@@ -1,0 +1,27 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+
+[workspace.dependencies]
+vextor-core = { path = "crates/vextor-core" }
+vextor-geom = { path = "crates/vextor-geom" }
+vextor-svg = { path = "crates/vextor-svg" }
+vextor-render = { path = "crates/vextor-render" }
+eframe = "0.37.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+
+[profile.release]
+lto = "thin"
