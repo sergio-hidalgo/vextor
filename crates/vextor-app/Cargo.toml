@@ -1,0 +1,21 @@
+[package]
+name = "vextor-app"
+description = "Vextor desktop editor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+vextor-core.workspace = true
+vextor-geom.workspace = true
+vextor-svg.workspace = true
+vextor-render.workspace = true
+eframe.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "vextor"
+path = "src/main.rs"

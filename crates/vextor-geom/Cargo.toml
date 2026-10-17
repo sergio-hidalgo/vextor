@@ -1,0 +1,13 @@
+[package]
+name = "vextor-geom"
+description = "Vextor geometry: hit-testing, snapping and path operations"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+vextor-core.workspace = true
+
+[lints]
+workspace = true
