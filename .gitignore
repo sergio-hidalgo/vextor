@@ -1,0 +1,61 @@
+# Rust build output. Cargo.lock IS tracked: vextor ships a binary
+target/
+**/*.rs.bk
+
+# profiling / benchmark output
+*.profraw
+*.profdata
+flamegraph.svg
+perf.data*
+criterion/
+
+# test snapshots awaiting review (accepted ones are tracked as *.snap)
+*.snap.new
+*.pending-snap
+
+# coverage output
+coverage/
+*.lcov
+
+# environment variables
+.env
+.env.*
+!.env.example
+
+# macOS-specific files
+.DS_Store
+._*
+
+# editors: the two vscode files below are project configuration and are
+# shared; anything else vscode drops in (settings.json above all) is personal
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+*.swp
+
+# agent instruction files (kept local, not tracked)
+AGENTS.md
+CLAUDE.md
+
+# AI support components (kept local, not tracked). README.md is the only
+# tracked documentation
+/specs/
+/issues/
+/skills/
+/references/
+/.claude/
+
+# reverse-engineering: local engines, analysis output and captures. Never
+# commit target binaries, decompiled output or extracted secrets
+.tools/
+re-work/
+*.hop
+*.gpr
+*.rep/
+*.i64
+*.idb
+*.pcap
+*.pcapng
+*.har
+*.saz
