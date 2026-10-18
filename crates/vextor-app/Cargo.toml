@@ -11,7 +11,15 @@ vextor-core.workspace = true
 vextor-geom.workspace = true
 vextor-svg.workspace = true
 vextor-render.workspace = true
+directories.workspace = true
 eframe.workspace = true
+rfd.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+resvg.workspace = true
 
 [lints]
 workspace = true
