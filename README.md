@@ -4,8 +4,8 @@ A very simple desktop vector editor, written in Rust, for drawing the shapes
 of web app components — icons, buttons, badges, cards — and copying clean
 SVG, HTML or JSX out of them.
 
-**Status:** workspace scaffolding only. Running the app opens an empty
-window; drawing tools arrive in later milestones.
+**Status:** the document model is in place (no editor UI yet). Running the
+app opens an empty window; drawing tools arrive in later milestones.
 
 ## Requirements
 
@@ -34,12 +34,24 @@ All four checks must pass before a change is merged.
 | Crate           | Holds                                                      |
 | :-------------- | :--------------------------------------------------------- |
 | `vextor-core`   | document model, commands, undo history (no UI, no I/O)     |
-| `vextor-geom`   | hit-testing, snapping, booleans, offset, simplify          |
+| `vextor-geom`   | shape → Bézier conversion; later hit-testing, snapping, booleans |
 | `vextor-svg`    | SVG export and import                                      |
 | `vextor-render` | rasterising documents for the canvas                       |
 | `vextor-app`    | the desktop app (`eframe`/`egui`)                          |
 
 Dependencies point downwards only: `app → svg/render → geom → core`.
+
+## Document model
+
+Everything the editor changes lives in `vextor_core::Document`: layers,
+groups, shapes (rect, ellipse, polygon, star, line, path), images,
+gradients, patterns, artboards, grid and export settings. A document is
+changed only through `Command`s, applied with `History::apply`, so every
+edit is undoable; a command either applies completely or not at all, and
+the document is validated after each one. Colours are sRGB + alpha, typed and saved as
+hex (`#1e90ff80`); a document can choose to save them as
+`{"r":30,"g":144,"b":255,"a":128}` instead.
+`vextor_geom` turns any shape into a `kurbo::BezPath` or an editable path.
 
 ## Conventions
 

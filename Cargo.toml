@@ -14,6 +14,12 @@ vextor-geom = { path = "crates/vextor-geom" }
 vextor-svg = { path = "crates/vextor-svg" }
 vextor-render = { path = "crates/vextor-render" }
 eframe = "0.37.0"
+base64 = "0.23.1"
+kurbo = "0.13.1"
+proptest = "1.12.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
