@@ -1,5 +1,13 @@
 //! Vextor desktop editor: window, tools, panels and input.
 
+mod app;
+mod canvas;
+mod debug;
+mod new_doc;
+mod panels;
+mod session;
+mod view;
+
 use eframe::egui;
 
 /// Window title, also used as the app name for eframe's persisted state.
@@ -13,14 +21,9 @@ fn main() -> eframe::Result {
             .with_min_inner_size([800.0, 500.0]),
         ..Default::default()
     };
-    eframe::run_native(APP_NAME, options, Box::new(|_cc| Ok(Box::new(VextorApp))))
-}
-
-/// Editor root. Empty until spec 03 adds the panels and the canvas.
-struct VextorApp;
-
-impl eframe::App for VextorApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        egui::Frame::central_panel(ui.style()).show(ui, |_ui| {});
-    }
+    eframe::run_native(
+        APP_NAME,
+        options,
+        Box::new(|cc| Ok(Box::new(app::VextorApp::new(cc)))),
+    )
 }

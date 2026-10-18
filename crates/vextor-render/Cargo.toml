@@ -9,6 +9,17 @@ publish.workspace = true
 [dependencies]
 vextor-core.workspace = true
 vextor-geom.workspace = true
+kurbo.workspace = true
+thiserror.workspace = true
+tiny-skia.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+resvg.workspace = true
+
+[[bench]]
+name = "render"
+harness = false
 
 [lints]
 workspace = true

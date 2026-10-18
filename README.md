@@ -4,8 +4,9 @@ A very simple desktop vector editor, written in Rust, for drawing the shapes
 of web app components — icons, buttons, badges, cards — and copying clean
 SVG, HTML or JSX out of them.
 
-**Status:** the document model is in place (no editor UI yet). Running the
-app opens an empty window; drawing tools arrive in later milestones.
+**Status:** the editor window, canvas and document model are in place.
+You can create a document and view it; drawing tools arrive in later
+milestones.
 
 ## Requirements
 
@@ -29,6 +30,34 @@ cargo deny check                 # advisories, licenses, bans, sources
 
 All four checks must pass before a change is merged.
 
+```sh
+cargo bench -p vextor-render     # canvas render timings (criterion)
+```
+
+## Using the editor
+
+On launch, pick an artboard size: Icon 16 / 24 / 32 / 48, Button 160×48,
+Card 320×200, or a custom size. The canvas shows a checkerboard inside
+transparent artboards and grey around them.
+
+| Action                      | How                                        |
+| :-------------------------- | :----------------------------------------- |
+| New document                | `⌘N` (File ▸ New…)                         |
+| Zoom at the pointer         | pinch, or `⌘`-scroll                       |
+| Pan                         | two-finger scroll, space-drag, middle-drag |
+| Fit artboard / actual size  | `⌘0` / `⌘1` (View menu)                    |
+| Undo / redo                 | `⌘Z` / `⇧⌘Z` (Edit menu shows what)        |
+
+Ctrl replaces ⌘ on Windows and Linux.
+
+Debug builds have a **Debug** menu: sample documents (basic shapes, 500
+and 5 000 shapes), an undoable "nudge layer" step and a frame-time readout.
+A release build shows it when started with `VEXTOR_DEBUG_MENU=1`:
+
+```sh
+VEXTOR_DEBUG_MENU=1 cargo run -p vextor-app --release
+```
+
 ## Crates
 
 | Crate           | Holds                                                      |
@@ -36,7 +65,7 @@ All four checks must pass before a change is merged.
 | `vextor-core`   | document model, commands, undo history (no UI, no I/O)     |
 | `vextor-geom`   | shape → Bézier conversion; later hit-testing, snapping, booleans |
 | `vextor-svg`    | SVG export and import                                      |
-| `vextor-render` | rasterising documents for the canvas                       |
+| `vextor-render` | rasterising documents for the canvas (`tiny-skia`), sample documents |
 | `vextor-app`    | the desktop app (`eframe`/`egui`)                          |
 
 Dependencies point downwards only: `app → svg/render → geom → core`.
