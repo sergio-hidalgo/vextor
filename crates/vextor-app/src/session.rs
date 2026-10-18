@@ -1,6 +1,10 @@
 //! One open document with its history and editor state.
 
+use std::path::{Path, PathBuf};
+
 use vextor_core::{Command, CoreError, Document, EditorState, History};
+
+use crate::files;
 
 /// The document being edited, its undo history and what the user is
 /// working with. Every edit goes through [`Session::apply`].
@@ -12,6 +16,11 @@ pub struct Session {
     revision: u64,
     /// The canvas should fit the artboards on its next frame.
     pub needs_fit: bool,
+    /// The file the document was opened from or last saved to.
+    path: Option<PathBuf>,
+    /// `revision` when the document last matched its file (or was
+    /// created); `None` when it never did, e.g. after recovery.
+    saved_revision: Option<u64>,
 }
 
 /// What the Edit menu shows: the label of the step undo/redo would act on,
@@ -23,8 +32,8 @@ pub struct EditMenu {
 }
 
 impl Session {
-    /// A session for a freshly created or loaded document: empty history,
-    /// fit on first show.
+    /// A session for a freshly created document: empty history, no file,
+    /// nothing unsaved, fit on first show.
     #[must_use]
     pub fn new(doc: Document) -> Self {
         Self {
@@ -33,7 +42,64 @@ impl Session {
             editor: EditorState::default(),
             revision: 0,
             needs_fit: true,
+            path: None,
+            saved_revision: Some(0),
         }
+    }
+
+    /// A session for a document opened from `path`, nothing unsaved.
+    #[must_use]
+    pub fn opened(doc: Document, path: PathBuf) -> Self {
+        Self {
+            path: Some(path),
+            ..Self::new(doc)
+        }
+    }
+
+    /// A session for a document recovered from an autosave: it has unsaved
+    /// changes until saved. `path` is the file it came from, if any.
+    #[must_use]
+    pub fn recovered(doc: Document, path: Option<PathBuf>) -> Self {
+        Self {
+            path,
+            saved_revision: None,
+            ..Self::new(doc)
+        }
+    }
+
+    /// The file this document is saved to, if any.
+    #[must_use]
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    /// True when the document changed since it was created, opened or
+    /// last saved. Undoing back to the saved state still counts.
+    #[must_use]
+    pub fn is_dirty(&self) -> bool {
+        self.saved_revision != Some(self.revision)
+    }
+
+    /// Records that the document, as it is now, was saved to `path`.
+    pub fn mark_saved(&mut self, path: PathBuf) {
+        self.path = Some(path);
+        self.saved_revision = Some(self.revision);
+    }
+
+    /// What the title bar and dialogs call the document: the file name,
+    /// or the document name before the first save.
+    #[must_use]
+    pub fn display_name(&self) -> String {
+        self.path
+            .as_deref()
+            .map_or_else(|| self.doc.name.clone(), files::display_name)
+    }
+
+    /// The window title, with `•` while there are unsaved changes.
+    #[must_use]
+    pub fn title(&self) -> String {
+        let dirty = if self.is_dirty() { " •" } else { "" };
+        format!("{}{dirty} — Vextor", self.display_name())
     }
 
     /// Changes whenever the document changes.
@@ -172,6 +238,50 @@ mod tests {
         s.redo();
         let r3 = s.revision();
         assert!(r1 > 0 && r2 > r1 && r3 > r2);
+    }
+
+    #[test]
+    fn edits_mark_the_document_dirty_until_saved() {
+        let mut s = Session::new(Document::new("icon"));
+        assert!(!s.is_dirty());
+        assert_eq!(s.title(), "icon — Vextor");
+        s.apply(nudge(&s, 10.0)).expect("valid command");
+        assert!(s.is_dirty());
+        assert_eq!(s.title(), "icon • — Vextor");
+        s.mark_saved(PathBuf::from("/tmp/button.vextor"));
+        assert!(!s.is_dirty());
+        assert_eq!(s.title(), "button.vextor — Vextor");
+        assert_eq!(s.path(), Some(Path::new("/tmp/button.vextor")));
+    }
+
+    #[test]
+    fn undo_after_a_save_is_an_unsaved_change() {
+        let mut s = Session::new(Document::new("t"));
+        s.apply(nudge(&s, 10.0)).expect("valid command");
+        s.mark_saved(PathBuf::from("/tmp/t.vextor"));
+        s.undo();
+        assert!(s.is_dirty());
+    }
+
+    #[test]
+    fn failed_command_keeps_the_document_clean() {
+        let mut s = Session::opened(Document::new("t"), PathBuf::from("/tmp/t.vextor"));
+        let bad = Command::SetTransform {
+            ids: vec![s.doc.layers[0]],
+            transform: Transform([f64::NAN, 0.0, 0.0, 1.0, 0.0, 0.0]),
+        };
+        assert!(s.apply(bad).is_err());
+        assert!(!s.is_dirty());
+    }
+
+    #[test]
+    fn a_recovered_document_is_dirty_and_keeps_its_file() {
+        let s = Session::recovered(Document::new("t"), Some(PathBuf::from("/tmp/a.vextor")));
+        assert!(s.is_dirty());
+        assert_eq!(s.title(), "a.vextor • — Vextor");
+        let s = Session::recovered(Document::new("t"), None);
+        assert_eq!(s.path(), None);
+        assert!(s.is_dirty());
     }
 
     #[test]

@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "name": "icon",
+  "color_format": "hex",
+  "artboards": [
+    { "id": 2, "name": "icon-24", "rect": { "x": 0, "y": 0, "width": 24, "height": 24 }, "background": null }
+  ],
+  "layers": [1],
+  "nodes": {
+    "1": {
+      "id": 1, "name": "Layer 1", "visible": true, "locked": false, "opacity": 1,
+      "transform": [1, 0, 0, 1, 0, 0],
+      "kind": { "layer": { "children": [3], "clip": null } }
+    },
+    "3": {
+      "id": 3, "name": "dot", "visible": true, "locked": false, "opacity": 1,
+      "transform": [1, 0, 0, 1, 0, 0],
+      "kind": {
+        "shape": {
+          "geometry": { "ellipse": { "center": { "x": 12, "y": 12 }, "rx": 8, "ry": 8 } },
+          "style": { "fill": { "solid": "#1e90ff" }, "stroke": null }
+        }
+      }
+    }
+  },
+  "resources": {},
+  "swatches": [],
+  "grid": {
+    "size": 8, "subdivisions": 4, "visible": false,
+    "snap": {
+      "to_grid": false, "to_nodes": true, "to_edges": true, "to_centers": true,
+      "to_artboard": true, "angle_step_deg": 45, "tolerance_px": 6
+    }
+  },
+  "export": {
+    "precision": 2, "styling": "attributes", "ids": "readable",
+    "responsive": false, "minify": false, "current_color": false
+  },
+  "next_id": 4
+}

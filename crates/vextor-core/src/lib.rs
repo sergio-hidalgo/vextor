@@ -1,7 +1,9 @@
 //! Vextor document model: documents, layers, shapes, paths, paints, the
 //! commands that edit them and the undo history.
 //!
-//! Knows nothing about UI, rendering, files or SVG (see the `rust-core` skill).
+//! Knows nothing about UI, rendering, file I/O or SVG (see the `rust-core`
+//! skill); [`from_bytes`] / [`to_bytes`] define the `.vextor` bytes the app
+//! reads and writes.
 
 mod apply;
 mod change;
@@ -10,6 +12,7 @@ mod command;
 mod document;
 mod editor;
 mod error;
+mod format;
 mod history;
 mod ids;
 mod math;
@@ -26,6 +29,7 @@ pub use command::Command;
 pub use document::{Artboard, Document, FORMAT_VERSION, Parent};
 pub use editor::{ClipboardPayload, EditorState, Selection, ToolId, View};
 pub use error::{ColorError, CoreError};
+pub use format::{FormatError, MAX_FILE_BYTES, MAX_NODES, from_bytes, to_bytes};
 pub use history::{DEFAULT_LIMIT, History};
 pub use ids::{ArtboardId, NodeId, ResourceId};
 pub use math::{EPS, Point, Rect, Transform, Vec2};
