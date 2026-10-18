@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 vextor-core.workspace = true
+kurbo.workspace = true
 
 [lints]
 workspace = true
