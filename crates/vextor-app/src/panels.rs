@@ -8,15 +8,18 @@ use vextor_geom::{rotation_degrees, union_bounds};
 use vextor_core::ToolId;
 
 use crate::edit_ops;
+use crate::icons::{self, Icon};
 use crate::session::Session;
 
 /// Gap between a label and its field, and between rows, in points.
 const GRID_SPACING: [f32; 2] = [12.0, 6.0];
 
+mod arrange;
 mod fonts;
 mod restyle;
 mod text;
 
+pub use arrange::PanelAction;
 pub use fonts::recent_families;
 
 /// Tools (left): the active one is highlighted. Returns the tool clicked.
@@ -47,12 +50,24 @@ pub fn tools(ui: &mut egui::Ui, active: Option<ToolId>) -> Option<ToolId> {
 }
 
 /// Inspector and Layers (right). Returns a message for the user when an
-/// edit was refused.
-pub fn inspector_and_layers(ui: &mut egui::Ui, session: Option<&mut Session>) -> Option<String> {
+/// edit was refused, and the Align / Group buttons clicked, for the app
+/// to run like their menu items. `to_artboard` is Align to Artboard.
+pub fn inspector_and_layers(
+    ui: &mut egui::Ui,
+    session: Option<&mut Session>,
+    to_artboard: &mut bool,
+) -> (Option<String>, Vec<PanelAction>) {
     ui.add_space(6.0);
     ui.strong("Inspector");
+    let mut actions = Vec::new();
     let message = if let Some(s) = session {
-        inspector(ui, s)
+        let message = inspector(ui, s);
+        if !s.selected().is_empty() {
+            let can = edit_ops::can(s);
+            arrange::align_section(ui, can, to_artboard, &mut actions);
+            arrange::group_section(ui, can, &mut actions);
+        }
+        message
     } else {
         ui.weak("Nothing selected.");
         None
@@ -61,7 +76,7 @@ pub fn inspector_and_layers(ui: &mut egui::Ui, session: Option<&mut Session>) ->
     ui.separator();
     ui.strong("Layers");
     ui.weak("The layer list will appear here.");
-    message
+    (message, actions)
 }
 
 /// X, Y, W, H of the selection box and the rotation of a single object.
@@ -79,22 +94,27 @@ fn inspector(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
     let mut edit = None;
     egui::Grid::new("inspector")
         .num_columns(4)
-        .spacing([6.0, 6.0])
+        .spacing(GRID_SPACING)
         .show(ui, |ui| {
-            field(ui, s, "X", b.x0, true, &mut edit, Change::X);
-            field(ui, s, "Y", b.y0, true, &mut edit, Change::Y);
+            let x_label = Label("X", Icon::PosX, "Left edge (X)");
+            let y_label = Label("Y", Icon::PosY, "Top edge (Y)");
+            field(ui, s, x_label, b.x0, true, &mut edit, Change::X);
+            field(ui, s, y_label, b.y0, true, &mut edit, Change::Y);
             ui.end_row();
             let w_ok = b.width() > vextor_core::EPS;
             let h_ok = b.height() > vextor_core::EPS;
-            field(ui, s, "W", b.width(), w_ok, &mut edit, Change::W);
-            field(ui, s, "H", b.height(), h_ok, &mut edit, Change::H);
+            let w_label = Label("W", Icon::Width, "Width (W)");
+            let h_label = Label("H", Icon::Height, "Height (H)");
+            field(ui, s, w_label, b.width(), w_ok, &mut edit, Change::W);
+            field(ui, s, h_label, b.height(), h_ok, &mut edit, Change::H);
             ui.end_row();
+            let angle = Label("°", Icon::Angle, "Rotation in degrees");
             if let Some(deg) = rotation {
-                field(ui, s, "°", deg, true, &mut edit, |v| {
+                field(ui, s, angle, deg, true, &mut edit, |v| {
                     Change::Rotation(v - deg)
                 });
             } else {
-                ui.label("°");
+                angle.show(ui);
                 ui.add_enabled(false, egui::DragValue::new(&mut 0.0))
                     .on_disabled_hover_text("Rotate one object at a time here, or use the corners");
             }
@@ -150,16 +170,30 @@ impl Change {
 }
 
 /// A labelled number. A drag is wrapped in a history gesture.
+/// A field's label: its letter, then a small icon saying what it is.
+#[derive(Clone, Copy)]
+struct Label(&'static str, Icon, &'static str);
+
+impl Label {
+    fn show(self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            ui.label(self.0);
+            icons::label(ui, self.1, self.2);
+        });
+    }
+}
+
 fn field(
     ui: &mut egui::Ui,
     s: &mut Session,
-    label: &str,
+    label: Label,
     value: f64,
     enabled: bool,
     edit: &mut Option<Change>,
     change: impl Fn(f64) -> Change,
 ) {
-    ui.label(label);
+    label.show(ui);
     let mut v = value;
     let r = ui.add_enabled(
         enabled,

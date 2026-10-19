@@ -89,7 +89,7 @@ pub fn section(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
                     (TextAlign::Centre, Icon::TextCentre, "Centre text"),
                     (TextAlign::Right, Icon::TextRight, "Align text right"),
                 ] {
-                    if icons::button(ui, icon, first.align == align, tip).clicked() {
+                    if icons::button(ui, icon, first.align == align, true, tip, "").clicked() {
                         edit = Some(Edit::Align(align));
                     }
                 }

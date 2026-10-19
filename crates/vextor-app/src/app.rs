@@ -53,6 +53,18 @@ enum Action {
     OutlineText,
 }
 
+impl From<panels::PanelAction> for Action {
+    /// The menu action an inspector button stands for.
+    fn from(a: panels::PanelAction) -> Self {
+        match a {
+            panels::PanelAction::Align(how) => Self::Align(how),
+            panels::PanelAction::Distribute { horizontal } => Self::Distribute { horizontal },
+            panels::PanelAction::Group => Self::Group,
+            panels::PanelAction::Ungroup => Self::Ungroup,
+        }
+    }
+}
+
 /// Editor root.
 pub struct VextorApp {
     session: Option<Session>,
@@ -307,8 +319,13 @@ impl eframe::App for VextorApp {
                     self.canvas.finish_text(s);
                 }
                 let session = self.session.as_mut().filter(|_| self.picker.is_none());
-                if let Some(e) = panels::inspector_and_layers(ui, session) {
+                let (message, clicked) =
+                    panels::inspector_and_layers(ui, session, &mut self.align_to_artboard);
+                if let Some(e) = message {
                     self.message = Some(e);
+                }
+                for action in clicked {
+                    self.run(Action::from(action));
                 }
             });
         egui::CentralPanel::no_frame().show(ui, |ui| {
