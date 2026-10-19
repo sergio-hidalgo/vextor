@@ -1,12 +1,13 @@
-//! The menu bar: File, Edit, Object, View and (debug builds) Debug.
+//! The menu bar: File, Edit, Object, View, Window and (debug builds) Debug.
 
 use eframe::egui::{self, KeyboardShortcut};
 use vextor_core::Arrange;
 use vextor_geom::Align;
 
 use super::keys::{
-    ACTUAL_SIZE, BACK, BACKWARD, COPY, CUT, DELETE, DUPLICATE, FIT, FORWARD, FRONT, GROUP, NEW,
-    OPEN, OUTLINE_TEXT, PASTE, PASTE_IN_PLACE, REDO, SAVE, SAVE_AS, SELECT_ALL, UNDO, UNGROUP,
+    ACTUAL_SIZE, BACK, BACKWARD, CLOSE, COPY, CUT, DELETE, DUPLICATE, FIT, FORWARD, FRONT, GROUP,
+    NEW, NEXT_DOC, OPEN, OUTLINE_TEXT, PASTE, PASTE_IN_PLACE, PREV_DOC, REDO, SAVE, SAVE_AS,
+    SELECT_ALL, UNDO, UNGROUP,
 };
 use super::{Action, VextorApp};
 use crate::session::Session;
@@ -20,29 +21,14 @@ impl VextorApp {
             let button = egui::Button::new(text).shortcut_text(ctx.format_shortcut(shortcut));
             ui.add_enabled(enabled, button).clicked()
         };
-        let has_doc = self.session.is_some() && self.picker.is_none();
-        let edit = self.session.as_ref().map(Session::edit_menu);
-        let can = match &self.session {
+        let has_doc = !self.docs.is_empty() && self.picker.is_none();
+        let edit = self.docs.session().map(Session::edit_menu);
+        let can = match self.docs.session() {
             Some(s) if has_doc => edit_ops::can(s),
             _ => edit_ops::Can::default(),
         };
         egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button("File", |ui| {
-                if item(ui, true, "New…", &NEW) {
-                    actions.push(Action::New);
-                }
-                if item(ui, true, "Open…", &OPEN) {
-                    actions.push(Action::Open);
-                }
-                self.recent_menu(ui, &mut actions);
-                ui.separator();
-                if item(ui, has_doc, "Save", &SAVE) {
-                    actions.push(Action::Save);
-                }
-                if item(ui, has_doc, "Save As…", &SAVE_AS) {
-                    actions.push(Action::SaveAs);
-                }
-            });
+            ui.menu_button("File", |ui| self.file_menu(ui, has_doc, &mut actions));
             ui.menu_button("Edit", |ui| {
                 let undo = edit.and_then(|e| e.undo);
                 let redo = edit.and_then(|e| e.redo);
@@ -105,6 +91,7 @@ impl VextorApp {
                 ui.separator();
                 ui.checkbox(&mut self.show_code, "Code Panel");
             });
+            ui.menu_button("Window", |ui| self.window_menu(ui, &mut actions));
             if debug::enabled()
                 && let Some(debug::Action::Load(doc)) = debug::menu(ui, &mut self.canvas.show_stats)
             {
@@ -167,6 +154,64 @@ impl VextorApp {
                 .on_disabled_hover_text(select_first);
             if button.clicked() {
                 actions.push(Action::Flip { horizontal });
+            }
+        }
+    }
+
+    /// File: New, Open, Open Recent, Close, Save, Save As.
+    fn file_menu(&self, ui: &mut egui::Ui, has_doc: bool, actions: &mut Vec<Action>) {
+        let items = [
+            ("New…", NEW, Action::New, true),
+            ("Open…", OPEN, Action::Open, true),
+        ];
+        for (text, shortcut, action, enabled) in items {
+            if why_item(ui, enabled, text, shortcut, "") {
+                actions.push(action);
+            }
+        }
+        self.recent_menu(ui, actions);
+        ui.separator();
+        let items = [
+            ("Close", CLOSE, Action::Close),
+            ("Save", SAVE, Action::Save),
+            ("Save As…", SAVE_AS, Action::SaveAs),
+        ];
+        for (text, shortcut, action) in items {
+            if why_item(ui, has_doc, text, shortcut, "No document is open") {
+                actions.push(action);
+            }
+        }
+    }
+
+    /// Window: next / previous document, then every open document (✓ on
+    /// the active one).
+    fn window_menu(&self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        let many = self.docs.tabs().len() > 1;
+        let cycle = [
+            ("Next Document", NEXT_DOC, true),
+            ("Previous Document", PREV_DOC, false),
+        ];
+        for (text, shortcut, forward) in cycle {
+            if why_item(ui, many, text, shortcut, "Open another document first") {
+                actions.push(Action::CycleTab { forward });
+            }
+        }
+        if self.docs.is_empty() {
+            return;
+        }
+        ui.separator();
+        let active = self.docs.active().map(|t| t.id);
+        for tab in self.docs.tabs() {
+            let mark = if active == Some(tab.id) {
+                "✓ "
+            } else {
+                "    "
+            };
+            if ui
+                .button(format!("{mark}{}", tab.session.display_name()))
+                .clicked()
+            {
+                actions.push(Action::Activate(tab.id));
             }
         }
     }

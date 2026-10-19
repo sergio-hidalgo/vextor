@@ -1,65 +1,40 @@
-//! Opening, saving, recovering and closing documents: everything that
-//! may need "Save changes?" first, and the autosave timer.
+//! Opening, saving, recovering and closing documents, the "Save
+//! changes?" and recovery prompts, and the autosave timer.
 
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use eframe::egui;
+use vextor_core::Command;
 
-use super::VextorApp;
+use super::closing::{Next, Pending};
+use super::{Quit, VextorApp};
+use crate::documents::DocId;
 use crate::files::{self, FileError};
-use crate::new_doc::Picker;
 use crate::prompts::{self, RecoverAnswer, SaveAnswer};
 use crate::recovery::Orphan;
 use crate::session::Session;
 
-/// Something that replaces or closes the current document, so it waits
-/// for "Save changes?" when there are unsaved changes.
-#[derive(Debug)]
-pub(super) enum Then {
-    New,
-    Open,
-    OpenPath(PathBuf),
-    Recover(Orphan),
-    Quit,
-}
-
 impl VextorApp {
-    /// Does `then` now, or first asks "Save changes?" when the document
-    /// has unsaved changes.
-    pub(super) fn request(&mut self, then: Then) {
-        if self.session.as_ref().is_some_and(Session::is_dirty) {
-            self.confirm = Some(then);
-        } else {
-            self.proceed(then);
+    /// File ▸ Open…: asks for a file, then opens it.
+    pub(super) fn open_dialog(&mut self) {
+        let dialog = rfd::FileDialog::new()
+            .set_title("Open")
+            .add_filter("Vextor document", &[files::EXTENSION]);
+        if let Some(path) = self.in_current_folder(dialog).pick_file() {
+            self.open_path(path);
         }
     }
 
-    pub(super) fn proceed(&mut self, then: Then) {
-        match then {
-            Then::New => self.picker = Some(Picker::default()),
-            Then::Open => {
-                let dialog = rfd::FileDialog::new()
-                    .set_title("Open")
-                    .add_filter("Vextor document", &[files::EXTENSION]);
-                if let Some(path) = self.in_current_folder(dialog).pick_file() {
-                    self.open_path(path);
-                }
-            }
-            Then::OpenPath(path) => self.open_path(path),
-            Then::Recover(orphan) => self.recover(&orphan),
-            Then::Quit => {
-                self.quitting = true;
-                if let Some(r) = &mut self.recovery {
-                    r.shutdown();
-                }
-                self.confirm = None;
-            }
-        }
-    }
-
+    /// Opens `path` in a new tab, or switches to its tab when it is open.
     pub(super) fn open_path(&mut self, path: PathBuf) {
+        if let Some(id) = self.docs.find_path(&path) {
+            self.activate(id);
+            self.recent.push(path);
+            self.save_recent();
+            return;
+        }
         match files::read_document(&path) {
             Ok(doc) => {
                 self.open(Session::opened(doc, path.clone()));
@@ -79,18 +54,64 @@ impl VextorApp {
         self.save_recent();
     }
 
-    /// Saves to the document's file, or asks for one. Returns true when
-    /// the document was saved.
+    /// Renames document `id` from its tab: a document not saved yet takes
+    /// the name (one undo step, used as the file name on its first save); a
+    /// saved one has its file renamed in its folder.
+    pub(super) fn rename_document(&mut self, id: DocId, input: &str) {
+        let name = match files::clean_name(input) {
+            Ok(name) => name,
+            Err(why) => {
+                self.message = Some(why.to_owned());
+                return;
+            }
+        };
+        let Some(tab) = self.docs.get_mut(id) else {
+            return;
+        };
+        let Some(from) = tab.session.path().map(Path::to_path_buf) else {
+            if name != tab.session.doc.name
+                && let Err(e) = tab.session.apply(Command::SetName(name))
+            {
+                self.message = Some(format!("Couldn't rename the document: {e}"));
+            }
+            return;
+        };
+        let dirty = tab.session.is_dirty();
+        match files::rename_document(&from, &name) {
+            Ok(to) if to != from => {
+                tab.session.moved_to(to.clone());
+                self.recent.remove(&from);
+                self.recent.push(to);
+                self.save_recent();
+                self.message = None;
+                // The autosave remembers the file it belongs to.
+                if dirty {
+                    self.autosave_now(id);
+                }
+            }
+            Ok(_) => {}
+            Err(e) => {
+                self.message = Some(format!(
+                    "Couldn't rename “{}”: {e}",
+                    files::display_name(&from)
+                ));
+            }
+        }
+    }
+
+    /// Saves the active document to its file, or asks for one. Returns
+    /// true when it was saved.
     pub(super) fn save(&mut self) -> bool {
-        match self.session.as_ref().and_then(Session::path) {
+        match self.docs.session().and_then(Session::path) {
             Some(path) => self.save_to(path.to_path_buf()),
             None => self.save_as(),
         }
     }
 
-    /// Asks where to save, then saves. Returns true when saved.
+    /// Asks where to save the active document, then saves. Returns true
+    /// when saved.
     pub(super) fn save_as(&mut self) -> bool {
-        let Some(session) = &self.session else {
+        let Some(session) = self.docs.session() else {
             return false;
         };
         let stem = session.path().and_then(|p| p.file_stem()).map_or_else(
@@ -108,18 +129,18 @@ impl VextorApp {
     }
 
     pub(super) fn save_to(&mut self, path: PathBuf) -> bool {
-        let Some(session) = &mut self.session else {
+        let Some(tab) = self.docs.active_mut() else {
             return false;
         };
-        if let Err(e) = files::write_document(&path, &session.doc) {
+        if let Err(e) = files::write_document(&path, &tab.session.doc) {
             self.message = Some(format!(
                 "Couldn't save “{}”: {e}",
                 files::display_name(&path)
             ));
             return false;
         }
-        session.mark_saved(path.clone());
-        if let Some(r) = &mut self.recovery {
+        tab.session.mark_saved(path.clone());
+        if let Some(r) = &mut tab.recovery {
             r.clear(Instant::now());
         }
         self.recent.push(path);
@@ -128,13 +149,13 @@ impl VextorApp {
         true
     }
 
-    /// Opens a recovered document, autosaves it under this run at once,
-    /// then deletes the orphan.
+    /// Opens a recovered document in a new tab, autosaves it under this
+    /// run at once, then deletes the orphan.
     pub(super) fn recover(&mut self, orphan: &Orphan) {
         match orphan.load() {
             Ok(doc) => {
-                self.open(Session::recovered(doc, orphan.original.clone()));
-                self.autosave_now();
+                let id = self.open(Session::recovered(doc, orphan.original.clone()));
+                self.autosave_now(id);
             }
             Err(e) => {
                 self.message = Some(format!("Couldn't recover {}: {e}", orphan.name()));
@@ -143,11 +164,11 @@ impl VextorApp {
         orphan.discard();
     }
 
-    /// Opens file dialogs in the current document's folder.
+    /// Opens file dialogs in the active document's folder.
     pub(super) fn in_current_folder(&self, dialog: rfd::FileDialog) -> rfd::FileDialog {
         match self
-            .session
-            .as_ref()
+            .docs
+            .session()
             .and_then(Session::path)
             .and_then(|p| p.parent())
         {
@@ -163,8 +184,12 @@ impl VextorApp {
         }
     }
 
-    pub(super) fn autosave_now(&mut self) {
-        let (Some(r), Some(s)) = (&mut self.recovery, &self.session) else {
+    /// Writes document `id`'s autosave now.
+    pub(super) fn autosave_now(&mut self, id: DocId) {
+        let Some(tab) = self.docs.get_mut(id) else {
+            return;
+        };
+        let (Some(r), s) = (&mut tab.recovery, &tab.session) else {
             return;
         };
         if let Err(e) = r.write(&s.doc, s.path(), s.revision(), Instant::now()) {
@@ -172,34 +197,67 @@ impl VextorApp {
         }
     }
 
-    /// Autosaves when due, and wakes the app up for the next one.
+    /// Autosaves every document that is due, and wakes the app up for the
+    /// next one.
     pub(super) fn autosave_tick(&mut self, ctx: &egui::Context) {
-        let (Some(r), Some(s)) = (&self.recovery, &self.session) else {
-            return;
-        };
         let now = Instant::now();
-        if r.due(now, s.revision(), s.is_dirty()) {
-            self.autosave_now();
-        } else if r.pending(s.revision(), s.is_dirty()) {
-            ctx.request_repaint_after(r.time_left(now).max(Duration::from_millis(100)));
+        let mut wait: Option<Duration> = None;
+        let mut failed = None;
+        for tab in self.docs.tabs_mut() {
+            let (Some(r), s) = (&mut tab.recovery, &tab.session) else {
+                continue;
+            };
+            let (revision, dirty) = (s.revision(), s.is_dirty());
+            if r.due(now, revision, dirty) {
+                if let Err(e) = r.write(&s.doc, s.path(), revision, now) {
+                    failed = Some(e);
+                }
+            } else if r.pending(revision, dirty) {
+                let left = r.time_left(now);
+                wait = Some(wait.map_or(left, |w| w.min(left)));
+            }
+        }
+        if let Some(e) = failed {
+            self.message = Some(format!("Autosave failed: {e}"));
+        }
+        if let Some(w) = wait {
+            ctx.request_repaint_after(w.max(Duration::from_millis(100)));
         }
     }
 
-    /// The window's close button (or ⌘Q): asks first when there are
-    /// unsaved changes.
+    /// Unsaved changes were dealt with: deletes every autosave and lets
+    /// the window close.
+    pub(super) fn quit_now(&mut self) {
+        self.quit = Quit::Quitting;
+        self.confirm = None;
+        for tab in self.docs.tabs_mut() {
+            if let Some(r) = &mut tab.recovery {
+                r.shutdown();
+            }
+        }
+    }
+
+    /// The window's close button (or ⌘Q): asks "Save changes?" about each
+    /// document with unsaved changes first.
     pub(super) fn handle_close(&mut self, ctx: &egui::Context) {
-        if self.quitting || !ctx.input(|i| i.viewport().close_requested()) {
+        if self.quit != Quit::Running || !ctx.input(|i| i.viewport().close_requested()) {
             return;
         }
-        if self.session.as_ref().is_some_and(Session::is_dirty) {
-            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            self.confirm = Some(Then::Quit);
-        } else {
-            self.proceed(Then::Quit);
+        match (Pending::Quit {
+            dont_save: Vec::new(),
+        })
+        .next(&mut self.docs)
+        {
+            Next::Quit => self.quit_now(),
+            next => {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.follow(next);
+            }
         }
     }
 
-    /// "Save changes?" and the recovery prompt, one at a time.
+    /// "Convert with the fallback font?", "Save changes?" and the recovery
+    /// prompt, one at a time.
     pub(super) fn prompts(&mut self, ctx: &egui::Context) {
         if let Some(missing) = &self.outline_prompt {
             let answer = prompts::outline_missing_font(
@@ -211,7 +269,7 @@ impl VextorApp {
             if let Some(convert) = answer {
                 self.outline_prompt = None;
                 if convert
-                    && let Some(s) = self.session.as_mut()
+                    && let Some(s) = self.docs.session_mut()
                     && let Err(e) = crate::outline_text::convert(s)
                 {
                     self.message = Some(e);
@@ -219,24 +277,19 @@ impl VextorApp {
             }
             return;
         }
-        if let Some(then) = &self.confirm {
+        if let Some((pending, id)) = self.confirm.take() {
             let name = self
-                .session
-                .as_ref()
-                .map_or_else(String::new, Session::display_name);
-            let quit = matches!(then, Then::Quit);
-            let answer = prompts::save_changes(ctx, self.canvas_rect, &name);
-            let then = match answer {
-                None => return,
-                Some(SaveAnswer::Cancel) => None,
-                Some(SaveAnswer::Save) if !self.save() => None,
-                Some(SaveAnswer::Save | SaveAnswer::DontSave) => self.confirm.take(),
-            };
-            self.confirm = None;
-            if let Some(then) = then {
-                self.proceed(then);
-                if quit {
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                .docs
+                .get(id)
+                .map_or_else(String::new, |t| t.session.display_name());
+            match prompts::save_changes(ctx, self.canvas_rect, &name) {
+                None => self.confirm = Some((pending, id)),
+                Some(answer) => {
+                    // Save acts on the active document: the one asked about.
+                    self.docs.activate(id);
+                    let saved = answer == SaveAnswer::Save && self.save();
+                    let next = pending.answer(&mut self.docs, id, answer, saved);
+                    self.follow(next);
                 }
             }
             return;
@@ -248,7 +301,7 @@ impl VextorApp {
             None => {}
             Some(RecoverAnswer::Recover) => {
                 let orphan = self.orphans.remove(0);
-                self.request(Then::Recover(orphan));
+                self.recover(&orphan);
             }
             Some(RecoverAnswer::Discard) => self.orphans.remove(0).discard(),
         }

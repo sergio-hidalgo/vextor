@@ -130,6 +130,81 @@ pub fn display_name(path: &Path) -> String {
     )
 }
 
+/// Longest document name, in characters.
+pub const MAX_NAME_CHARS: usize = 64;
+
+/// `input` (typed on a tab) as a document name, which is also a file name
+/// without its extension: control characters removed, trimmed, a typed
+/// `.vextor` dropped, cut to [`MAX_NAME_CHARS`].
+///
+/// # Errors
+/// Why the name can't be used: empty, hidden (leading dot), or holding a
+/// character that is a folder separator somewhere (`/`, `\`, `:`).
+pub fn clean_name(input: &str) -> Result<String, &'static str> {
+    let cleaned: String = input.chars().filter(|c| !c.is_control()).collect();
+    let mut name = cleaned.trim();
+    let suffix = format!(".{EXTENSION}");
+    if name.len() > suffix.len() && name.to_lowercase().ends_with(&suffix) {
+        name = name[..name.len() - suffix.len()].trim_end();
+    }
+    if name.is_empty() {
+        return Err("A name can't be empty.");
+    }
+    if name.starts_with('.') {
+        return Err("A name can't start with a dot.");
+    }
+    if name.contains(['/', '\\', ':']) {
+        return Err("A name can't contain /, \\ or :.");
+    }
+    let cut: String = name.chars().take(MAX_NAME_CHARS).collect();
+    Ok(cut.trim_end().to_owned())
+}
+
+/// Renames the document file `from` to `<name>.vextor` in the same folder
+/// and returns the new path. Never replaces another file: a name already
+/// taken is refused. Changing only the letter case is allowed.
+///
+/// # Errors
+/// The name is taken, or the OS refused the rename (the file is unchanged).
+pub fn rename_document(from: &Path, name: &str) -> io::Result<PathBuf> {
+    let to = from.with_file_name(format!("{name}.{EXTENSION}"));
+    if to == from {
+        return Ok(to);
+    }
+    let taken = || {
+        io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            format!("a file named “{}” is already there", display_name(&to)),
+        )
+    };
+    // The same file under another letter case (case-insensitive disks).
+    let same_file = matches!(
+        (fs::canonicalize(from), fs::canonicalize(&to)),
+        (Ok(a), Ok(b)) if a == b
+    );
+    if same_file {
+        fs::rename(from, &to)?;
+        return Ok(to);
+    }
+    // A hard link fails when the name is taken, with no gap between the
+    // check and the rename; disks without hard links fall back below.
+    match fs::hard_link(from, &to) {
+        Ok(()) => {
+            if let Err(e) = fs::remove_file(from) {
+                let _ = fs::remove_file(&to);
+                return Err(e);
+            }
+            Ok(to)
+        }
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Err(taken()),
+        Err(_) if to.exists() => Err(taken()),
+        Err(_) => {
+            fs::rename(from, &to)?;
+            Ok(to)
+        }
+    }
+}
+
 /// File ▸ Open Recent: most recent first, no duplicates, at most
 /// [`MAX_RECENT`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -229,6 +304,64 @@ mod tests {
 
     use super::test_dir::TestDir;
     use super::*;
+
+    #[test]
+    fn names_are_cleaned_like_file_names() {
+        assert_eq!(
+            clean_name("  pricing\t card \n").as_deref(),
+            Ok("pricing card")
+        );
+        assert_eq!(clean_name("card.vextor").as_deref(), Ok("card"));
+        assert_eq!(clean_name("card.VEXTOR ").as_deref(), Ok("card"));
+        assert_eq!(
+            clean_name(&"x".repeat(80)).map(|n| n.len()),
+            Ok(MAX_NAME_CHARS)
+        );
+        assert!(clean_name("   ").is_err());
+        assert!(
+            clean_name(".vextor").is_err(),
+            "only the extension is left as a dot name"
+        );
+        assert!(clean_name(".hidden").is_err());
+        for bad in ["a/b", "a\\b", "a:b", "../up"] {
+            assert!(clean_name(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn renaming_moves_the_file_and_keeps_its_content() {
+        let dir = TestDir::new();
+        let from = dir.path().join("card.vextor");
+        fs::write(&from, b"content").expect("writes");
+        let to = rename_document(&from, "pricing").expect("renames");
+        assert_eq!(to, dir.path().join("pricing.vextor"));
+        assert_eq!(files_in(dir.path()), ["pricing.vextor"]);
+        assert_eq!(fs::read(&to).expect("reads"), b"content");
+        assert_eq!(rename_document(&to, "pricing").expect("same name"), to);
+    }
+
+    #[test]
+    fn renaming_never_replaces_another_file() {
+        let dir = TestDir::new();
+        let from = dir.path().join("card.vextor");
+        let other = dir.path().join("pricing.vextor");
+        fs::write(&from, b"card").expect("writes");
+        fs::write(&other, b"pricing").expect("writes");
+        let e = rename_document(&from, "pricing").expect_err("refused");
+        assert_eq!(e.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read(&other).expect("reads"), b"pricing", "untouched");
+        assert_eq!(fs::read(&from).expect("reads"), b"card", "untouched");
+    }
+
+    #[test]
+    fn renaming_can_change_only_the_letter_case() {
+        let dir = TestDir::new();
+        let from = dir.path().join("card.vextor");
+        fs::write(&from, b"card").expect("writes");
+        let to = rename_document(&from, "Card").expect("renames");
+        assert_eq!(files_in(dir.path()), ["Card.vextor"]);
+        assert_eq!(fs::read(&to).expect("reads"), b"card");
+    }
 
     fn files_in(dir: &Path) -> Vec<String> {
         let mut names: Vec<String> = fs::read_dir(dir)

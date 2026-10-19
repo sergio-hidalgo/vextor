@@ -70,6 +70,7 @@ impl Document {
             artboards: targets.artboards.as_ref().map(|_| self.artboards.clone()),
             grid: targets.grid.as_ref().map(|_| self.grid.clone()),
             color_format: targets.color_format.map(|_| self.color_format),
+            name: targets.name.as_ref().map(|_| self.name.clone()),
         }
     }
 }
@@ -166,6 +167,7 @@ fn run(tx: &mut Tx<'_>, cmd: Command) -> Result<(), CoreError> {
             }
             Ok(())
         }
+        C::SetName(name) => set_name(tx, name),
         C::SetColorFormat(format) => {
             if tx.before.color_format.is_none() {
                 tx.before.color_format = Some(tx.doc.color_format);
@@ -174,6 +176,18 @@ fn run(tx: &mut Tx<'_>, cmd: Command) -> Result<(), CoreError> {
             Ok(())
         }
     }
+}
+
+/// [`Command::SetName`].
+fn set_name(tx: &mut Tx<'_>, name: String) -> Result<(), CoreError> {
+    if name.trim().is_empty() {
+        return Err(CoreError::InvalidCommand("a document name cannot be empty"));
+    }
+    if tx.before.name.is_none() {
+        tx.before.name = Some(tx.doc.name.clone());
+    }
+    tx.doc.name = name;
+    Ok(())
 }
 
 /// A document being edited by one command, recording the undo patch.

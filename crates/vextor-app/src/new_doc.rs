@@ -1,11 +1,13 @@
-//! The new-document flow: pick an artboard preset or a custom size.
+//! The new-document flow: pick an artboard preset or a custom size. It is
+//! also the start screen, so it offers Open… and the recent files.
 
 use std::cell::OnceCell;
+use std::path::{Path, PathBuf};
 
 use eframe::egui;
 use vextor_core::{Artboard, Command, Document, Rect};
 
-use crate::{theme, wordmark};
+use crate::{files, theme, wordmark};
 
 /// Largest custom artboard side, in document px.
 pub const MAX_SIDE: f64 = 10_000.0;
@@ -18,6 +20,8 @@ const SIDE_MARGIN: f32 = 32.0;
 const WORDMARK_GAP: f32 = 12.0;
 /// Least space kept above the picker, in points.
 const TOP_MARGIN: f32 = 16.0;
+/// Recent files listed on the start screen (the File menu lists them all).
+const RECENT_SHOWN: usize = 5;
 
 /// The artboard sizes offered when creating a document.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -130,6 +134,10 @@ pub enum Outcome {
     Cancel,
     /// A new document to switch to.
     Create(Box<Document>),
+    /// Open… was clicked: show the open dialog.
+    Browse,
+    /// A recent file was clicked.
+    OpenRecent(PathBuf),
 }
 
 /// State of the picker (the custom size fields).
@@ -159,9 +167,10 @@ impl Default for Picker {
 }
 
 impl Picker {
-    /// Draws the picker centred in `ui`. `can_cancel` shows a Cancel
-    /// button and lets `Esc` close it.
-    pub fn ui(&mut self, ui: &mut egui::Ui, can_cancel: bool) -> Outcome {
+    /// Draws the picker centred in `ui`, with Open… and the first
+    /// `recent` files under it. `can_cancel` shows a Cancel button and lets
+    /// `Esc` close it.
+    pub fn ui(&mut self, ui: &mut egui::Ui, can_cancel: bool, recent: &[PathBuf]) -> Outcome {
         let mut outcome = Outcome::Open;
         if can_cancel && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             return Outcome::Cancel;
@@ -247,6 +256,13 @@ impl Picker {
             if can_cancel && ui.add(action_button("Cancel")).clicked() {
                 outcome = Outcome::Cancel;
             }
+            ui.add_space(20.0);
+            if ui.add(action_button("Open…")).clicked() {
+                outcome = Outcome::Browse;
+            }
+            if let Some(path) = recent_list(ui, recent) {
+                outcome = Outcome::OpenRecent(path.to_path_buf());
+            }
             let height = ui.min_rect().max.y - start;
             if (height - self.content_height).abs() > 0.5 {
                 self.content_height = height;
@@ -269,6 +285,26 @@ impl Picker {
             }
         }
     }
+}
+
+/// The first recent files as links (full path on hover). Returns the one
+/// clicked.
+fn recent_list<'a>(ui: &mut egui::Ui, recent: &'a [PathBuf]) -> Option<&'a Path> {
+    if recent.is_empty() {
+        return None;
+    }
+    ui.add_space(12.0);
+    ui.weak("Recent");
+    let mut clicked = None;
+    for path in recent.iter().take(RECENT_SHOWN) {
+        let link = ui
+            .link(files::display_name(path))
+            .on_hover_text(path.display().to_string());
+        if link.clicked() {
+            clicked = Some(path.as_path());
+        }
+    }
+    clicked
 }
 
 /// Create / Cancel under the picker: one width so stacked buttons line up.

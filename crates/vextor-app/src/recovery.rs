@@ -1,14 +1,15 @@
 //! Autosave and crash recovery.
 //!
-//! While a document has unsaved changes, a copy is written every
-//! [`INTERVAL`] to `<app data>/recovery/<id>.vextor` (plus `<id>.path` with
-//! the file it came from, if any). A clean save or quit deletes it, so a
-//! copy found at launch means Vextor did not exit cleanly.
+//! Each open document has its own slot (spec 05f). While the document has
+//! unsaved changes, a copy is written every [`INTERVAL`] to
+//! `<app data>/recovery/<id>.vextor` (plus `<id>.path` with the file it
+//! came from, if any). A clean save, closing the document or a clean quit
+//! deletes it, so a copy found at launch means Vextor did not exit cleanly.
 //!
-//! Each running Vextor holds an OS lock on `<id>.lock` for its lifetime.
-//! The OS drops the lock when the process dies, however it dies, so a copy
-//! whose lock can be taken is an orphan to offer; a copy whose lock is held
-//! belongs to another running window and is left alone.
+//! A slot holds an OS lock on `<id>.lock` for as long as its document is
+//! open. The OS drops the lock when the process dies, however it dies, so a
+//! copy whose lock can be taken is an orphan to offer; a copy whose lock is
+//! held belongs to a document open in a running window and is left alone.
 
 use std::fs::{self, File, OpenOptions, TryLockError};
 use std::io;
@@ -30,7 +31,7 @@ const FOLDER: &str = "recovery";
 /// within one millisecond get their own slots (I-001).
 static STARTS: AtomicU64 = AtomicU64::new(0);
 
-/// This run's autosave slot.
+/// One open document's autosave slot.
 pub struct Recovery {
     dir: PathBuf,
     id: String,
@@ -52,15 +53,31 @@ pub struct Orphan {
 }
 
 impl Recovery {
-    /// Claims a fresh slot under `<app_data>/recovery` and returns the
-    /// orphans found there before claiming, newest first.
+    /// The autosaves under `<app_data>/recovery` whose owner is gone,
+    /// newest first. Called once at launch, before any slot is claimed.
+    ///
+    /// # Errors
+    /// I/O errors creating the folder.
+    pub fn orphans(app_data: &Path) -> io::Result<Vec<Orphan>> {
+        let dir = app_data.join(FOLDER);
+        fs::create_dir_all(&dir)?;
+        Ok(find_orphans(&dir))
+    }
+
+    /// [`Recovery::orphans`], then [`Recovery::claim`].
+    #[cfg(test)]
+    fn start(app_data: &Path, now: Instant) -> io::Result<(Self, Vec<Orphan>)> {
+        let orphans = Self::orphans(app_data)?;
+        Ok((Self::claim(app_data, now)?, orphans))
+    }
+
+    /// Claims a fresh slot under `<app_data>/recovery` for one document.
     ///
     /// # Errors
     /// I/O errors creating the folder or the lock.
-    pub fn start(app_data: &Path, now: Instant) -> io::Result<(Self, Vec<Orphan>)> {
+    pub fn claim(app_data: &Path, now: Instant) -> io::Result<Self> {
         let dir = app_data.join(FOLDER);
         fs::create_dir_all(&dir)?;
-        let orphans = find_orphans(&dir);
 
         let millis = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -76,14 +93,13 @@ impl Recovery {
             TryLockError::Error(e) => e,
             TryLockError::WouldBlock => io::Error::other("autosave slot already in use"),
         })?;
-        let recovery = Self {
+        Ok(Self {
             dir,
             id,
             lock: Some(lock),
             last_write: now,
             written: None,
-        };
-        Ok((recovery, orphans))
+        })
     }
 
     /// True when an autosave should be written now: there are unsaved
@@ -103,8 +119,7 @@ impl Recovery {
         INTERVAL.saturating_sub(now.saturating_duration_since(self.last_write))
     }
 
-    /// Writes `doc` (at `revision`, opened from `original`) to this run's
-    /// slot, replacing the previous copy atomically.
+    /// Writes `doc` (at `revision`, opened from `original`) to this, replacing the previous copy atomically.
     ///
     /// # Errors
     /// I/O or encoding errors; the previous copy is kept.
@@ -125,8 +140,8 @@ impl Recovery {
         Ok(())
     }
 
-    /// Deletes this run's copy (after a clean save, or when the document is
-    /// discarded or closed). The next autosave waits a full interval.
+    /// Deletes this slot's copy (after a clean save). The next autosave
+    /// waits a full interval.
     pub fn clear(&mut self, now: Instant) {
         let _ = remove_if_present(&self.doc_path());
         let _ = remove_if_present(&self.path_path());
@@ -134,7 +149,8 @@ impl Recovery {
         self.last_write = now;
     }
 
-    /// Clean exit: deletes the copy and releases and removes the lock.
+    /// The document closed, or the app quit cleanly: deletes the copy and
+    /// releases and removes the lock.
     pub fn shutdown(&mut self) {
         self.clear(Instant::now());
         if self.lock.take().is_some() {
@@ -335,6 +351,45 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), slots.len(), "every start has its own id");
+    }
+
+    #[test]
+    fn each_document_has_its_own_slot_and_closing_one_keeps_the_other() {
+        let dir = TestDir::new();
+        let now = Instant::now();
+        assert!(Recovery::orphans(dir.path()).expect("scans").is_empty());
+        let mut a = Recovery::claim(dir.path(), now).expect("claims");
+        let mut b = Recovery::claim(dir.path(), now).expect("claims");
+        a.write(&Document::new("a"), None, 1, now).expect("writes");
+        b.write(&Document::new("b"), None, 1, now).expect("writes");
+        assert!(a.doc_path().exists() && b.doc_path().exists());
+
+        a.shutdown();
+        assert!(!a.doc_path().exists(), "closed document's copy is gone");
+        assert!(b.doc_path().exists(), "the other document's copy stays");
+        assert!(
+            Recovery::orphans(dir.path()).expect("scans").is_empty(),
+            "an open document's copy is not an orphan"
+        );
+    }
+
+    #[test]
+    fn a_crash_with_two_unsaved_documents_offers_both() {
+        let dir = TestDir::new();
+        let now = Instant::now();
+        let mut a = Recovery::claim(dir.path(), now).expect("claims");
+        let mut b = Recovery::claim(dir.path(), now).expect("claims");
+        a.write(&Document::new("a"), None, 1, now).expect("writes");
+        b.write(&Document::new("b"), None, 1, now).expect("writes");
+        crash(a);
+        crash(b);
+        let orphans = Recovery::orphans(dir.path()).expect("scans");
+        let mut names: Vec<String> = orphans
+            .iter()
+            .map(|o| o.load().expect("loads").name)
+            .collect();
+        names.sort();
+        assert_eq!(names, ["a", "b"]);
     }
 
     #[test]

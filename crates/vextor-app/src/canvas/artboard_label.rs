@@ -105,12 +105,6 @@ impl Canvas {
             && press_at.is_some_and(|p| label_at(&painter, rect.min, session, p).is_some())
     }
 
-    /// Drops a rename in progress without applying it (the document is
-    /// being replaced: its artboard ids mean nothing in the next one).
-    pub fn cancel_rename(&mut self) {
-        self.rename = None;
-    }
-
     /// The label being renamed, if any: the canvas draws no label for it.
     pub(super) fn renaming(&self) -> Option<ArtboardId> {
         self.rename.as_ref().map(|r| r.id)
@@ -155,24 +149,5 @@ impl Canvas {
             }
             self.rename = None;
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn opening_another_document_drops_the_rename() {
-        let mut canvas = Canvas {
-            rename: Some(Rename {
-                id: ArtboardId(1),
-                text: "old name".to_owned(),
-                fresh: false,
-            }),
-            ..Canvas::default()
-        };
-        canvas.cancel_rename();
-        assert_eq!(canvas.renaming(), None);
     }
 }

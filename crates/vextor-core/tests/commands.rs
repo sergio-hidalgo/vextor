@@ -948,6 +948,15 @@ fn set_color_format() {
 }
 
 #[test]
+fn set_name() {
+    let fx = fixture();
+    check(&fx.doc, Command::SetName("pricing".to_owned()), |d| {
+        d.name = "pricing".to_owned();
+    });
+    rejects(&fx.doc, Command::SetName("  ".to_owned()));
+}
+
+#[test]
 fn set_grid() {
     let fx = fixture();
     let grid = GridSettings {

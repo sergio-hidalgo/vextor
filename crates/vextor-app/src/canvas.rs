@@ -16,6 +16,7 @@ use eframe::egui::{
 use vextor_core::{Point, Rect, Vec2, View};
 use vextor_render::{RenderCache, Viewport};
 
+use crate::documents::DocId;
 use crate::select::SelectTool;
 use crate::session::Session;
 use crate::text_tool::TextTool;
@@ -60,6 +61,8 @@ pub struct Canvas {
     text: TextTool,
     /// An artboard label being renamed (spec 05e).
     rename: Option<artboard_label::Rename>,
+    /// The document drawn last frame (spec 05f).
+    document: Option<DocId>,
 }
 
 impl Canvas {
@@ -75,9 +78,27 @@ impl Canvas {
         session.editor.view = view::actual_size(session.editor.view, self.size);
     }
 
-    /// Draws the canvas into the rest of `ui` and handles its input.
+    /// Starts afresh for document `doc` when it is not the one drawn last:
+    /// the texture, render cache, drag, text edit and rename all belonged
+    /// to the previous document (a revision number means nothing across
+    /// documents). The view itself is the session's, so it is kept.
+    fn show_document(&mut self, doc: DocId) {
+        if self.document == Some(doc) {
+            return;
+        }
+        *self = Self {
+            checker: self.checker.take(),
+            size: self.size,
+            show_stats: self.show_stats,
+            document: Some(doc),
+            ..Self::default()
+        };
+    }
+
+    /// Draws document `doc` into the rest of `ui` and handles its input.
     /// Returns a message for the user when an edit was refused.
-    pub fn ui(&mut self, ui: &mut egui::Ui, session: &mut Session) -> Option<String> {
+    pub fn ui(&mut self, ui: &mut egui::Ui, doc: DocId, session: &mut Session) -> Option<String> {
+        self.show_document(doc);
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
         self.size = to_vec2(rect.size());
         if session.needs_fit && rect.width() > 0.0 && rect.height() > 0.0 {
@@ -419,6 +440,26 @@ mod tests {
         let mut now = viewport(1.0);
         now.width = 120;
         assert!(needs_render(Some(&shown(1.0, 3)), &now, 3, false));
+    }
+
+    #[test]
+    fn switching_documents_starts_the_canvas_afresh() {
+        let mut docs = crate::documents::Documents::default();
+        let new = |name| Session::new(crate::new_doc::new_document(name, 24.0, 24.0));
+        let a = docs.add(new("a"), None);
+        let b = docs.add(new("b"), None);
+        let mut canvas = Canvas {
+            show_stats: true,
+            ..Canvas::default()
+        };
+        canvas.show_document(a);
+        canvas.shown = Some(shown(1.0, 3));
+        canvas.show_document(a);
+        assert!(canvas.shown.is_some(), "same document: texture kept");
+        canvas.show_document(b);
+        assert!(canvas.shown.is_none(), "other document: rendered again");
+        assert!(canvas.renaming().is_none());
+        assert!(canvas.show_stats, "debug setting kept");
     }
 
     #[test]

@@ -43,13 +43,23 @@ there), never the machine's fonts.
 ## Using the editor
 
 On launch, pick an artboard size: Icon 16 / 24 / 32 / 48, Button 160×48,
-Card 320×200, or a custom size. The canvas shows a checkerboard inside
-transparent artboards and grey around them.
+Card 320×200, or a custom size — or open a file (Open… and the recent files
+are under the sizes). The canvas shows a checkerboard inside transparent
+artboards and grey around them.
+
+Several documents can be open at once, one tab each above the canvas (`•`
+marks unsaved changes; hover a tab for its file). Each keeps its own undo,
+selection and view; copy in one and paste in another. Closing the last one
+goes back to the start screen. Quitting asks about each unsaved document in
+turn, and after a crash every unsaved document is offered back.
 
 | Action                      | How                                        |
 | :-------------------------- | :----------------------------------------- |
-| New document                | `⌘N` (File ▸ New…)                         |
-| Open / open a recent file   | `⌘O` (File ▸ Open…) / File ▸ Open Recent   |
+| New document                | `⌘N` (File ▸ New…), or `+` after the tabs  |
+| Open / open a recent file   | `⌘O` (File ▸ Open…) / File ▸ Open Recent (an open file switches to its tab) |
+| Close document              | `⌘W` (File ▸ Close), or the `×` that shows when you hover a tab |
+| Rename document             | double-click its tab; `Enter` or click elsewhere keeps it, `Esc` cancels. A saved document's file is renamed in its folder (never over another file) |
+| Next / previous document    | `⌥⌘→` / `⌥⌘←`, or `⌃Tab` / `⌃⇧Tab` (Window menu lists them all) |
 | Save / save as              | `⌘S` / `⇧⌘S`                               |
 | Zoom at the pointer         | pinch, or `⌘`-scroll                       |
 | Pan                         | two-finger scroll, space-drag, middle-drag |
