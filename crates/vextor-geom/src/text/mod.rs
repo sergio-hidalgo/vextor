@@ -8,7 +8,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use kurbo::Rect;
-use vextor_core::{FontSpec, NodeId, Text, TextAlign};
+use vextor_core::{FillRule, FontSpec, Geometry, NodeId, Shape, Style, Text, TextAlign};
+
+use crate::convert::bezpath_to_path;
 
 pub use fonts::{FaceStyle, FontDb, ResolvedFace};
 pub use layout::{LineBox, MissingFont, TextLayout, layout};
@@ -104,4 +106,30 @@ pub fn text_box(text: &Text, layout: &TextLayout) -> Rect {
         }
         None => b,
     }
+}
+
+/// A text as ordinary shapes (Convert to Outlines), in the text's own
+/// space: its frame as a rounded rect, then every glyph as one compound
+/// path with the text's paint. Either is `None` when the text has none
+/// (no frame; no glyphs, e.g. blank or not laid out with a font).
+#[must_use]
+pub fn text_outlines(text: &Text, layout: &TextLayout) -> (Option<Shape>, Option<Shape>) {
+    let frame = text.frame.as_ref().map(|f| {
+        let b = text_box(text, layout);
+        Shape {
+            geometry: Geometry::Rect {
+                rect: vextor_core::Rect::new(b.x0, b.y0, b.width(), b.height()),
+                radius: f.radius,
+            },
+            style: Style {
+                fill: f.fill,
+                stroke: f.stroke.clone(),
+            },
+        }
+    });
+    let glyphs = (!layout.glyphs.is_empty()).then(|| Shape {
+        geometry: Geometry::Path(bezpath_to_path(&layout.glyphs, FillRule::NonZero)),
+        style: text.style.clone(),
+    });
+    (frame, glyphs)
 }

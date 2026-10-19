@@ -5,10 +5,10 @@ use std::sync::Arc;
 
 use resvg::{tiny_skia, usvg};
 use vextor_core::{
-    Command, CornerRadii, Document, FillRule, Geometry, Node, NodeId, NodeKind, Paint, Rect, Rgba,
-    Shape, Stroke, Style, Text, TextAlign, TextFrame, Transform, Vec2, View,
+    Command, CornerRadii, Document, Node, NodeId, NodeKind, Paint, Rgba, Stroke, Style, Text,
+    TextAlign, TextFrame, Transform, Vec2, View,
 };
-use vextor_geom::{FontDb, Fonts, bezpath_to_path, text_box};
+use vextor_geom::{FontDb, Fonts, text_outlines};
 use vextor_render::{Pixmap, Viewport, render};
 
 const REGULAR: &[u8] =
@@ -130,25 +130,11 @@ fn text_draws_like_the_shapes_of_its_outlines_and_frame() {
     )]);
     let live = render(&d, &fonts, &viewport()).expect("renders");
 
-    // The same picture built from plain shapes: a rounded rect for the
-    // frame, then one compound path holding every glyph.
+    // What Convert to Outlines makes: a rounded rect for the frame, then
+    // one compound path holding every glyph.
     let layout = fonts.layout(NodeId(100), &text);
-    let b = text_box(&text, &layout);
-    let frame = text.frame.clone().expect("framed");
-    let rect = Shape {
-        geometry: Geometry::Rect {
-            rect: Rect::new(b.x0, b.y0, b.width(), b.height()),
-            radius: frame.radius,
-        },
-        style: Style {
-            fill: frame.fill,
-            stroke: frame.stroke,
-        },
-    };
-    let glyphs = Shape {
-        geometry: Geometry::Path(bezpath_to_path(&layout.glyphs, FillRule::NonZero)),
-        style: text.style.clone(),
-    };
+    let (rect, glyphs) = text_outlines(&text, &layout);
+    let (rect, glyphs) = (rect.expect("framed"), glyphs.expect("inked"));
     let twin = doc(vec![
         at(NodeId(101), NodeKind::Shape(rect), 20.0, 20.0),
         at(NodeId(102), NodeKind::Shape(glyphs), 20.0, 20.0),

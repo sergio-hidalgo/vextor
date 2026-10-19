@@ -6,7 +6,7 @@ use vextor_geom::Align;
 
 use super::keys::{
     ACTUAL_SIZE, BACK, BACKWARD, COPY, CUT, DELETE, DUPLICATE, FIT, FORWARD, FRONT, GROUP, NEW,
-    OPEN, PASTE, PASTE_IN_PLACE, REDO, SAVE, SAVE_AS, SELECT_ALL, UNDO, UNGROUP,
+    OPEN, OUTLINE_TEXT, PASTE, PASTE_IN_PLACE, REDO, SAVE, SAVE_AS, SELECT_ALL, UNDO, UNGROUP,
 };
 use super::{Action, VextorApp};
 use crate::session::Session;
@@ -128,6 +128,16 @@ impl VextorApp {
         }
         if why_item(ui, can.ungroup, "Ungroup", UNGROUP, "Select a group") {
             actions.push(Action::Ungroup);
+        }
+        ui.separator();
+        if why_item(
+            ui,
+            can.outline,
+            "Convert Text to Outlines",
+            OUTLINE_TEXT,
+            "Select a text",
+        ) {
+            actions.push(Action::OutlineText);
         }
         ui.separator();
         ui.add_enabled_ui(can.edit, |ui| {

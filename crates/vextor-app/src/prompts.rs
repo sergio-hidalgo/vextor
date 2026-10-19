@@ -67,6 +67,36 @@ pub fn recover(ctx: &egui::Context, canvas: Rect, name: &str) -> Option<RecoverA
     .inner
 }
 
+/// Warns that `wanted` is missing and the text would be outlined in
+/// `shown`. `Some(true)` converts, `Some(false)` (or `Esc`, or a click
+/// outside) cancels, `None` while the user has not answered.
+pub fn outline_missing_font(
+    ctx: &egui::Context,
+    canvas: Rect,
+    wanted: &str,
+    shown: Option<&str>,
+) -> Option<bool> {
+    let text = match shown {
+        Some(shown) => format!(
+            "“{wanted}” is not installed. The outlines will have the shape of {shown}, the font shown instead."
+        ),
+        None => format!("“{wanted}” is not installed and no font can stand in for it."),
+    };
+    let modal = dialog(ctx, "outline_missing_font", canvas, |ui| {
+        body(ui, "Font missing", &text);
+        let options: &[(&str, bool)] = if shown.is_some() {
+            &[("Convert", true), ("Cancel", false)]
+        } else {
+            &[("Cancel", false)]
+        };
+        buttons(ui, options)
+    });
+    if modal.should_close() && modal.inner.is_none() {
+        return Some(false);
+    }
+    modal.inner
+}
+
 /// A modal of fixed width whose centre is the centre of `canvas`, with its
 /// content centred.
 fn dialog<T>(

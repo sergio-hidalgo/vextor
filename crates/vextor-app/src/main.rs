@@ -8,6 +8,7 @@ mod files;
 mod fonts;
 mod icon;
 mod new_doc;
+mod outline_text;
 mod panels;
 mod prompts;
 mod recovery;

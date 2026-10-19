@@ -50,6 +50,7 @@ enum Action {
     Flip { horizontal: bool },
     Nudge { dx: i32, dy: i32 },
     Tool(ToolId),
+    OutlineText,
 }
 
 /// Editor root.
@@ -80,6 +81,9 @@ pub struct VextorApp {
     system_clipboard: Option<String>,
     /// Fonts for text; the OS fonts arrive from a background thread.
     fonts: SystemFonts,
+    /// Waiting on "Convert with the fallback font?" (a selected text's
+    /// font is missing).
+    outline_prompt: Option<vextor_geom::MissingFont>,
 }
 
 impl VextorApp {
@@ -124,6 +128,7 @@ impl VextorApp {
             align_to_artboard: false,
             system_clipboard: None,
             fonts,
+            outline_prompt: None,
         }
     }
 
@@ -219,6 +224,14 @@ impl VextorApp {
                 s.editor.tool = *tool;
                 Ok(())
             }
+            Action::OutlineText => match crate::outline_text::missing_font(s) {
+                // Ask first: the fallback face would be outlined.
+                Some(missing) => {
+                    self.outline_prompt = Some(missing);
+                    Ok(())
+                }
+                None => crate::outline_text::convert(s),
+            },
             _ => Ok(()),
         };
         if let Err(e) = result {
@@ -247,7 +260,8 @@ impl eframe::App for VextorApp {
             s.set_fonts(fonts);
         }
         self.handle_close(&ctx);
-        let prompt_open = self.confirm.is_some() || !self.orphans.is_empty();
+        let prompt_open =
+            self.confirm.is_some() || !self.orphans.is_empty() || self.outline_prompt.is_some();
         if !prompt_open {
             // While text is typed, letters and Edit keys belong to it.
             let editing =

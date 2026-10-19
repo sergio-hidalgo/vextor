@@ -41,6 +41,8 @@ pub(super) const BACKWARD: KeyboardShortcut =
 pub(super) const FRONT: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::ArrowUp);
 pub(super) const BACK: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::ArrowDown);
 
+pub(super) const OUTLINE_TEXT: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::O);
+
 // Tools: plain letters (every layout has them).
 pub(super) const SELECT_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::V);
 pub(super) const TEXT_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::T);
@@ -70,6 +72,7 @@ impl VextorApp {
                 }
             }
             let keys = [
+                (OUTLINE_TEXT, Action::OutlineText),
                 (PASTE_IN_PLACE, Action::PasteInPlace),
                 (DUPLICATE, Action::Duplicate),
                 (SELECT_ALL, Action::SelectAll),

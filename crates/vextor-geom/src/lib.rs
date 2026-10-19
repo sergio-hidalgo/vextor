@@ -12,6 +12,7 @@ pub use hit::{bounds, from_affine, pick, selectable, to_affine, touching, union_
 pub use resize::{Resized, polar, resize, stretched};
 pub use text::{
     FaceStyle, FontDb, Fonts, LineBox, MissingFont, ResolvedFace, TextLayout, layout, text_box,
+    text_outlines,
 };
 pub use transform::{
     Align, Handle, ROTATE_STEP, align, distribute, flip, retarget, rotate, rotation_angle,

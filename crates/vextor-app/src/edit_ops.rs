@@ -22,6 +22,8 @@ pub struct Can {
     pub group: bool,
     pub ungroup: bool,
     pub distribute: bool,
+    /// A text is selected (Convert Text to Outlines).
+    pub outline: bool,
 }
 
 /// Which selection operations are possible.
@@ -34,6 +36,7 @@ pub fn can(s: &Session) -> Can {
         group: !sel.is_empty() && common_parent(&s.doc, &sel).is_some(),
         ungroup: sel.iter().any(|&id| is_plain_group(&s.doc, id)),
         distribute: sel.len() >= 3,
+        outline: !crate::outline_text::selected_texts(s).is_empty(),
     }
 }
 
