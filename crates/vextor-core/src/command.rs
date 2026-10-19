@@ -4,7 +4,7 @@ use crate::color::ColorFormat;
 use crate::document::Artboard;
 use crate::ids::{NodeId, ResourceId};
 use crate::math::{Transform, Vec2};
-use crate::node::Node;
+use crate::node::{Geometry, Node};
 use crate::path::{NodeType, Path, PathNode, PathNodeRef};
 use crate::resource::Resource;
 use crate::settings::GridSettings;
@@ -52,9 +52,19 @@ pub enum Command {
         ids: Vec<NodeId>,
         transform: Transform,
     },
+    /// Gives each node its own transform (moving, aligning or scaling
+    /// several objects at once).
+    SetTransforms {
+        items: Vec<(NodeId, Transform)>,
+    },
     SetStyle {
         ids: Vec<NodeId>,
         style: Style,
+    },
+    /// Replaces shape geometries (a resize baked into the shape, so its
+    /// stroke keeps its width).
+    SetGeometry {
+        items: Vec<(NodeId, Geometry)>,
     },
     SetProps {
         id: NodeId,
@@ -153,6 +163,14 @@ pub enum Command {
     SetGrid(GridSettings),
     /// How colours are written when the document is saved.
     SetColorFormat(ColorFormat),
+
+    // ----- composite -----
+    /// Runs `commands` in order as one undo step named `label`; either all
+    /// of them apply or none does.
+    Batch {
+        label: &'static str,
+        commands: Vec<Command>,
+    },
 }
 
 impl Command {
@@ -165,8 +183,9 @@ impl Command {
             Self::Reparent { .. } => "Move to layer",
             Self::Group { .. } => "Group",
             Self::Ungroup { .. } => "Ungroup",
-            Self::SetTransform { .. } => "Transform",
+            Self::SetTransform { .. } | Self::SetTransforms { .. } => "Transform",
             Self::SetStyle { .. } => "Change style",
+            Self::SetGeometry { .. } => "Change shape",
             Self::SetProps { .. } => "Change properties",
             Self::AddPathNode { .. } => "Add node",
             Self::MovePathNodes { .. } => "Move nodes",
@@ -186,6 +205,7 @@ impl Command {
             Self::SetArtboards(_) => "Edit artboards",
             Self::SetGrid(_) => "Edit grid",
             Self::SetColorFormat(_) => "Change colour format",
+            Self::Batch { label, .. } => label,
         }
     }
 }

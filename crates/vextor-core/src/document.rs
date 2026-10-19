@@ -247,10 +247,18 @@ impl Document {
     /// references between them (children, clip) are remapped. Used for
     /// paste and duplicate so inserted ids never collide.
     pub fn fresh_copies(&mut self, nodes: &[Node]) -> Vec<Node> {
+        self.fresh_copies_mapped(nodes).0
+    }
+
+    /// [`Document::fresh_copies`], plus the old → new id map.
+    pub(crate) fn fresh_copies_mapped(
+        &mut self,
+        nodes: &[Node],
+    ) -> (Vec<Node>, BTreeMap<NodeId, NodeId>) {
         let map: BTreeMap<NodeId, NodeId> =
             nodes.iter().map(|n| (n.id, self.alloc_node_id())).collect();
         let remap = |id: NodeId| map.get(&id).copied().unwrap_or(id);
-        nodes
+        let copies = nodes
             .iter()
             .map(|n| {
                 let mut copy = n.clone();
@@ -263,7 +271,8 @@ impl Document {
                 }
                 copy
             })
-            .collect()
+            .collect();
+        (copies, map)
     }
 
     /// True when any paint in the document refers to `id`.

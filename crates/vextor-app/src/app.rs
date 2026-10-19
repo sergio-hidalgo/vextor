@@ -1,12 +1,15 @@
 //! The editor window: menus, shortcuts, panels and the canvas.
 
 mod file_flow;
+mod keys;
+mod menus;
 
 use std::path::PathBuf;
 use std::time::Instant;
 
-use eframe::egui::{self, Key, KeyboardShortcut, Modifiers};
-use vextor_core::{Command, Transform};
+use eframe::egui;
+use vextor_core::Arrange;
+use vextor_geom::Align;
 
 use self::file_flow::Then;
 use crate::canvas::Canvas;
@@ -14,18 +17,8 @@ use crate::files::{self, RecentFiles};
 use crate::new_doc::{Outcome, Picker};
 use crate::recovery::{Orphan, Recovery};
 use crate::session::Session;
-use crate::{debug, panels, prompts};
-
-const NEW: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::N);
-const OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
-const SAVE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
-const SAVE_AS: KeyboardShortcut =
-    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S);
-const UNDO: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Z);
-const REDO: KeyboardShortcut =
-    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::Z);
-const FIT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Num0);
-const ACTUAL_SIZE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Num1);
+use crate::theme;
+use crate::{edit_ops, panels, prompts};
 
 /// A user request from a menu or a shortcut.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -40,6 +33,21 @@ enum Action {
     Redo,
     Fit,
     ActualSize,
+    Cut,
+    Copy,
+    Paste,
+    PasteInPlace,
+    Duplicate,
+    Delete,
+    SelectAll,
+    Deselect,
+    Group,
+    Ungroup,
+    Arrange(Arrange),
+    Align(Align),
+    Distribute { horizontal: bool },
+    Flip { horizontal: bool },
+    Nudge { dx: i32, dy: i32 },
 }
 
 /// Editor root.
@@ -64,6 +72,10 @@ pub struct VextorApp {
     quitting: bool,
     /// The canvas area last frame; dialogs centre on it.
     canvas_rect: egui::Rect,
+    /// Object ▸ Align ▸ Align to Artboard.
+    align_to_artboard: bool,
+    /// SVG text to put on the system clipboard this frame.
+    system_clipboard: Option<String>,
 }
 
 impl VextorApp {
@@ -72,6 +84,7 @@ impl VextorApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // ⌘0 / ⌘+ / ⌘- belong to the canvas, not to egui's UI scale.
         cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
+        theme::apply(&cc.egui_ctx);
         let data_dir = files::app_data_dir();
         let recent = data_dir
             .as_deref()
@@ -103,13 +116,19 @@ impl VextorApp {
             message,
             quitting: false,
             canvas_rect: egui::Rect::NOTHING,
+            align_to_artboard: false,
+            system_clipboard: None,
         }
     }
 
     /// Replaces the current document (already confirmed) with `session`.
-    fn open(&mut self, session: Session) {
+    fn open(&mut self, mut session: Session) {
         if let Some(r) = &mut self.recovery {
             r.clear(Instant::now());
+        }
+        // The clipboard outlives the document, so copies paste elsewhere.
+        if let Some(old) = &mut self.session {
+            session.editor.clipboard = old.editor.clipboard.take();
         }
         self.session = Some(session);
         self.picker = None;
@@ -145,107 +164,48 @@ impl VextorApp {
                     _ => self.canvas.actual_size(session),
                 }
             }
+            _ => self.edit(&action),
         }
     }
 
-    /// Keyboard shortcuts, most specific first (⇧⌘Z before ⌘Z).
-    fn shortcuts(ctx: &egui::Context) -> Vec<Action> {
-        ctx.input_mut(|i| {
-            [
-                (REDO, Action::Redo),
-                (UNDO, Action::Undo),
-                (NEW, Action::New),
-                (OPEN, Action::Open),
-                (SAVE_AS, Action::SaveAs),
-                (SAVE, Action::Save),
-                (FIT, Action::Fit),
-                (ACTUAL_SIZE, Action::ActualSize),
-            ]
-            .into_iter()
-            .filter(|(shortcut, _)| i.consume_shortcut(shortcut))
-            .map(|(_, action)| action)
-            .collect()
-        })
-    }
-
-    fn menu_bar(&mut self, ui: &mut egui::Ui) -> Vec<Action> {
-        let mut actions = Vec::new();
-        let ctx = ui.ctx().clone();
-        let item = |ui: &mut egui::Ui, enabled: bool, text: &str, shortcut: &KeyboardShortcut| {
-            let button = egui::Button::new(text).shortcut_text(ctx.format_shortcut(shortcut));
-            ui.add_enabled(enabled, button).clicked()
+    /// Edit and Object actions on the open document's selection.
+    fn edit(&mut self, action: &Action) {
+        let Some(s) = self.session.as_mut() else {
+            return;
         };
-        let has_doc = self.session.is_some();
-        let edit = self.session.as_ref().map(Session::edit_menu);
-        egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button("File", |ui| {
-                if item(ui, true, "New…", &NEW) {
-                    actions.push(Action::New);
-                }
-                if item(ui, true, "Open…", &OPEN) {
-                    actions.push(Action::Open);
-                }
-                self.recent_menu(ui, &mut actions);
-                ui.separator();
-                if item(ui, has_doc, "Save", &SAVE) {
-                    actions.push(Action::Save);
-                }
-                if item(ui, has_doc, "Save As…", &SAVE_AS) {
-                    actions.push(Action::SaveAs);
-                }
-            });
-            ui.menu_button("Edit", |ui| {
-                let undo = edit.and_then(|e| e.undo);
-                let redo = edit.and_then(|e| e.redo);
-                let undo_text = undo.map_or_else(|| "Undo".to_owned(), |l| format!("Undo {l}"));
-                let redo_text = redo.map_or_else(|| "Redo".to_owned(), |l| format!("Redo {l}"));
-                if item(ui, undo.is_some(), &undo_text, &UNDO) {
-                    actions.push(Action::Undo);
-                }
-                if item(ui, redo.is_some(), &redo_text, &REDO) {
-                    actions.push(Action::Redo);
-                }
-            });
-            ui.menu_button("View", |ui| {
-                if item(ui, has_doc, "Fit Artboard", &FIT) {
-                    actions.push(Action::Fit);
-                }
-                if item(ui, has_doc, "Actual Size", &ACTUAL_SIZE) {
-                    actions.push(Action::ActualSize);
-                }
-                ui.separator();
-                ui.checkbox(&mut self.show_code, "Code Panel");
-            });
-            if debug::enabled() {
-                match debug::menu(ui, &mut self.canvas.show_stats) {
-                    Some(debug::Action::Load(doc)) => self.open(Session::new(*doc)),
-                    Some(debug::Action::NudgeLayer) => nudge_first_layer(self.session.as_mut()),
-                    None => {}
-                }
+        if self.picker.is_some() {
+            return;
+        }
+        let result = match action {
+            Action::Cut => edit_ops::cut(s).map(|svg| self.system_clipboard = svg),
+            Action::Copy => {
+                self.system_clipboard = edit_ops::copy(s);
+                Ok(())
             }
-        });
-        actions
-    }
-
-    /// File ▸ Open Recent: file names, full path on hover.
-    fn recent_menu(&self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
-        let paths = self.recent.paths();
-        ui.add_enabled_ui(!paths.is_empty(), |ui| {
-            ui.menu_button("Open Recent", |ui| {
-                for path in paths {
-                    let button = ui
-                        .button(files::display_name(path))
-                        .on_hover_text(path.display().to_string());
-                    if button.clicked() {
-                        actions.push(Action::OpenRecent(path.clone()));
-                    }
-                }
-                ui.separator();
-                if ui.button("Clear Menu").clicked() {
-                    actions.push(Action::ClearRecent);
-                }
-            });
-        });
+            Action::Paste => edit_ops::paste(s, false),
+            Action::PasteInPlace => edit_ops::paste(s, true),
+            Action::Duplicate => edit_ops::duplicate(s),
+            Action::Delete => edit_ops::delete(s),
+            Action::SelectAll => {
+                edit_ops::select_all(s);
+                Ok(())
+            }
+            Action::Deselect => {
+                s.select(Vec::new());
+                Ok(())
+            }
+            Action::Group => edit_ops::group(s),
+            Action::Ungroup => edit_ops::ungroup(s),
+            Action::Arrange(how) => edit_ops::arrange(s, *how),
+            Action::Align(how) => edit_ops::align(s, *how, self.align_to_artboard),
+            Action::Distribute { horizontal } => edit_ops::distribute(s, *horizontal),
+            Action::Flip { horizontal } => edit_ops::flip(s, *horizontal),
+            Action::Nudge { dx, dy } => edit_ops::nudge(s, f64::from(*dx), f64::from(*dy)),
+            _ => Ok(()),
+        };
+        if let Err(e) = result {
+            self.message = Some(e);
+        }
     }
 
     fn update_title(&mut self, ctx: &egui::Context) {
@@ -266,7 +226,8 @@ impl eframe::App for VextorApp {
         self.handle_close(&ctx);
         let prompt_open = self.confirm.is_some() || !self.orphans.is_empty();
         if !prompt_open {
-            for action in Self::shortcuts(&ctx) {
+            let editing = self.session.is_some() && self.picker.is_none();
+            for action in Self::shortcuts(&ctx, editing) {
                 self.run(action);
             }
         }
@@ -288,7 +249,12 @@ impl eframe::App for VextorApp {
         egui::Panel::right("inspector")
             .resizable(true)
             .default_size(240.0)
-            .show(ui, panels::inspector_and_layers);
+            .show(ui, |ui| {
+                let session = self.session.as_mut().filter(|_| self.picker.is_none());
+                if let Some(e) = panels::inspector_and_layers(ui, session) {
+                    self.message = Some(e);
+                }
+            });
         egui::CentralPanel::no_frame().show(ui, |ui| {
             self.canvas_rect = ui.max_rect();
             if let Some(picker) = &mut self.picker {
@@ -297,13 +263,18 @@ impl eframe::App for VextorApp {
                     Outcome::Cancel => self.picker = None,
                     Outcome::Create(doc) => self.open(Session::new(*doc)),
                 }
-            } else if let Some(session) = &mut self.session {
-                self.canvas.ui(ui, session);
+            } else if let Some(session) = &mut self.session
+                && let Some(e) = self.canvas.ui(ui, session)
+            {
+                self.message = Some(e);
             }
         });
 
         self.prompts(&ctx);
         self.autosave_tick(&ctx);
+        if let Some(text) = self.system_clipboard.take() {
+            ctx.copy_text(text);
+        }
         self.update_title(&ctx);
     }
 }
@@ -318,23 +289,4 @@ impl Drop for VextorApp {
             r.shutdown();
         }
     }
-}
-
-/// Debug: moves the first layer 10 px right through the history.
-fn nudge_first_layer(session: Option<&mut Session>) {
-    let Some(session) = session else {
-        return;
-    };
-    let Some(&layer) = session.doc.layers.first() else {
-        return;
-    };
-    let Ok(node) = session.doc.node(layer) else {
-        return;
-    };
-    let transform = node.transform.then(Transform::translate(10.0, 0.0));
-    // A layer transform is always valid; a failure would leave nothing changed.
-    let _ = session.apply(Command::SetTransform {
-        ids: vec![layer],
-        transform,
-    });
 }

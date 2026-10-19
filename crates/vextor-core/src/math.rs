@@ -161,6 +161,27 @@ impl Transform {
         ])
     }
 
+    /// The transform that undoes this one, or `None` when it collapses
+    /// the plane (determinant within [`EPS`] of zero) or is not finite.
+    #[must_use]
+    #[allow(clippy::many_single_char_names)] // SVG matrix coefficient names
+    pub fn invert(self) -> Option<Self> {
+        let [a, b, c, d, e, f] = self.0;
+        let det = a * d - b * c;
+        if !self.is_finite() || det.abs() < EPS {
+            return None;
+        }
+        let (ia, ib, ic, id) = (d / det, -b / det, -c / det, a / det);
+        Some(Self([
+            ia,
+            ib,
+            ic,
+            id,
+            -(ia * e + ic * f),
+            -(ib * e + id * f),
+        ]))
+    }
+
     /// Maps a point through this transform.
     #[must_use]
     #[allow(clippy::many_single_char_names)] // SVG matrix coefficient names
@@ -218,6 +239,16 @@ mod tests {
         let t = Transform([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
         assert_eq!(t.then(Transform::IDENTITY), t);
         assert_eq!(Transform::IDENTITY.then(t), t);
+    }
+
+    #[test]
+    fn invert_undoes_the_transform() {
+        let t = Transform([2.0, 1.0, -1.0, 3.0, 5.0, -7.0]);
+        let inv = t.invert().expect("invertible");
+        let p = Point::new(3.0, 4.0);
+        let back = inv.apply(t.apply(p));
+        assert!((back.x - p.x).abs() < EPS && (back.y - p.y).abs() < EPS);
+        assert_eq!(Transform::scale(0.0, 1.0).invert(), None);
     }
 
     #[test]

@@ -1,9 +1,9 @@
 //! The app icon shown in the Dock (macOS) or the window/taskbar while
 //! Vextor runs.
 //!
-//! The source is `assets/icon.svg`; `assets/icon.png` is its 512 px render
-//! on a black rounded tile sized like other macOS icons, because the OS
-//! takes pixels, not vectors. After changing the SVG, regenerate the PNG:
+//! The source is `assets/icon.svg` (it carries its own rounded tile);
+//! `assets/icon.png` is its 512 px render inset like other macOS icons,
+//! because the OS takes pixels, not vectors. After changing the SVG, regenerate the PNG:
 //!
 //! ```sh
 //! cargo test -p vextor-app -- --ignored regenerate_icon_png
@@ -32,39 +32,20 @@ mod tests {
     /// Width and height of the icon render, in px.
     const SIZE: u32 = 512;
 
-    /// Transparent border around the tile, per side (Apple's grid: 100 of
-    /// 1024).
+    /// Transparent border around the SVG's tile, per side (Apple's grid:
+    /// 100 of 1024).
     const TILE_INSET: f32 = 50.0;
 
-    /// Corner radius of the tile (Apple's grid: ~185 of 1024).
-    const TILE_RADIUS: f32 = 92.0;
-
-    /// Space between the tile's edge and the logo, per side, both
-    /// horizontally and vertically.
-    const LOGO_PADDING: f32 = 66.0;
-
-    /// Renders the black rounded tile, then the logo centred inside it
-    /// with [`LOGO_PADDING`].
+    /// Renders the SVG centred in the square left inside [`TILE_INSET`].
     fn render_svg() -> tiny_skia::Pixmap {
         #[allow(clippy::cast_precision_loss)]
         let side = SIZE as f32;
         let tile = side - 2.0 * TILE_INSET;
-        let background = format!(
-            r##"<svg xmlns="http://www.w3.org/2000/svg" width="{side}" height="{side}"><rect x="{TILE_INSET}" y="{TILE_INSET}" width="{tile}" height="{tile}" rx="{TILE_RADIUS}" fill="#000"/></svg>"##
-        );
-        let options = usvg::Options::default();
-        let background = usvg::Tree::from_str(&background, &options).expect("tile SVG parses");
-        let logo = usvg::Tree::from_str(SVG, &options).expect("icon SVG parses");
+        let logo = usvg::Tree::from_str(SVG, &usvg::Options::default()).expect("icon SVG parses");
 
         let mut pixmap = tiny_skia::Pixmap::new(SIZE, SIZE).expect("non-empty size");
-        resvg::render(
-            &background,
-            tiny_skia::Transform::identity(),
-            &mut pixmap.as_mut(),
-        );
         let svg = logo.size();
-        let inner = tile - 2.0 * LOGO_PADDING;
-        let scale = (inner / svg.width()).min(inner / svg.height());
+        let scale = (tile / svg.width()).min(tile / svg.height());
         let dx = (side - svg.width() * scale) / 2.0;
         let dy = (side - svg.height() * scale) / 2.0;
         resvg::render(
@@ -84,9 +65,9 @@ mod tests {
             "has opaque pixels"
         );
         assert_eq!(icon.rgba[3], 0, "corner is transparent (margin)");
-        // Inside the tile, in the padding left of the logo: opaque black.
+        // Inside the tile, left of the logo: the SVG's amber background.
         let at = |x: usize, y: usize| &icon.rgba[(y * SIZE as usize + x) * 4..][..4];
-        assert_eq!(at(70, 256), [0, 0, 0, 255], "black tile");
+        assert_eq!(at(70, 256), [0xdc, 0xa5, 0x00, 255], "amber tile");
         // Just inside the tile's rounded corner: still transparent.
         assert_eq!(at(52, 52)[3], 0, "rounded corner");
     }

@@ -1,7 +1,11 @@
 //! The new-document flow: pick an artboard preset or a custom size.
 
+use std::cell::OnceCell;
+
 use eframe::egui;
 use vextor_core::{Artboard, Command, Document, Rect};
+
+use crate::{theme, wordmark};
 
 /// Largest custom artboard side, in document px.
 pub const MAX_SIDE: f64 = 10_000.0;
@@ -10,6 +14,10 @@ pub const MAX_SIDE: f64 = 10_000.0;
 const PRESET_BUTTON: egui::Vec2 = egui::vec2(96.0, 48.0);
 /// Least space kept left and right of the preset rows, in points.
 const SIDE_MARGIN: f32 = 32.0;
+/// Space between the wordmark and the "New document" title, in points.
+const WORDMARK_GAP: f32 = 12.0;
+/// Least space kept above the picker, in points.
+const TOP_MARGIN: f32 = 16.0;
 
 /// The artboard sizes offered when creating a document.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -131,6 +139,10 @@ pub struct Picker {
     error: Option<String>,
     /// Width of the custom-size row on the last frame, to centre it.
     custom_row_width: f32,
+    /// Height of the whole picker on the last frame, to centre it.
+    content_height: f32,
+    /// Loaded on the first frame; `None` after that if it failed to decode.
+    wordmark: OnceCell<Option<egui::TextureHandle>>,
 }
 
 impl Default for Picker {
@@ -140,6 +152,8 @@ impl Default for Picker {
             height: "64".to_owned(),
             error: None,
             custom_row_width: 0.0,
+            content_height: 0.0,
+            wordmark: OnceCell::new(),
         }
     }
 }
@@ -152,9 +166,25 @@ impl Picker {
         if can_cancel && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             return Outcome::Cancel;
         }
+        let wordmark = self
+            .wordmark
+            .get_or_init(|| wordmark::texture(ui.ctx()))
+            .clone();
         ui.vertical_centered(|ui| {
-            ui.add_space((ui.available_height() / 2.0 - 120.0).max(16.0));
-            ui.heading("New document");
+            // Its height depends on the window width (rows of presets), so
+            // it is measured each frame and the padding uses the last one.
+            let top = ((ui.available_height() - self.content_height) / 2.0).max(TOP_MARGIN);
+            ui.add_space(top);
+            let start = ui.cursor().min.y;
+            if let Some(texture) = &wordmark {
+                ui.add(egui::Image::new((texture.id(), wordmark::size(texture))));
+                ui.add_space(WORDMARK_GAP);
+            }
+            ui.label(
+                egui::RichText::new("New document")
+                    .heading()
+                    .color(theme::YELLOW_SOFT),
+            );
             ui.label("Pick the size of what you are drawing.");
             ui.add_space(12.0);
             // `vertical_centered` does not centre rows, so each row is
@@ -216,6 +246,11 @@ impl Picker {
             }
             if can_cancel && ui.add(action_button("Cancel")).clicked() {
                 outcome = Outcome::Cancel;
+            }
+            let height = ui.min_rect().max.y - start;
+            if (height - self.content_height).abs() > 0.5 {
+                self.content_height = height;
+                ui.ctx().request_repaint();
             }
         });
         if matches!(outcome, Outcome::Create(_)) {

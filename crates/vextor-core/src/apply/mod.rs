@@ -90,7 +90,9 @@ fn run(tx: &mut Tx<'_>, cmd: Command) -> Result<(), CoreError> {
         C::Group { ids } => structure::group(tx, &ids),
         C::Ungroup { id } => structure::ungroup(tx, id),
         C::SetTransform { ids, transform } => structure::set_transform(tx, &ids, transform),
+        C::SetTransforms { items } => structure::set_transforms(tx, items),
         C::SetStyle { ids, style } => structure::set_style(tx, &ids, &style),
+        C::SetGeometry { items } => structure::set_geometry(tx, items),
         C::SetProps {
             id,
             name,
@@ -149,6 +151,15 @@ fn run(tx: &mut Tx<'_>, cmd: Command) -> Result<(), CoreError> {
         }
         C::SetGrid(grid) => {
             *tx.grid_mut() = grid;
+            Ok(())
+        }
+        C::Batch { commands, .. } => {
+            // One transaction: the patch covers every step and validation
+            // runs once at the end, so steps may pass through states that
+            // are only valid together.
+            for cmd in commands {
+                run(tx, cmd)?;
+            }
             Ok(())
         }
         C::SetColorFormat(format) => {

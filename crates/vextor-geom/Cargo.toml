@@ -10,5 +10,13 @@ publish.workspace = true
 vextor-core.workspace = true
 kurbo.workspace = true
 
+[dev-dependencies]
+criterion.workspace = true
+proptest.workspace = true
+
+[[bench]]
+name = "hit"
+harness = false
+
 [lints]
 workspace = true

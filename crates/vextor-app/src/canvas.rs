@@ -3,8 +3,8 @@
 //! The document is rasterised by `vextor-render` into a texture. While a pan
 //! or zoom is moving, the last texture is moved and scaled instead of
 //! rendering every frame; the canvas renders sharp again once the view
-//! stops changing. Overlays (checkerboard, artboard outlines) are drawn by
-//! egui every frame.
+//! stops changing. Overlays (checkerboard, artboard outlines, selection,
+//! marquee) are drawn by egui every frame.
 
 use std::fmt::Write as _;
 use std::time::Instant;
@@ -16,11 +16,17 @@ use eframe::egui::{
 use vextor_core::{Point, Rect, Vec2, View};
 use vextor_render::{RenderCache, Viewport};
 
+use crate::select::SelectTool;
 use crate::session::Session;
 use crate::view;
 
+mod drag_layers;
+mod selection;
+
 /// Side of one checkerboard square, in points.
 const CHECKER_CELL: f32 = 8.0;
+/// Side of a drawn transform-box handle, in points.
+const HANDLE_SIZE: f32 = 7.0;
 
 /// What the current texture shows.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -44,6 +50,9 @@ pub struct Canvas {
     pub show_stats: bool,
     last_render_ms: Option<f64>,
     error: Option<String>,
+    tool: SelectTool,
+    /// The layer textures of the drag in progress (spec 05b).
+    drag_layers: Option<drag_layers::DragLayers>,
 }
 
 impl Canvas {
@@ -60,7 +69,8 @@ impl Canvas {
     }
 
     /// Draws the canvas into the rest of `ui` and handles its input.
-    pub fn ui(&mut self, ui: &mut egui::Ui, session: &mut Session) {
+    /// Returns a message for the user when an edit was refused.
+    pub fn ui(&mut self, ui: &mut egui::Ui, session: &mut Session) -> Option<String> {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
         self.size = to_vec2(rect.size());
         if session.needs_fit && rect.width() > 0.0 && rect.height() > 0.0 {
@@ -68,6 +78,7 @@ impl Canvas {
             session.needs_fit = false;
         }
         handle_input(ui, &response, rect, &mut session.editor.view);
+        let message = self.tool_input(ui, &response, rect, session);
 
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
@@ -75,8 +86,10 @@ impl Canvas {
         self.draw_checkerboards(ui.ctx(), &painter, rect.min, session);
         self.draw_document(ui, &painter, rect, session);
         draw_artboard_outlines(ui, &painter, rect.min, session);
+        self.draw_selection(ui, &painter, &response, rect, session);
         self.draw_status(ui, &painter, rect, current);
         self.last_view = Some(current);
+        message
     }
 
     fn draw_document(
@@ -94,6 +107,10 @@ impl Canvas {
             pixels_per_point: ppp,
         };
         if viewport.width == 0 || viewport.height == 0 {
+            return;
+        }
+        // While the selection is dragged, its layers stand in for a render.
+        if self.draw_drag_layers(ui.ctx(), painter, rect, &viewport, &session.doc) {
             return;
         }
         let settled = self.last_view == Some(viewport.view);

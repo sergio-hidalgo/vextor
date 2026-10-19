@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use vextor_core::{Command, CoreError, Document, EditorState, History};
+use vextor_core::{Command, CoreError, Document, EditorState, History, NodeId, Selection};
 
 use crate::files;
 
@@ -127,6 +127,7 @@ impl Session {
         };
         self.editor.selection = selection;
         self.revision += 1;
+        self.prune_selection();
         true
     }
 
@@ -135,8 +136,50 @@ impl Session {
         let done = self.history.redo(&mut self.doc);
         if done {
             self.revision += 1;
+            self.prune_selection();
         }
         done
+    }
+
+    /// Starts a pointer gesture: the changes until [`Session::end_gesture`]
+    /// that have the same label and targets become one undo step.
+    pub fn begin_gesture(&mut self) {
+        self.history.begin_gesture();
+    }
+
+    /// Ends the gesture started by [`Session::begin_gesture`].
+    pub fn end_gesture(&mut self) {
+        self.history.end_gesture();
+    }
+
+    /// The selected objects, bottom → top.
+    #[must_use]
+    pub fn selected(&self) -> Vec<NodeId> {
+        match &self.editor.selection {
+            Selection::Objects(ids) => self.doc.sorted_by_paint_order(ids),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Selects `ids` (nothing when empty).
+    pub fn select(&mut self, ids: Vec<NodeId>) {
+        self.editor.selection = if ids.is_empty() {
+            Selection::None
+        } else {
+            Selection::Objects(ids)
+        };
+    }
+
+    /// Drops selected objects that no longer exist (after redo, say).
+    fn prune_selection(&mut self) {
+        if let Selection::Objects(ids) = &self.editor.selection {
+            let kept: Vec<NodeId> = ids
+                .iter()
+                .copied()
+                .filter(|id| self.doc.nodes.contains_key(id))
+                .collect();
+            self.select(kept);
+        }
     }
 
     /// The state of the Undo and Redo menu items.

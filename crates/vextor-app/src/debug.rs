@@ -17,9 +17,6 @@ pub fn enabled() -> bool {
 pub enum Action {
     /// Open this sample document.
     Load(Box<Document>),
-    /// Move the first layer 10 px right, as one undoable step (exercises
-    /// the Edit menu until real tools exist).
-    NudgeLayer,
 }
 
 /// The Debug menu's contents. `show_stats` is the frame-time toggle.
@@ -36,9 +33,6 @@ pub fn menu(ui: &mut egui::Ui, show_stats: &mut bool) -> Option<Action> {
             action = Some(Action::Load(Box::new(fixtures::many_nodes(5_000))));
         }
         ui.separator();
-        if ui.button("Nudge layer 10 px (undoable)").clicked() {
-            action = Some(Action::NudgeLayer);
-        }
         ui.checkbox(show_stats, "Show frame time");
     });
     action
