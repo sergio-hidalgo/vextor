@@ -68,13 +68,15 @@ Tools (left panel): Select (`V`) and Text (`T`).
 | Move                                | drag the selection; arrows nudge 1 px, `⇧`+arrows 10 px |
 | Scale                               | drag a handle; `⇧` keeps proportions, `⌥` from the centre (strokes keep their width; text scales its font size and always keeps proportions) |
 | Rotate                              | drag just outside any corner (curved-arrow cursor); `⇧` in 15° steps |
-| Exact position, size, rotation      | Inspector (right): X, Y, W, H, °                       |
+| Exact position, size, rotation      | Inspector (right): X, Y, W, H, ° (hover the small icons for what each is) |
 | Cut / copy / paste / paste in place | `⌘X` / `⌘C` / `⌘V` (+10 px) / `⇧⌘V`                     |
 | Duplicate / delete                  | `⌘D` (+10 px) / `⌫`                                    |
 | Group / ungroup                     | `⌘G` / `⇧⌘G`                                           |
 | Bring forward / to front            | `⌘↑` / `⇧⌘↑`                                           |
 | Send backward / to back             | `⌘↓` / `⇧⌘↓`                                           |
-| Align, distribute, flip             | Object menu                                            |
+| Align, distribute                   | Inspector ▸ Align icon buttons, or the Object menu (the board icon toggles Align to Artboard) |
+| Group / ungroup (buttons)           | Inspector ▸ Group, or `⌘G` / `⇧⌘G`                     |
+| Flip                                | Object menu                                            |
 
 ### Text
 

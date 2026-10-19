@@ -6,9 +6,9 @@
 use eframe::egui::{self, RichText};
 use vextor_core::{NodeId, NodeKind, Paint, Rgba, Stroke, Text, TextAlign};
 
-use super::GRID_SPACING;
 use super::fonts::{family_picker, remember_family, style_picker};
 use super::restyle::{Edit, empty_frame, restyle};
+use super::{FIELD_SIZE, GRID_SPACING, LABEL_WIDTH};
 use crate::icons::{self, Icon};
 use crate::session::Session;
 use crate::theme;
@@ -28,10 +28,17 @@ fn selected_texts(s: &Session) -> Vec<(NodeId, Text)> {
 /// an edit was refused.
 pub fn section(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
     let texts = selected_texts(s);
+    if texts.is_empty() {
+        return None;
+    }
+    let mut message = None;
+    super::section(ui, "Text", |ui| message = body(ui, s, &texts));
+    message
+}
+
+/// The Text section's fields for `texts` (not empty).
+fn body(ui: &mut egui::Ui, s: &mut Session, texts: &[(NodeId, Text)]) -> Option<String> {
     let (first_id, first) = texts.first()?.clone();
-    ui.add_space(12.0);
-    ui.separator();
-    ui.strong("Text");
     font_note(ui, s, first_id, &first);
 
     let mut edit: Option<Edit> = None;
@@ -39,6 +46,7 @@ pub fn section(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
     egui::Grid::new("text-inspector")
         .num_columns(2)
         .spacing(GRID_SPACING)
+        .min_col_width(LABEL_WIDTH)
         .show(ui, |ui| {
             ui.label("Font");
             if let Some(family) = family_picker(ui, &db, &first.font.family) {
@@ -89,7 +97,7 @@ pub fn section(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
                     (TextAlign::Centre, Icon::TextCentre, "Centre text"),
                     (TextAlign::Right, Icon::TextRight, "Align text right"),
                 ] {
-                    if icons::button(ui, icon, first.align == align, tip).clicked() {
+                    if icons::button(ui, icon, first.align == align, true, tip, "").clicked() {
                         edit = Some(Edit::Align(align));
                     }
                 }
@@ -105,7 +113,7 @@ pub fn section(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
     frame_fields(ui, s, &first, &mut edit);
 
     let edit = edit?;
-    let cmd = restyle(&texts, &edit);
+    let cmd = restyle(texts, &edit);
     s.apply(cmd)
         .err()
         .map(|e| format!("Change text failed: {e}"))
@@ -139,6 +147,7 @@ fn frame_fields(ui: &mut egui::Ui, s: &mut Session, t: &Text, edit: &mut Option<
         egui::Grid::new("text-background-inspector")
             .num_columns(2)
             .spacing(GRID_SPACING)
+            .min_col_width(LABEL_WIDTH)
             .show(ui, |ui| {
                 ui.label("Colour");
                 if let Some(c) = color_field(ui, "text-background", solid(frame.fill)) {
@@ -190,6 +199,7 @@ fn frame_fields(ui: &mut egui::Ui, s: &mut Session, t: &Text, edit: &mut Option<
         egui::Grid::new("text-border-inspector")
             .num_columns(2)
             .spacing(GRID_SPACING)
+            .min_col_width(LABEL_WIDTH)
             .show(ui, |ui| {
                 ui.label("Colour");
                 if let Some(c) = color_field(ui, "text-border", solid(b.paint)) {
@@ -239,7 +249,8 @@ fn number(
 ) {
     ui.label(label);
     let mut v = value;
-    let r = ui.add(
+    let r = ui.add_sized(
+        FIELD_SIZE,
         egui::DragValue::new(&mut v)
             .speed(speed)
             .range(range)

@@ -6,6 +6,10 @@ use eframe::egui::{self, Align2, Rect, Sense, Stroke, Vec2};
 /// Width of a dialog's content, in points.
 const DIALOG_WIDTH: f32 = 340.0;
 
+/// Space between a dialog's border and its content, in points: wide at
+/// the sides so wrapped text never runs close to the edge.
+const DIALOG_MARGIN: egui::Margin = egui::Margin::symmetric(28, 18);
+
 /// Width and height of every dialog button, so a row of them centres
 /// exactly.
 const BUTTON_SIZE: Vec2 = Vec2::new(96.0, 28.0);
@@ -112,6 +116,7 @@ fn dialog<T>(
     let id = egui::Id::unique(id);
     egui::Modal::new(id)
         .area(egui::Modal::default_area(id).anchor(Align2::CENTER_CENTER, offset))
+        .frame(egui::Frame::popup(&ctx.global_style()).inner_margin(DIALOG_MARGIN))
         .show(ctx, |ui| {
             ui.set_width(DIALOG_WIDTH);
             ui.vertical_centered(content).inner

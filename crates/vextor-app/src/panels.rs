@@ -8,15 +8,29 @@ use vextor_geom::{rotation_degrees, union_bounds};
 use vextor_core::ToolId;
 
 use crate::edit_ops;
+use crate::icons::{self, Icon};
 use crate::session::Session;
 
 /// Gap between a label and its field, and between rows, in points.
 const GRID_SPACING: [f32; 2] = [12.0, 6.0];
+/// Width of the label column in the Text section's grids, so their
+/// fields (colour swatches and hex values included) line up.
+const LABEL_WIDTH: f32 = 84.0;
+/// Size of every number field: fixed, so typing or dragging a longer
+/// value never shifts the panel.
+const FIELD_SIZE: [f32; 2] = [64.0, 20.0];
+/// Space kept free at the right of the inspector's content, matching the
+/// panel's own margin on the left (the scroll bar floats over it).
+const RIGHT_MARGIN: i8 = 10;
+/// Starting height of the Layers area, in points.
+const LAYERS_HEIGHT: f32 = 160.0;
 
+mod arrange;
 mod fonts;
 mod restyle;
 mod text;
 
+pub use arrange::PanelAction;
 pub use fonts::recent_families;
 
 /// Tools (left): the active one is highlighted. Returns the tool clicked.
@@ -47,21 +61,92 @@ pub fn tools(ui: &mut egui::Ui, active: Option<ToolId>) -> Option<ToolId> {
 }
 
 /// Inspector and Layers (right). Returns a message for the user when an
-/// edit was refused.
-pub fn inspector_and_layers(ui: &mut egui::Ui, session: Option<&mut Session>) -> Option<String> {
+/// edit was refused, and the Align / Group buttons clicked, for the app
+/// to run like their menu items. `to_artboard` is Align to Artboard.
+pub fn inspector_and_layers(
+    ui: &mut egui::Ui,
+    session: Option<&mut Session>,
+    to_artboard: &mut bool,
+) -> (Option<String>, Vec<PanelAction>) {
+    // Layers keep their own resizable area at the bottom; the inspector
+    // scrolls in the space above, so neither draws past the panel.
+    egui::Panel::bottom("layers")
+        .resizable(true)
+        .default_size(LAYERS_HEIGHT)
+        .min_size(48.0)
+        .show(ui, |ui| {
+            ui.add_space(6.0);
+            panel_title(ui, "Layers");
+            egui::ScrollArea::vertical()
+                .id_salt("layers-scroll")
+                .auto_shrink(false)
+                .show(ui, |ui| {
+                    right_margin(ui, |ui| ui.weak("The layer list will appear here."));
+                });
+        });
+    egui::ScrollArea::vertical()
+        .id_salt("inspector-scroll")
+        .auto_shrink(false)
+        .show(ui, |ui| {
+            right_margin(ui, |ui| inspector_sections(ui, session, to_artboard))
+        })
+        .inner
+}
+
+/// A panel's title (Inspector, Layers), in the title yellow so it reads
+/// above its sections, as "New document" does on the start screen.
+fn panel_title(ui: &mut egui::Ui, title: &str) {
+    ui.label(
+        egui::RichText::new(title)
+            .strong()
+            .color(crate::theme::YELLOW_SOFT),
+    );
+}
+
+/// `add` with [`RIGHT_MARGIN`] kept free on its right.
+fn right_margin<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    egui::Frame::new()
+        .inner_margin(egui::Margin {
+            right: RIGHT_MARGIN,
+            ..egui::Margin::ZERO
+        })
+        .show(ui, add)
+        .inner
+}
+
+/// The inspector's title and its sections for the current selection.
+fn inspector_sections(
+    ui: &mut egui::Ui,
+    session: Option<&mut Session>,
+    to_artboard: &mut bool,
+) -> (Option<String>, Vec<PanelAction>) {
     ui.add_space(6.0);
-    ui.strong("Inspector");
+    panel_title(ui, "Inspector");
+    let mut actions = Vec::new();
     let message = if let Some(s) = session {
-        inspector(ui, s)
+        let message = inspector(ui, s);
+        if !s.selected().is_empty() {
+            let can = edit_ops::can(s);
+            arrange::align_section(ui, can, to_artboard, &mut actions);
+            arrange::group_section(ui, can, &mut actions);
+        }
+        message
     } else {
         ui.weak("Nothing selected.");
         None
     };
-    ui.add_space(12.0);
+    (message, actions)
+}
+
+/// A collapsible inspector section, open until the user folds it (egui
+/// remembers it per title).
+fn section(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
+    ui.add_space(8.0);
     ui.separator();
-    ui.strong("Layers");
-    ui.weak("The layer list will appear here.");
-    message
+    egui::CollapsingHeader::new(egui::RichText::new(title).strong())
+        .id_salt(title)
+        .default_open(true)
+        .show(ui, add);
 }
 
 /// X, Y, W, H of the selection box and the rotation of a single object.
@@ -77,29 +162,38 @@ fn inspector(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
         _ => None,
     };
     let mut edit = None;
-    egui::Grid::new("inspector")
-        .num_columns(4)
-        .spacing([6.0, 6.0])
-        .show(ui, |ui| {
-            field(ui, s, "X", b.x0, true, &mut edit, Change::X);
-            field(ui, s, "Y", b.y0, true, &mut edit, Change::Y);
-            ui.end_row();
-            let w_ok = b.width() > vextor_core::EPS;
-            let h_ok = b.height() > vextor_core::EPS;
-            field(ui, s, "W", b.width(), w_ok, &mut edit, Change::W);
-            field(ui, s, "H", b.height(), h_ok, &mut edit, Change::H);
-            ui.end_row();
-            if let Some(deg) = rotation {
-                field(ui, s, "°", deg, true, &mut edit, |v| {
-                    Change::Rotation(v - deg)
-                });
-            } else {
-                ui.label("°");
-                ui.add_enabled(false, egui::DragValue::new(&mut 0.0))
-                    .on_disabled_hover_text("Rotate one object at a time here, or use the corners");
-            }
-            ui.end_row();
-        });
+    section(ui, "Transform", |ui| {
+        egui::Grid::new("inspector")
+            .num_columns(4)
+            .spacing(GRID_SPACING)
+            .show(ui, |ui| {
+                let x_label = Label("X", Icon::PosX, "Left edge (X)");
+                let y_label = Label("Y", Icon::PosY, "Top edge (Y)");
+                field(ui, s, x_label, b.x0, true, &mut edit, Change::X);
+                field(ui, s, y_label, b.y0, true, &mut edit, Change::Y);
+                ui.end_row();
+                let w_ok = b.width() > vextor_core::EPS;
+                let h_ok = b.height() > vextor_core::EPS;
+                let w_label = Label("W", Icon::Width, "Width (W)");
+                let h_label = Label("H", Icon::Height, "Height (H)");
+                field(ui, s, w_label, b.width(), w_ok, &mut edit, Change::W);
+                field(ui, s, h_label, b.height(), h_ok, &mut edit, Change::H);
+                ui.end_row();
+                let angle = Label("°", Icon::Angle, "Rotation in degrees");
+                if let Some(deg) = rotation {
+                    field(ui, s, angle, deg, true, &mut edit, |v| {
+                        Change::Rotation(v - deg)
+                    });
+                } else {
+                    angle.show(ui);
+                    ui.add_enabled(false, egui::DragValue::new(&mut 0.0))
+                        .on_disabled_hover_text(
+                            "Rotate one object at a time here, or use the corners",
+                        );
+                }
+                ui.end_row();
+            });
+    });
     let text_message = text::section(ui, s);
     let Some(change) = edit else {
         return text_message;
@@ -150,21 +244,39 @@ impl Change {
 }
 
 /// A labelled number. A drag is wrapped in a history gesture.
+/// A field's label: its letter, then a small icon saying what it is.
+#[derive(Clone, Copy)]
+struct Label(&'static str, Icon, &'static str);
+
+impl Label {
+    fn show(self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            ui.label(self.0);
+            icons::label(ui, self.1, self.2);
+        });
+    }
+}
+
 fn field(
     ui: &mut egui::Ui,
     s: &mut Session,
-    label: &str,
+    label: Label,
     value: f64,
     enabled: bool,
     edit: &mut Option<Change>,
     change: impl Fn(f64) -> Change,
 ) {
-    ui.label(label);
+    label.show(ui);
     let mut v = value;
-    let r = ui.add_enabled(
-        enabled,
-        egui::DragValue::new(&mut v).speed(1.0).max_decimals(2),
-    );
+    let r = ui
+        .add_enabled_ui(enabled, |ui| {
+            ui.add_sized(
+                FIELD_SIZE,
+                egui::DragValue::new(&mut v).speed(1.0).max_decimals(2),
+            )
+        })
+        .inner;
     if r.drag_started() {
         s.begin_gesture();
     }
