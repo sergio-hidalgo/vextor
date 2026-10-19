@@ -4,45 +4,12 @@
 //! selected text, each keeping its other values.
 
 use eframe::egui::{self, RichText};
-use vextor_core::{
-    Command, CornerRadii, FontSpec, NodeId, NodeKind, Paint, Rgba, Stroke, Text, TextAlign,
-    TextFrame,
-};
-use vextor_geom::{FaceStyle, FontDb};
+use vextor_core::{NodeId, NodeKind, Paint, Rgba, Stroke, Text, TextAlign};
 
+use super::fonts::{family_picker, remember_family, style_picker};
+use super::restyle::{Edit, empty_frame, restyle};
 use crate::session::Session;
 use crate::theme;
-
-/// Most families remembered as recently used.
-const RECENT_LIMIT: usize = 8;
-/// Rows of the family list shown at once.
-const FAMILY_ROWS: f32 = 12.0;
-/// Size the family names are shown at in the list.
-const FAMILY_PREVIEW_SIZE: f32 = 15.0;
-
-fn recent_id() -> egui::Id {
-    egui::Id::unique("vextor-recent-font-families")
-}
-
-fn search_id() -> egui::Id {
-    egui::Id::unique("vextor-font-family-search")
-}
-
-/// Font families picked most recently, newest first (this run only).
-#[must_use]
-pub fn recent_families(ctx: &egui::Context) -> Vec<String> {
-    ctx.data(|d| d.get_temp::<Vec<String>>(recent_id()))
-        .unwrap_or_default()
-}
-
-/// Puts `family` first in the recently used list.
-pub fn remember_family(ctx: &egui::Context, family: &str) {
-    let mut recent = recent_families(ctx);
-    recent.retain(|f| f != family);
-    recent.insert(0, family.to_owned());
-    recent.truncate(RECENT_LIMIT);
-    ctx.data_mut(|d| d.insert_temp(recent_id(), recent));
-}
 
 /// The selected text objects (direct selection only).
 fn selected_texts(s: &Session) -> Vec<(NodeId, Text)> {
@@ -255,6 +222,9 @@ fn number(
         egui::DragValue::new(&mut v)
             .speed(speed)
             .range(range)
+            // Only what the user enters is clamped: showing a text resized
+            // past the range must not change it.
+            .clamp_existing_to_range(false)
             .max_decimals(2),
     );
     if r.drag_started() {
@@ -304,142 +274,6 @@ fn color_field(ui: &mut egui::Ui, id: &str, current: Option<Rgba>) -> Option<Rgb
     picked
 }
 
-/// The family list: a search field, recently used first, each family's
-/// name in its own face once that face is loaded (only rows on screen
-/// load theirs). Returns the family picked.
-fn family_picker(ui: &mut egui::Ui, db: &FontDb, current: &str) -> Option<String> {
-    let mut picked = None;
-    egui::ComboBox::from_id_salt("text-font-family")
-        .selected_text(current)
-        .width(150.0)
-        .show_ui(ui, |ui| {
-            let ctx = ui.ctx().clone();
-            let mut query = ctx
-                .data(|d| d.get_temp::<String>(search_id()))
-                .unwrap_or_default();
-            let r = ui.add(
-                egui::TextEdit::singleline(&mut query)
-                    .hint_text("Search fonts")
-                    .desired_width(f32::INFINITY),
-            );
-            if r.changed() {
-                ctx.data_mut(|d| d.insert_temp(search_id(), query.clone()));
-            }
-            r.request_focus();
-            let list = family_list(db.families(), &recent_families(&ctx), &query);
-            if db.is_empty() {
-                ui.weak("Loading fonts…");
-                return;
-            }
-            let row = FAMILY_PREVIEW_SIZE + 8.0;
-            egui::ScrollArea::vertical()
-                .max_height(row * FAMILY_ROWS)
-                .show_rows(ui, row, list.len(), |ui, rows| {
-                    for family in &list[rows] {
-                        let text = family_label(&ctx, db, family);
-                        if ui.selectable_label(family == current, text).clicked() {
-                            picked = Some(family.clone());
-                        }
-                    }
-                });
-        });
-    if picked.is_some() {
-        ui.ctx().data_mut(|d| d.remove::<String>(search_id()));
-    }
-    picked
-}
-
-/// `family` written in its own face when egui has it, else in the UI font
-/// while the face loads (it is usable from the next frame).
-fn family_label(ctx: &egui::Context, db: &FontDb, family: &str) -> RichText {
-    let egui_family = egui::FontFamily::Name(format!("vextor:{family}").into());
-    let loaded = ctx.fonts(|f| f.definitions().families.contains_key(&egui_family));
-    if loaded {
-        return RichText::new(family).font(egui::FontId::new(FAMILY_PREVIEW_SIZE, egui_family));
-    }
-    if let Some((data, index)) = db.sample_face(family) {
-        let mut font = egui::FontData::from_owned(data.as_ref().clone());
-        font.index = index;
-        ctx.add_font(egui::epaint::text::FontInsert::new(
-            &format!("vextor:{family}"),
-            font,
-            vec![egui::epaint::text::InsertFontFamily {
-                family: egui_family,
-                priority: egui::epaint::text::FontPriority::Highest,
-            }],
-        ));
-        ctx.request_repaint();
-    }
-    RichText::new(family).size(FAMILY_PREVIEW_SIZE)
-}
-
-/// The families to list: recently used (still installed) first, then
-/// the rest, filtered by `query` (case-insensitive, anywhere in the name).
-fn family_list(all: &[String], recent: &[String], query: &str) -> Vec<String> {
-    let q = query.trim().to_lowercase();
-    let hit = |f: &String| q.is_empty() || f.to_lowercase().contains(&q);
-    let recent: Vec<String> = recent
-        .iter()
-        .filter(|r| all.contains(r) && hit(r))
-        .cloned()
-        .collect();
-    recent
-        .iter()
-        .cloned()
-        .chain(
-            all.iter()
-                .filter(|f| hit(f) && !recent.contains(f))
-                .cloned(),
-        )
-        .collect()
-}
-
-/// The faces the family has, by name. Returns the style picked.
-fn style_picker(ui: &mut egui::Ui, db: &FontDb, font: &FontSpec) -> Option<FaceStyle> {
-    let styles = db.styles(&font.family);
-    let current = FaceStyle {
-        weight: font.weight,
-        italic: font.italic,
-    };
-    let mut picked = None;
-    ui.add_enabled_ui(!styles.is_empty(), |ui| {
-        egui::ComboBox::from_id_salt("text-font-style")
-            .selected_text(style_name(current))
-            .width(150.0)
-            .show_ui(ui, |ui| {
-                for style in styles {
-                    if ui
-                        .selectable_label(style == current, style_name(style))
-                        .clicked()
-                    {
-                        picked = Some(style);
-                    }
-                }
-            });
-    });
-    picked
-}
-
-/// "Bold", "Light Italic", "Regular"…: CSS weight names.
-fn style_name(style: FaceStyle) -> String {
-    let weight = match style.weight {
-        0..=149 => "Thin",
-        150..=249 => "ExtraLight",
-        250..=349 => "Light",
-        350..=449 => "Regular",
-        450..=549 => "Medium",
-        550..=649 => "SemiBold",
-        650..=749 => "Bold",
-        750..=849 => "ExtraBold",
-        _ => "Black",
-    };
-    match (weight, style.italic) {
-        ("Regular", true) => "Italic".to_owned(),
-        (w, true) => format!("{w} Italic"),
-        (w, false) => w.to_owned(),
-    }
-}
-
 fn solid(p: Paint) -> Option<Rgba> {
     match p {
         Paint::Solid(c) => Some(c),
@@ -447,153 +281,10 @@ fn solid(p: Paint) -> Option<Rgba> {
     }
 }
 
-fn empty_frame() -> TextFrame {
-    TextFrame {
-        padding: [8.0, 16.0, 8.0, 16.0],
-        radius: CornerRadii {
-            tl: 6.0,
-            tr: 6.0,
-            br: 6.0,
-            bl: 6.0,
-        },
-        fill: Paint::None,
-        stroke: None,
-    }
-}
-
-/// One change from the Text section.
-#[derive(Clone, Debug, PartialEq)]
-enum Edit {
-    Family(String),
-    Style(FaceStyle),
-    Size(f64),
-    LineHeight(f64),
-    Spacing(f64),
-    Align(TextAlign),
-    Color(Rgba),
-    /// Background colour, or `None` to remove it.
-    Background(Option<Rgba>),
-    PaddingX(f64),
-    PaddingY(f64),
-    Radius(f64),
-    /// Border, or `None` to remove it.
-    Border(Option<Stroke>),
-    BorderWidth(f64),
-}
-
-impl Edit {
-    fn apply(&self, t: &mut Text) {
-        let frame = || t.frame.clone().unwrap_or_else(empty_frame);
-        match self {
-            Self::Family(f) => t.font.family.clone_from(f),
-            Self::Style(s) => {
-                t.font.weight = s.weight;
-                t.font.italic = s.italic;
-            }
-            Self::Size(v) => t.size = *v,
-            Self::LineHeight(v) => t.line_height = *v,
-            Self::Spacing(v) => t.letter_spacing = *v,
-            Self::Align(a) => t.align = *a,
-            Self::Color(c) => t.style.fill = Paint::Solid(*c),
-            Self::Background(c) => {
-                let mut f = frame();
-                f.fill = c.map_or(Paint::None, Paint::Solid);
-                t.frame = Some(f);
-            }
-            Self::PaddingX(v) => {
-                let mut f = frame();
-                f.padding[1] = *v;
-                f.padding[3] = *v;
-                t.frame = Some(f);
-            }
-            Self::PaddingY(v) => {
-                let mut f = frame();
-                f.padding[0] = *v;
-                f.padding[2] = *v;
-                t.frame = Some(f);
-            }
-            Self::Radius(v) => {
-                let mut f = frame();
-                f.radius = CornerRadii {
-                    tl: *v,
-                    tr: *v,
-                    br: *v,
-                    bl: *v,
-                };
-                t.frame = Some(f);
-            }
-            Self::Border(b) => {
-                let mut f = frame();
-                f.stroke.clone_from(b);
-                t.frame = Some(f);
-            }
-            Self::BorderWidth(w) => {
-                let mut f = frame();
-                if let Some(b) = &mut f.stroke {
-                    b.width = *w;
-                }
-                t.frame = Some(f);
-            }
-        }
-        // Neither background nor border: no frame at all.
-        if t.frame
-            .as_ref()
-            .is_some_and(|f| f.fill == Paint::None && f.stroke.is_none())
-        {
-            t.frame = None;
-        }
-    }
-
-    fn label(&self) -> &'static str {
-        match self {
-            Self::Family(_) | Self::Style(_) => "Change font",
-            Self::Size(_) | Self::LineHeight(_) | Self::Spacing(_) | Self::Align(_) => {
-                "Change text style"
-            }
-            Self::Color(_) => "Change text colour",
-            _ => "Change text frame",
-        }
-    }
-}
-
-/// One undo step applying `edit` to every text, each keeping its other
-/// values.
-fn restyle(texts: &[(NodeId, Text)], edit: &Edit) -> Command {
-    let mut commands = Vec::new();
-    for (id, before) in texts {
-        let mut t = before.clone();
-        edit.apply(&mut t);
-        let ids = vec![*id];
-        if t.style != before.style {
-            commands.push(Command::SetStyle {
-                ids: ids.clone(),
-                style: t.style.clone(),
-            });
-        }
-        if t.frame != before.frame {
-            commands.push(Command::SetTextFrame {
-                ids: ids.clone(),
-                frame: t.frame.clone(),
-            });
-        }
-        commands.push(Command::SetTextStyle {
-            ids,
-            font: t.font,
-            size: t.size,
-            line_height: t.line_height,
-            letter_spacing: t.letter_spacing,
-            align: t.align,
-        });
-    }
-    Command::Batch {
-        label: edit.label(),
-        commands,
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use vextor_core::{Document, Node};
+    use vextor_core::{Command, Document, Node};
+    use vextor_geom::FaceStyle;
 
     use super::*;
     use crate::new_doc::new_document;
@@ -623,30 +314,6 @@ mod tests {
             NodeKind::Text(t) => t,
             _ => panic!("text"),
         }
-    }
-
-    #[test]
-    fn style_names_follow_css_weights() {
-        let name = |weight, italic| style_name(FaceStyle { weight, italic });
-        assert_eq!(name(400, false), "Regular");
-        assert_eq!(name(400, true), "Italic");
-        assert_eq!(name(700, false), "Bold");
-        assert_eq!(name(300, true), "Light Italic");
-        assert_eq!(name(950, false), "Black");
-    }
-
-    #[test]
-    fn family_list_puts_recent_first_and_filters() {
-        let all: Vec<String> = ["Arial", "Helvetica", "Inter", "Menlo"]
-            .map(String::from)
-            .to_vec();
-        let recent = vec!["Menlo".to_owned(), "Gone".to_owned()];
-        assert_eq!(
-            family_list(&all, &recent, ""),
-            ["Menlo", "Arial", "Helvetica", "Inter"]
-        );
-        assert_eq!(family_list(&all, &recent, "  he"), ["Helvetica"]);
-        assert_eq!(family_list(&all, &recent, "N"), ["Menlo", "Inter"]);
     }
 
     #[test]
@@ -726,15 +393,26 @@ mod tests {
     }
 
     #[test]
-    fn recent_families_are_newest_first_and_bounded() {
+    fn showing_values_outside_the_ranges_leaves_them_alone() {
+        let big = Text {
+            size: 1_500.0,
+            letter_spacing: 400.0,
+            line_height: 9.0,
+            ..Text::new("Huge", "Inter")
+        };
+        let (mut s, ids) = session_with(vec![big]);
         let ctx = egui::Context::default();
-        for f in ["A", "B", "A", "C"] {
-            remember_family(&ctx, f);
+        for _ in 0..2 {
+            ctx.run_ui(egui::RawInput::default(), |ui| {
+                let _ = section(ui, &mut s);
+            })
+            .textures_delta
+            .clear();
         }
-        assert_eq!(recent_families(&ctx), ["C", "A", "B"]);
-        for i in 0..20 {
-            remember_family(&ctx, &format!("F{i}"));
-        }
-        assert_eq!(recent_families(&ctx).len(), RECENT_LIMIT);
+        let t = text(&s, ids[0]);
+        assert!((t.size - 1_500.0).abs() < 1e-9);
+        assert!((t.letter_spacing - 400.0).abs() < 1e-9);
+        assert!((t.line_height - 9.0).abs() < 1e-9);
+        assert_eq!(s.edit_menu().undo, None, "nothing was recorded");
     }
 }

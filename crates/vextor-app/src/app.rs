@@ -298,6 +298,14 @@ impl eframe::App for VextorApp {
             .resizable(true)
             .default_size(240.0)
             .show(ui, |ui| {
+                // Working in the inspector ends a text edit first, so the
+                // edit stays one undo step and the fields apply to it.
+                if ui.input(|i| i.pointer.primary_pressed())
+                    && ui.ui_contains_pointer()
+                    && let Some(s) = self.session.as_mut()
+                {
+                    self.canvas.finish_text(s);
+                }
                 let session = self.session.as_mut().filter(|_| self.picker.is_none());
                 if let Some(e) = panels::inspector_and_layers(ui, session) {
                     self.message = Some(e);

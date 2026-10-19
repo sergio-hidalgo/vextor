@@ -10,9 +10,11 @@ use vextor_core::ToolId;
 use crate::edit_ops;
 use crate::session::Session;
 
+mod fonts;
+mod restyle;
 mod text;
 
-pub use text::recent_families;
+pub use fonts::recent_families;
 
 /// Tools (left): the active one is highlighted. Returns the tool clicked.
 pub fn tools(ui: &mut egui::Ui, active: Option<ToolId>) -> Option<ToolId> {
