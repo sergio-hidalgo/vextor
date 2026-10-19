@@ -1,8 +1,10 @@
 //! One open document with its history and editor state.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use vextor_core::{Command, CoreError, Document, EditorState, History, NodeId, Selection};
+use vextor_geom::Fonts;
 
 use crate::files;
 
@@ -12,6 +14,9 @@ pub struct Session {
     pub doc: Document,
     history: History,
     pub editor: EditorState,
+    /// Fonts and text layouts, shared by every session of the app; empty
+    /// until the system fonts have loaded ([`Session::set_fonts`]).
+    pub fonts: Arc<Fonts>,
     /// Changes whenever `doc` changes; the canvas re-renders on change.
     revision: u64,
     /// The canvas should fit the artboards on its next frame.
@@ -40,6 +45,7 @@ impl Session {
             doc,
             history: History::new(),
             editor: EditorState::default(),
+            fonts: Arc::default(),
             revision: 0,
             needs_fit: true,
             path: None,
@@ -106,6 +112,17 @@ impl Session {
     #[must_use]
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// Switches to `fonts` (the system fonts finished loading). Text lays
+    /// out again, so the revision moves on; a clean document stays clean.
+    pub fn set_fonts(&mut self, fonts: Arc<Fonts>) {
+        let clean = !self.is_dirty();
+        self.fonts = fonts;
+        self.revision += 1;
+        if clean {
+            self.saved_revision = Some(self.revision);
+        }
     }
 
     /// Applies and records `cmd`.
@@ -215,6 +232,19 @@ mod tests {
                 redo: None
             }
         );
+    }
+
+    #[test]
+    fn new_fonts_redraw_without_marking_the_document_changed() {
+        let mut s = Session::new(Document::new("t"));
+        let before = s.revision();
+        s.set_fonts(Arc::default());
+        assert!(s.revision() > before, "text lays out again");
+        assert!(!s.is_dirty());
+
+        s.apply(nudge(&s, 10.0)).expect("valid command");
+        s.set_fonts(Arc::default());
+        assert!(s.is_dirty(), "unsaved work stays unsaved");
     }
 
     #[test]

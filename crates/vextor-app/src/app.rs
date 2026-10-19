@@ -14,6 +14,7 @@ use vextor_geom::Align;
 use self::file_flow::Then;
 use crate::canvas::Canvas;
 use crate::files::{self, RecentFiles};
+use crate::fonts::SystemFonts;
 use crate::new_doc::{Outcome, Picker};
 use crate::recovery::{Orphan, Recovery};
 use crate::session::Session;
@@ -76,6 +77,8 @@ pub struct VextorApp {
     align_to_artboard: bool,
     /// SVG text to put on the system clipboard this frame.
     system_clipboard: Option<String>,
+    /// Fonts for text; the OS fonts arrive from a background thread.
+    fonts: SystemFonts,
 }
 
 impl VextorApp {
@@ -85,6 +88,7 @@ impl VextorApp {
         // ⌘0 / ⌘+ / ⌘- belong to the canvas, not to egui's UI scale.
         cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
         theme::apply(&cc.egui_ctx);
+        let fonts = SystemFonts::load(&cc.egui_ctx);
         let data_dir = files::app_data_dir();
         let recent = data_dir
             .as_deref()
@@ -118,6 +122,7 @@ impl VextorApp {
             canvas_rect: egui::Rect::NOTHING,
             align_to_artboard: false,
             system_clipboard: None,
+            fonts,
         }
     }
 
@@ -130,6 +135,7 @@ impl VextorApp {
         if let Some(old) = &mut self.session {
             session.editor.clipboard = old.editor.clipboard.take();
         }
+        session.fonts = self.fonts.current();
         self.session = Some(session);
         self.picker = None;
     }
@@ -223,6 +229,11 @@ impl VextorApp {
 impl eframe::App for VextorApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        if let Some(fonts) = self.fonts.poll()
+            && let Some(s) = &mut self.session
+        {
+            s.set_fonts(fonts);
+        }
         self.handle_close(&ctx);
         let prompt_open = self.confirm.is_some() || !self.orphans.is_empty();
         if !prompt_open {

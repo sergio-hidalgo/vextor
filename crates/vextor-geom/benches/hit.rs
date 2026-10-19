@@ -7,7 +7,7 @@ use std::hint::black_box;
 use criterion::{Criterion, criterion_group, criterion_main};
 use kurbo::{Point, Rect};
 use vextor_core::{Command, CornerRadii, Document, Geometry, Node, NodeKind, Shape, Stroke, Style};
-use vextor_geom::{pick, retarget, touching};
+use vextor_geom::{Fonts, pick, retarget, touching};
 
 /// `n` stroked rounded rects on a grid, 40 px apart.
 fn grid(n: u32) -> Document {
@@ -49,15 +49,30 @@ fn grid(n: u32) -> Document {
 fn bench_hit(c: &mut Criterion) {
     let doc = grid(500);
     c.bench_function("pick, 500 nodes, miss", |b| {
-        b.iter(|| pick(black_box(&doc), black_box(Point::new(-5.0, -5.0)), 1.0));
+        b.iter(|| {
+            pick(
+                black_box(&doc),
+                &Fonts::default(),
+                black_box(Point::new(-5.0, -5.0)),
+                1.0,
+            )
+        });
     });
     c.bench_function("pick, 500 nodes, bottom-most hit", |b| {
-        b.iter(|| pick(black_box(&doc), black_box(Point::new(15.0, 15.0)), 1.0));
+        b.iter(|| {
+            pick(
+                black_box(&doc),
+                &Fonts::default(),
+                black_box(Point::new(15.0, 15.0)),
+                1.0,
+            )
+        });
     });
     c.bench_function("marquee, 500 nodes, half the grid", |b| {
         b.iter(|| {
             touching(
                 black_box(&doc),
+                &Fonts::default(),
                 black_box(Rect::new(0.0, 0.0, 500.0, 400.0)),
             )
         });

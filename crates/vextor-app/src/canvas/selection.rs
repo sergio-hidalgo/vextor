@@ -119,12 +119,12 @@ impl Canvas {
             .then(|| SelectTool::target(session, kurbo::Point::new(at.x, at.y), view.zoom));
         if let Some(Target::Object(o)) = target
             && !selected.contains(&o)
-            && let Some(b) = vextor_geom::bounds(&session.doc, o)
+            && let Some(b) = vextor_geom::bounds(&session.doc, &session.fonts, o)
         {
             painter.rect_stroke(screen(b), 0.0, thin, StrokeKind::Middle);
         }
         if (self.tool.rotating() || target == Some(Target::Rotate))
-            && let Some(b) = vextor_geom::union_bounds(&session.doc, &selected)
+            && let Some(b) = vextor_geom::union_bounds(&session.doc, &session.fonts, &selected)
         {
             let centre = screen(b).center();
             draw_rotate_cursor(painter, p, p - centre);
@@ -142,12 +142,12 @@ impl Canvas {
         if selected.len() > 1 {
             for b in selected
                 .iter()
-                .filter_map(|&id| vextor_geom::bounds(&session.doc, id))
+                .filter_map(|&id| vextor_geom::bounds(&session.doc, &session.fonts, id))
             {
                 painter.rect_stroke(screen(b), 0.0, thin, StrokeKind::Middle);
             }
         }
-        if let Some(b) = vextor_geom::union_bounds(&session.doc, selected) {
+        if let Some(b) = vextor_geom::union_bounds(&session.doc, &session.fonts, selected) {
             let r = screen(b);
             painter.rect_stroke(r, 0.0, Stroke::new(1.0, theme::YELLOW), StrokeKind::Middle);
             if !self.tool.is_moving() {

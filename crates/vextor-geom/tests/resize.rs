@@ -13,7 +13,7 @@ use vextor_core::{
     Command, CornerRadii, Geometry, Node, NodeKind, NodeType, Path, PathNode, Shape, Style,
     SubPath, Transform, Vec2,
 };
-use vextor_geom::{bounds, from_affine, polar, resize, stretched};
+use vextor_geom::{Fonts, bounds, from_affine, polar, resize, stretched};
 
 fn close(a: f64, b: f64) -> bool {
     (a - b).abs() < 1e-6
@@ -92,12 +92,12 @@ fn a_skewing_stretch_turns_a_rect_into_a_path_with_the_same_outline() {
     let mut node = rect(r, 0.0, 0.0, 10.0, 10.0);
     node.transform = from_affine(Affine::rotate(FRAC_PI_6));
     add(&mut d, layer, vec![node]);
-    let before = bounds(&d, r).expect("visible");
+    let before = bounds(&d, &Fonts::default(), r).expect("visible");
     // A world-axis stretch on a rotated rect skews it in its own space.
     let change = Affine::scale_non_uniform(2.0, 1.0);
     apply(&mut d, &[r], change);
     assert!(matches!(geometry_of(&d, r), Geometry::Path(_)));
-    let after = bounds(&d, r).expect("visible");
+    let after = bounds(&d, &Fonts::default(), r).expect("visible");
     let want = change.transform_rect_bbox(before);
     assert!(close(after.x0, want.x0) && close(after.x1, want.x1));
     assert!(close(after.y0, want.y0) && close(after.y1, want.y1));
@@ -231,12 +231,12 @@ proptest! {
         let (g, r) = (id(&mut d), id(&mut d));
         let t = from_affine(Affine::rotate(angle) * Affine::scale_non_uniform(1.5, 0.5));
         add(&mut d, layer, vec![group(g, vec![r], t), outlined(rect(r, 0.0, 0.0, 10.0, 10.0), 2.0)]);
-        let b = bounds(&d, g).expect("visible");
+        let b = bounds(&d, &Fonts::default(), g).expect("visible");
         let change = Affine::translate(b.origin().to_vec2())
             * Affine::scale_non_uniform(sx, sy)
             * Affine::translate(-b.origin().to_vec2());
         apply(&mut d, &[g], change);
-        let after = bounds(&d, g).expect("visible");
+        let after = bounds(&d, &Fonts::default(), g).expect("visible");
         let want = change.transform_rect_bbox(b);
         prop_assert!((after.x0 - want.x0).abs() < 1e-6 && (after.y1 - want.y1).abs() < 1e-6);
     }

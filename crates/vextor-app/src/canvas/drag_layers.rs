@@ -15,9 +15,11 @@ use std::collections::BTreeSet;
 use eframe::egui::{self, Color32, ColorImage, Pos2, TextureHandle, TextureOptions};
 use kurbo::{Affine, Rect};
 use vextor_core::{Document, NodeId, NodeKind, Paint, View};
+use vextor_geom::Fonts;
 use vextor_render::{RenderError, Viewport, render};
 
 use super::Canvas;
+use crate::session::Session;
 
 /// Extra room around a cropped layer, in points (anti-aliasing).
 const CROP_MARGIN: f64 = 2.0;
@@ -47,8 +49,9 @@ impl Canvas {
         painter: &egui::Painter,
         rect: egui::Rect,
         viewport: &Viewport,
-        current: &Document,
+        session: &Session,
     ) -> bool {
+        let (current, fonts) = (&session.doc, &*session.fonts);
         let scaling = self.tool.scaling().is_some();
         let Some(preview) = self.tool.preview() else {
             self.drag_layers = None;
@@ -59,7 +62,8 @@ impl Canvas {
         });
         if stale {
             // A failed render falls back to the normal path (`None`).
-            self.drag_layers = DragLayers::build(ctx, preview.before, preview.ids, viewport).ok();
+            self.drag_layers =
+                DragLayers::build(ctx, fonts, preview.before, preview.ids, viewport).ok();
         }
         let Some(layers) = &mut self.drag_layers else {
             return false;
@@ -71,9 +75,16 @@ impl Canvas {
             let objects = top_level(current);
             let selected: BTreeSet<NodeId> = preview.ids.iter().copied().collect();
             let only = keep_only(current, &objects, |id| selected.contains(id), false);
-            layers.selection = layer(ctx, "drag-selection", &only, viewport, Some(&objects))
-                .ok()
-                .flatten();
+            layers.selection = layer(
+                ctx,
+                fonts,
+                "drag-selection",
+                &only,
+                viewport,
+                Some(&objects),
+            )
+            .ok()
+            .flatten();
             layers.draw(painter, rect.min, viewport.view, None);
         } else {
             layers.draw(painter, rect.min, viewport.view, Some(preview.change));
@@ -85,6 +96,7 @@ impl Canvas {
 impl DragLayers {
     fn build(
         ctx: &egui::Context,
+        fonts: &Fonts,
         before: &Document,
         ids: &[NodeId],
         viewport: &Viewport,
@@ -92,12 +104,21 @@ impl DragLayers {
         let [below, selection, above] = split(before, ids);
         let objects = top_level(before);
         Ok(Self {
-            below: layer(ctx, "drag-below", &below, viewport, None)?.ok_or(RenderError::Empty {
-                width: viewport.width,
-                height: viewport.height,
-            })?,
-            selection: layer(ctx, "drag-selection", &selection, viewport, Some(&objects))?,
-            above: layer(ctx, "drag-above", &above, viewport, Some(&objects))?,
+            below: layer(ctx, fonts, "drag-below", &below, viewport, None)?.ok_or(
+                RenderError::Empty {
+                    width: viewport.width,
+                    height: viewport.height,
+                },
+            )?,
+            selection: layer(
+                ctx,
+                fonts,
+                "drag-selection",
+                &selection,
+                viewport,
+                Some(&objects),
+            )?,
+            above: layer(ctx, fonts, "drag-above", &above, viewport, Some(&objects))?,
             viewport: *viewport,
         })
     }
@@ -126,6 +147,7 @@ impl DragLayers {
 /// none is visible on the canvas; without, the whole canvas.
 fn layer(
     ctx: &egui::Context,
+    fonts: &Fonts,
     name: &str,
     doc: &Document,
     viewport: &Viewport,
@@ -146,7 +168,7 @@ fn layer(
                 .copied()
                 .filter(|id| doc.nodes.get(id).is_some_and(|n| n.visible))
                 .collect();
-            let Some(b) = vextor_geom::union_bounds(doc, &visible) else {
+            let Some(b) = vextor_geom::union_bounds(doc, fonts, &visible) else {
                 return Ok(None);
             };
             let margin = stroke_reach(doc, &visible) * viewport.view.zoom + CROP_MARGIN;

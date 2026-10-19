@@ -164,7 +164,7 @@ impl SelectTool {
     #[must_use]
     pub fn target(s: &Session, p: Point, zoom: f64) -> Target {
         let selected = s.selected();
-        if let Some(b) = union_bounds(&s.doc, &selected) {
+        if let Some(b) = union_bounds(&s.doc, &s.fonts, &selected) {
             let near = |q: Point, reach: f64| {
                 (p.x - q.x).abs() * zoom <= reach && (p.y - q.y).abs() * zoom <= reach
             };
@@ -187,7 +187,7 @@ impl SelectTool {
             {
                 return Target::Rotate;
             }
-            if let Some(o) = pick(&s.doc, p, PICK_TOLERANCE / zoom) {
+            if let Some(o) = pick(&s.doc, &s.fonts, p, PICK_TOLERANCE / zoom) {
                 return Target::Object(o);
             }
             if b.contains(p) {
@@ -195,7 +195,7 @@ impl SelectTool {
             }
             return Target::Empty;
         }
-        pick(&s.doc, p, PICK_TOLERANCE / zoom).map_or(Target::Empty, Target::Object)
+        pick(&s.doc, &s.fonts, p, PICK_TOLERANCE / zoom).map_or(Target::Empty, Target::Object)
     }
 
     /// Primary button pressed at `p`.
@@ -236,7 +236,7 @@ impl SelectTool {
             }
         };
         let ids = s.selected();
-        let Some(bounds) = union_bounds(&s.doc, &ids) else {
+        let Some(bounds) = union_bounds(&s.doc, &s.fonts, &ids) else {
             return;
         };
         s.begin_gesture();
@@ -268,7 +268,7 @@ impl SelectTool {
             Drag::Marquee { start, now, base } => {
                 *now = p;
                 let mut sel = base.clone();
-                for id in touching(&s.doc, Rect::from_points(*start, p)) {
+                for id in touching(&s.doc, &s.fonts, Rect::from_points(*start, p)) {
                     if !sel.contains(&id) {
                         sel.push(id);
                     }
@@ -393,7 +393,7 @@ mod tests {
     }
 
     fn bounds(s: &Session, id: NodeId) -> Rect {
-        vextor_geom::bounds(&s.doc, id).expect("visible")
+        vextor_geom::bounds(&s.doc, &s.fonts, id).expect("visible")
     }
 
     fn click(t: &mut SelectTool, s: &mut Session, p: Point, mods: Mods) {

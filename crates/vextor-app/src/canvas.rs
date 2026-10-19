@@ -110,7 +110,7 @@ impl Canvas {
             return;
         }
         // While the selection is dragged, its layers stand in for a render.
-        if self.draw_drag_layers(ui.ctx(), painter, rect, &viewport, &session.doc) {
+        if self.draw_drag_layers(ui.ctx(), painter, rect, &viewport, session) {
             return;
         }
         let settled = self.last_view == Some(viewport.view);

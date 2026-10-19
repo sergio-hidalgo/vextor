@@ -14,7 +14,7 @@ use vextor_core::{
     ClipboardPayload, Document, EPS, FillRule, Geometry, LineCap, LineJoin, Node, NodeId, NodeKind,
     Paint, Resource, Shape, Stroke, Transform,
 };
-use vextor_geom::{to_bezpath, union_bounds};
+use vextor_geom::{Fonts, to_bezpath, union_bounds};
 
 /// Decimals written for every number.
 const PRECISION: usize = 2;
@@ -22,7 +22,7 @@ const PRECISION: usize = 2;
 /// The copied objects as a standalone SVG, or `None` when nothing visible
 /// was copied.
 #[must_use]
-pub fn clipboard_svg(payload: &ClipboardPayload) -> Option<String> {
+pub fn clipboard_svg(payload: &ClipboardPayload, fonts: &Fonts) -> Option<String> {
     // Paste into an empty scratch document: ids stay unique, resources
     // resolve, and the roots land at their world positions.
     let mut doc = Document::new("clipboard");
@@ -31,7 +31,7 @@ pub fn clipboard_svg(payload: &ClipboardPayload) -> Option<String> {
         .paste(payload, layer, 0, Transform::IDENTITY, "Copy")
         .ok()?;
     doc.apply(cmd).ok()?;
-    let b = union_bounds(&doc, &roots)?;
+    let b = union_bounds(&doc, fonts, &roots)?;
 
     let mut w = Writer {
         doc: &doc,

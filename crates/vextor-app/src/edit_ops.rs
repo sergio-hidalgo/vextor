@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use kurbo::{Affine, Rect as KRect, Vec2 as KVec2};
 use vextor_core::{Arrange, Command, Document, NodeId, NodeKind, Parent, Rect, Transform};
-use vextor_geom::{Align, retarget, union_bounds};
+use vextor_geom::{Align, Fonts, retarget, union_bounds};
 
 use crate::session::Session;
 
@@ -45,7 +45,7 @@ pub fn copy(s: &mut Session) -> Option<String> {
         return None;
     }
     let payload = s.doc.copy(&sel).ok()?;
-    let svg = vextor_svg::clipboard_svg(&payload);
+    let svg = vextor_svg::clipboard_svg(&payload, &s.fonts);
     s.editor.clipboard = Some(payload);
     svg
 }
@@ -213,7 +213,7 @@ pub fn arrange(s: &mut Session, how: Arrange) -> Result<(), String> {
 /// A message for the user when the move is refused.
 pub fn align(s: &mut Session, how: Align, to_artboard: bool) -> Result<(), String> {
     let ids = s.selected();
-    let boxes = boxes(&s.doc, &ids);
+    let boxes = boxes(&s.doc, &s.fonts, &ids);
     let Some(selection) = union(&boxes) else {
         return Ok(());
     };
@@ -235,7 +235,7 @@ pub fn align(s: &mut Session, how: Align, to_artboard: bool) -> Result<(), Strin
 /// # Errors
 /// A message for the user when the move is refused.
 pub fn distribute(s: &mut Session, horizontal: bool) -> Result<(), String> {
-    let boxes = boxes(&s.doc, &s.selected());
+    let boxes = boxes(&s.doc, &s.fonts, &s.selected());
     let moves = vextor_geom::distribute(&boxes.iter().map(|b| b.1).collect::<Vec<_>>(), horizontal);
     move_each(s, &boxes, &moves, "Distribute")
 }
@@ -246,7 +246,7 @@ pub fn distribute(s: &mut Session, horizontal: bool) -> Result<(), String> {
 /// A message for the user when the change is refused.
 pub fn flip(s: &mut Session, horizontal: bool) -> Result<(), String> {
     let ids = s.selected();
-    let Some(b) = union_bounds(&s.doc, &ids) else {
+    let Some(b) = union_bounds(&s.doc, &s.fonts, &ids) else {
         return Ok(());
     };
     transform(s, vextor_geom::flip(b, horizontal), "Flip")
@@ -364,9 +364,9 @@ fn is_plain_group(doc: &Document, id: NodeId) -> bool {
         .is_some_and(|n| matches!(&n.kind, NodeKind::Group(c) if c.clip.is_none()))
 }
 
-fn boxes(doc: &Document, ids: &[NodeId]) -> Vec<(NodeId, KRect)> {
+fn boxes(doc: &Document, fonts: &Fonts, ids: &[NodeId]) -> Vec<(NodeId, KRect)> {
     ids.iter()
-        .filter_map(|&id| Some((id, vextor_geom::bounds(doc, id)?)))
+        .filter_map(|&id| Some((id, vextor_geom::bounds(doc, fonts, id)?)))
         .collect()
 }
 
@@ -449,7 +449,7 @@ mod tests {
     }
 
     fn origin(s: &Session, id: NodeId) -> (f64, f64) {
-        let b = vextor_geom::bounds(&s.doc, id).expect("visible");
+        let b = vextor_geom::bounds(&s.doc, &s.fonts, id).expect("visible");
         (b.x0, b.y0)
     }
 

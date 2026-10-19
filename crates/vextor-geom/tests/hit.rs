@@ -12,7 +12,7 @@ use vextor_core::{
     Command, Container, FillRule, Geometry, NodeKind, Path, PathNode, Shape, Style, SubPath,
     Transform,
 };
-use vextor_geom::{bounds, from_affine, pick, selectable, touching, union_bounds};
+use vextor_geom::{Fonts, bounds, from_affine, pick, selectable, touching, union_bounds};
 
 fn rect_close(a: Rect, b: Rect) -> bool {
     [a.x0 - b.x0, a.y0 - b.y0, a.x1 - b.x1, a.y1 - b.y1]
@@ -26,9 +26,18 @@ fn pick_finds_the_topmost_object() {
     let (a, b) = (id(&mut d), id(&mut d));
     add(&mut d, layer, vec![rect(a, 0.0, 0.0, 10.0, 10.0)]);
     add(&mut d, layer, vec![rect(b, 5.0, 5.0, 10.0, 10.0)]);
-    assert_eq!(pick(&d, Point::new(7.0, 7.0), 0.0), Some(b));
-    assert_eq!(pick(&d, Point::new(2.0, 2.0), 0.0), Some(a));
-    assert_eq!(pick(&d, Point::new(30.0, 30.0), 0.0), None);
+    assert_eq!(
+        pick(&d, &Fonts::default(), Point::new(7.0, 7.0), 0.0),
+        Some(b)
+    );
+    assert_eq!(
+        pick(&d, &Fonts::default(), Point::new(2.0, 2.0), 0.0),
+        Some(a)
+    );
+    assert_eq!(
+        pick(&d, &Fonts::default(), Point::new(30.0, 30.0), 0.0),
+        None
+    );
 }
 
 #[test]
@@ -43,7 +52,10 @@ fn pick_selects_the_whole_group() {
             rect(r, 0.0, 0.0, 4.0, 4.0),
         ],
     );
-    assert_eq!(pick(&d, Point::new(1.0, 1.0), 0.0), Some(g));
+    assert_eq!(
+        pick(&d, &Fonts::default(), Point::new(1.0, 1.0), 0.0),
+        Some(g)
+    );
 }
 
 #[test]
@@ -59,21 +71,21 @@ fn pick_follows_a_rotated_and_scaled_group() {
         vec![group(g, vec![r], t), rect(r, 0.0, 0.0, 10.0, 10.0)],
     );
     assert_eq!(
-        pick(&d, Point::new(0.0, 20.0), 0.0),
+        pick(&d, &Fonts::default(), Point::new(0.0, 20.0), 0.0),
         Some(g),
         "inside after rotation"
     );
     assert_eq!(
-        pick(&d, Point::new(15.0, 2.0), 0.0),
+        pick(&d, &Fonts::default(), Point::new(15.0, 2.0), 0.0),
         None,
         "inside before rotation only"
     );
     assert_eq!(
-        pick(&d, Point::new(0.0, 27.0), 0.0),
+        pick(&d, &Fonts::default(), Point::new(0.0, 27.0), 0.0),
         Some(g),
         "inside only thanks to the scale"
     );
-    let b = bounds(&d, g).expect("visible");
+    let b = bounds(&d, &Fonts::default(), g).expect("visible");
     let half = 20.0 * FRAC_PI_4.cos();
     assert!(rect_close(b, Rect::new(-half, 0.0, half, 2.0 * half)));
 }
@@ -86,12 +98,24 @@ fn pick_scales_the_stroke_with_its_transform() {
     node.transform = Transform::scale(3.0, 3.0);
     add(&mut d, layer, vec![node]);
     // Edge at x = 30; stroke 2 × 3 = 6 wide, so it reaches x = 33.
-    assert_eq!(pick(&d, Point::new(32.5, 15.0), 0.0), Some(r));
-    assert_eq!(pick(&d, Point::new(34.0, 15.0), 0.0), None);
+    assert_eq!(
+        pick(&d, &Fonts::default(), Point::new(32.5, 15.0), 0.0),
+        Some(r)
+    );
+    assert_eq!(
+        pick(&d, &Fonts::default(), Point::new(34.0, 15.0), 0.0),
+        None
+    );
     // No fill: the middle is empty.
-    assert_eq!(pick(&d, Point::new(15.0, 15.0), 0.0), None);
+    assert_eq!(
+        pick(&d, &Fonts::default(), Point::new(15.0, 15.0), 0.0),
+        None
+    );
     // Tolerance widens the reach.
-    assert_eq!(pick(&d, Point::new(34.0, 15.0), 2.0), Some(r));
+    assert_eq!(
+        pick(&d, &Fonts::default(), Point::new(34.0, 15.0), 2.0),
+        Some(r)
+    );
 }
 
 #[test]
@@ -119,8 +143,15 @@ fn pick_respects_even_odd_holes() {
         }),
     );
     add(&mut d, layer, vec![node]);
-    assert_eq!(pick(&d, Point::new(5.0, 5.0), 0.0), Some(r));
-    assert_eq!(pick(&d, Point::new(15.0, 15.0), 0.0), None, "the hole");
+    assert_eq!(
+        pick(&d, &Fonts::default(), Point::new(5.0, 5.0), 0.0),
+        Some(r)
+    );
+    assert_eq!(
+        pick(&d, &Fonts::default(), Point::new(15.0, 15.0), 0.0),
+        None,
+        "the hole"
+    );
 }
 
 #[test]
@@ -132,8 +163,11 @@ fn hidden_locked_and_locked_layers_are_not_hit() {
     let mut locked = rect(b, 20.0, 0.0, 10.0, 10.0);
     locked.locked = true;
     add(&mut d, layer, vec![hidden, locked]);
-    assert_eq!(pick(&d, Point::new(5.0, 5.0), 0.0), None);
-    assert_eq!(pick(&d, Point::new(25.0, 5.0), 0.0), None);
+    assert_eq!(pick(&d, &Fonts::default(), Point::new(5.0, 5.0), 0.0), None);
+    assert_eq!(
+        pick(&d, &Fonts::default(), Point::new(25.0, 5.0), 0.0),
+        None
+    );
     assert_eq!(selectable(&d).len(), 0);
 
     let (mut d, layer) = doc();
@@ -148,7 +182,7 @@ fn hidden_locked_and_locked_layers_are_not_hit() {
         opacity: 1.0,
     })
     .expect("locks");
-    assert_eq!(pick(&d, Point::new(5.0, 5.0), 0.0), None);
+    assert_eq!(pick(&d, &Fonts::default(), Point::new(5.0, 5.0), 0.0), None);
 }
 
 #[test]
@@ -168,13 +202,16 @@ fn clipped_content_is_hit_only_inside_the_clip() {
             rect(r, 0.0, 0.0, 20.0, 20.0),
         ],
     );
-    assert_eq!(pick(&d, Point::new(2.0, 2.0), 0.0), Some(g));
     assert_eq!(
-        pick(&d, Point::new(10.0, 10.0), 0.0),
+        pick(&d, &Fonts::default(), Point::new(2.0, 2.0), 0.0),
+        Some(g)
+    );
+    assert_eq!(
+        pick(&d, &Fonts::default(), Point::new(10.0, 10.0), 0.0),
         None,
         "outside the clip"
     );
-    let b = bounds(&d, g).expect("visible");
+    let b = bounds(&d, &Fonts::default(), g).expect("visible");
     assert!(rect_close(b, Rect::new(0.0, 0.0, 5.0, 5.0)));
 }
 
@@ -202,14 +239,23 @@ fn marquee_touches_shapes_not_their_empty_bounding_box() {
         ],
     );
     // A box in the empty corner of the line's bounding box.
-    assert_eq!(touching(&d, Rect::new(70.0, 0.0, 95.0, 20.0)).len(), 0);
+    assert_eq!(
+        touching(&d, &Fonts::default(), Rect::new(70.0, 0.0, 95.0, 20.0)).len(),
+        0
+    );
     // Crossing the line.
-    assert_eq!(touching(&d, Rect::new(40.0, 0.0, 60.0, 100.0)), vec![line]);
+    assert_eq!(
+        touching(&d, &Fonts::default(), Rect::new(40.0, 0.0, 60.0, 100.0)),
+        vec![line]
+    );
     // Fully inside the big rect.
-    assert_eq!(touching(&d, Rect::new(210.0, 210.0, 220.0, 220.0)), vec![a]);
+    assert_eq!(
+        touching(&d, &Fonts::default(), Rect::new(210.0, 210.0, 220.0, 220.0)),
+        vec![a]
+    );
     // Around two of them, bottom → top.
     assert_eq!(
-        touching(&d, Rect::new(150.0, -10.0, 400.0, 300.0)),
+        touching(&d, &Fonts::default(), Rect::new(150.0, -10.0, 400.0, 300.0)),
         vec![a, b]
     );
 }
@@ -221,6 +267,6 @@ fn union_bounds_covers_every_object() {
     let mut moved = rect(b, 0.0, 0.0, 10.0, 10.0);
     moved.transform = Transform::translate(50.0, -5.0);
     add(&mut d, layer, vec![rect(a, 0.0, 0.0, 10.0, 10.0), moved]);
-    let u = union_bounds(&d, &[a, b]).expect("visible");
+    let u = union_bounds(&d, &Fonts::default(), &[a, b]).expect("visible");
     assert!(rect_close(u, Rect::new(0.0, -5.0, 60.0, 10.0)));
 }

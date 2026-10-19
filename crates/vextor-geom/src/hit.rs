@@ -11,6 +11,7 @@ use kurbo::{Affine, BezPath, Line, ParamCurve, ParamCurveNearest, PathEl, Point,
 use vextor_core::{Document, FillRule, Geometry, NodeId, NodeKind, Paint, Transform};
 
 use crate::convert::to_bezpath;
+use crate::text::{Fonts, text_box};
 
 /// Accuracy of the nearest-point search on curves, in document px.
 const NEAREST_ACCURACY: f64 = 1e-3;
@@ -88,8 +89,8 @@ impl Leaf {
 /// The topmost object with a leaf under `p` (document space), within
 /// `tolerance` document px of its outline.
 #[must_use]
-pub fn pick(doc: &Document, p: Point, tolerance: f64) -> Option<NodeId> {
-    leaves(doc)
+pub fn pick(doc: &Document, fonts: &Fonts, p: Point, tolerance: f64) -> Option<NodeId> {
+    leaves(doc, fonts)
         .iter()
         .rev()
         .find(|leaf| leaf.hit(p, tolerance))
@@ -98,9 +99,9 @@ pub fn pick(doc: &Document, p: Point, tolerance: f64) -> Option<NodeId> {
 
 /// The objects a marquee `r` (document space) touches, bottom → top.
 #[must_use]
-pub fn touching(doc: &Document, r: Rect) -> Vec<NodeId> {
+pub fn touching(doc: &Document, fonts: &Fonts, r: Rect) -> Vec<NodeId> {
     let mut out: Vec<NodeId> = Vec::new();
-    for leaf in leaves(doc).iter().filter(|leaf| leaf.touches(r)) {
+    for leaf in leaves(doc, fonts).iter().filter(|leaf| leaf.touches(r)) {
         if !out.contains(&leaf.object) {
             out.push(leaf.object);
         }
@@ -137,20 +138,26 @@ pub fn selectable(doc: &Document) -> Vec<NodeId> {
 /// The geometric bounds of `id` and its visible descendants in document
 /// space (strokes not included), or `None` when nothing visible is there.
 #[must_use]
-pub fn bounds(doc: &Document, id: NodeId) -> Option<Rect> {
+pub fn bounds(doc: &Document, fonts: &Fonts, id: NodeId) -> Option<Rect> {
     let parent = to_affine(doc.parent_transform(id));
-    subtree_bounds(doc, id, parent, 0)
+    subtree_bounds(doc, fonts, id, parent, 0)
 }
 
 /// The union of [`bounds`] of `ids`.
 #[must_use]
-pub fn union_bounds(doc: &Document, ids: &[NodeId]) -> Option<Rect> {
+pub fn union_bounds(doc: &Document, fonts: &Fonts, ids: &[NodeId]) -> Option<Rect> {
     ids.iter()
-        .filter_map(|&id| bounds(doc, id))
+        .filter_map(|&id| bounds(doc, fonts, id))
         .reduce(|a, b| a.union(b))
 }
 
-fn subtree_bounds(doc: &Document, id: NodeId, parent: Affine, depth: usize) -> Option<Rect> {
+fn subtree_bounds(
+    doc: &Document,
+    fonts: &Fonts,
+    id: NodeId,
+    parent: Affine,
+    depth: usize,
+) -> Option<Rect> {
     let node = doc.nodes.get(&id)?;
     if !node.visible || depth > MAX_DEPTH {
         return None;
@@ -159,18 +166,20 @@ fn subtree_bounds(doc: &Document, id: NodeId, parent: Affine, depth: usize) -> O
     match &node.kind {
         NodeKind::Shape(s) => Some((world * to_bezpath(&s.geometry)).bounding_box()),
         NodeKind::Image(img) => Some((world * image_outline(img.rect)).bounding_box()),
-        // Text has no extent until its layout exists (spec 05c, step 2).
-        NodeKind::Text(_) => None,
+        NodeKind::Text(t) => {
+            let b = text_box(t, &fonts.layout(id, t));
+            Some((world * b.to_path(0.0)).bounding_box())
+        }
         NodeKind::Layer(c) | NodeKind::Group(c) => {
             let inner = c
                 .children
                 .iter()
                 .filter(|&&child| Some(child) != c.clip)
-                .filter_map(|&child| subtree_bounds(doc, child, world, depth + 1))
+                .filter_map(|&child| subtree_bounds(doc, fonts, child, world, depth + 1))
                 .reduce(|a, b| a.union(b))?;
             match c
                 .clip
-                .and_then(|clip| subtree_bounds(doc, clip, world, depth + 1))
+                .and_then(|clip| subtree_bounds(doc, fonts, clip, world, depth + 1))
             {
                 Some(clip) => {
                     let r = inner.intersect(clip);
@@ -186,7 +195,7 @@ fn subtree_bounds(doc: &Document, id: NodeId, parent: Affine, depth: usize) -> O
 const MAX_DEPTH: usize = 64;
 
 /// All hittable leaves, bottom → top.
-fn leaves(doc: &Document) -> Vec<Leaf> {
+fn leaves(doc: &Document, fonts: &Fonts) -> Vec<Leaf> {
     let mut out = Vec::new();
     for layer in doc.layers.iter().filter_map(|l| doc.nodes.get(l)) {
         if !layer.visible || layer.locked {
@@ -198,14 +207,16 @@ fn leaves(doc: &Document) -> Vec<Leaf> {
         let world = to_affine(layer.transform);
         let clips = clip_of(doc, c.clip, world);
         for &child in c.children.iter().filter(|&&ch| Some(ch) != c.clip) {
-            collect(doc, child, child, world, &clips, 0, &mut out);
+            collect(doc, fonts, child, child, world, &clips, 0, &mut out);
         }
     }
     out
 }
 
+#[allow(clippy::too_many_arguments)] // one recursive walk's state
 fn collect(
     doc: &Document,
+    fonts: &Fonts,
     id: NodeId,
     object: NodeId,
     parent: Affine,
@@ -251,13 +262,20 @@ fn collect(
             half_stroke: 0.0,
             clips: clips.to_vec(),
         }),
-        // Hit by its layout box from spec 05c, step 2.
-        NodeKind::Text(_) => {}
+        // A label is picked anywhere in its box, frame included.
+        NodeKind::Text(t) => out.push(Leaf {
+            object,
+            outline: world * text_box(t, &fonts.layout(id, t)).to_path(0.0),
+            filled: true,
+            fill_rule: FillRule::NonZero,
+            half_stroke: 0.0,
+            clips: clips.to_vec(),
+        }),
         NodeKind::Layer(c) | NodeKind::Group(c) => {
             let mut inner = clips.to_vec();
             inner.extend(clip_of(doc, c.clip, world));
             for &child in c.children.iter().filter(|&&ch| Some(ch) != c.clip) {
-                collect(doc, child, object, world, &inner, depth + 1, out);
+                collect(doc, fonts, child, object, world, &inner, depth + 1, out);
             }
         }
     }

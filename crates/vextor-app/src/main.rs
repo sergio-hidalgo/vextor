@@ -5,6 +5,7 @@ mod canvas;
 mod debug;
 mod edit_ops;
 mod files;
+mod fonts;
 mod icon;
 mod new_doc;
 mod panels;

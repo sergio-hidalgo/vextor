@@ -39,7 +39,7 @@ pub fn inspector_and_layers(ui: &mut egui::Ui, session: Option<&mut Session>) ->
 /// Dragging a value is one undo step; typing one is one step per change.
 fn inspector(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
     let ids = s.selected();
-    let Some(b) = union_bounds(&s.doc, &ids) else {
+    let Some(b) = union_bounds(&s.doc, &s.fonts, &ids) else {
         ui.weak("Nothing selected.");
         return None;
     };

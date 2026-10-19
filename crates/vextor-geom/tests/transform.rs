@@ -12,7 +12,7 @@ use kurbo::{Affine, Point, Rect, Vec2};
 use proptest::prelude::*;
 use vextor_core::{Command, Transform};
 use vextor_geom::{
-    Align, Handle, align, bounds, distribute, flip, from_affine, retarget, rotation_angle,
+    Align, Fonts, Handle, align, bounds, distribute, flip, from_affine, retarget, rotation_angle,
     rotation_degrees, scale,
 };
 
@@ -135,10 +135,10 @@ fn retarget_moves_a_child_of_a_rotated_scaled_group_in_world_space() {
         layer,
         vec![group(g, vec![r], t), rect(r, 0.0, 0.0, 10.0, 10.0)],
     );
-    let before = bounds(&d, r).expect("visible");
+    let before = bounds(&d, &Fonts::default(), r).expect("visible");
     let items = retarget(&d, &[r], Affine::translate((15.0, -4.0)));
     d.apply(Command::SetTransforms { items }).expect("applies");
-    let after = bounds(&d, r).expect("visible");
+    let after = bounds(&d, &Fonts::default(), r).expect("visible");
     assert!(close(
         after.origin(),
         before.origin() + Vec2::new(15.0, -4.0)
@@ -162,11 +162,11 @@ proptest! {
         let t = from_affine(Affine::rotate(angle) * Affine::scale_non_uniform(sx, sy));
         add(&mut d, layer, vec![group(g, vec![r], t), rect(r, 0.0, 0.0, 10.0, 10.0)]);
         // Scale the group (an axis-aligned world box) from its SE corner.
-        let b = bounds(&d, g).expect("visible");
+        let b = bounds(&d, &Fonts::default(), g).expect("visible");
         let change = scale(b, Handle::SE, Vec2::new(dx, dy), false, false);
         let items = retarget(&d, &[g], change);
         d.apply(Command::SetTransforms { items }).expect("applies");
-        let after = bounds(&d, g).expect("visible");
+        let after = bounds(&d, &Fonts::default(), g).expect("visible");
         let want = change.transform_rect_bbox(b);
         prop_assert!((after.x0 - want.x0).abs() < 1e-6 && (after.y0 - want.y0).abs() < 1e-6);
         prop_assert!((after.x1 - want.x1).abs() < 1e-6 && (after.y1 - want.y1).abs() < 1e-6);
