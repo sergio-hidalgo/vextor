@@ -5,8 +5,9 @@ of web app components — icons, buttons, badges, cards — and copying clean
 SVG, HTML or JSX out of them.
 
 **Status:** the editor window, canvas, document model and `.vextor`
-files are in place. You can create, open, save and view a document;
-drawing tools arrive in later milestones.
+files are in place. You can create, open and save documents, select and
+transform objects, and add text labels; the shape and pen tools arrive in
+later milestones.
 
 ## Requirements
 
@@ -31,9 +32,13 @@ cargo deny check                 # advisories, licenses, bans, sources
 All four checks must pass before a change is merged.
 
 ```sh
-cargo bench -p vextor-render     # canvas render timings (criterion)
-cargo bench -p vextor-geom       # hit-testing and drag-frame timings
+cargo bench -p vextor-render     # canvas render timings (criterion), typing in long text
+cargo bench -p vextor-geom       # hit-testing, drag-frame and text layout timings
 ```
+
+Text tests use the bundled Noto Sans fonts in
+`crates/vextor-geom/tests/fixtures/fonts/` (SIL OFL 1.1, see the README
+there), never the machine's fonts.
 
 ## Using the editor
 
@@ -53,7 +58,7 @@ transparent artboards and grey around them.
 
 ### Selecting and transforming
 
-The Select tool (`V`) is the only tool so far.
+Tools (left panel): Select (`V`) and Text (`T`).
 
 | Action                              | How                                                    |
 | :---------------------------------- | :----------------------------------------------------- |
@@ -61,7 +66,7 @@ The Select tool (`V`) is the only tool so far.
 | Select by area                      | drag on empty canvas: selects what the box touches     |
 | Select all / clear                  | `⌘A` / `Esc`                                           |
 | Move                                | drag the selection; arrows nudge 1 px, `⇧`+arrows 10 px |
-| Scale                               | drag a handle; `⇧` keeps proportions, `⌥` from the centre (strokes keep their width) |
+| Scale                               | drag a handle; `⇧` keeps proportions, `⌥` from the centre (strokes keep their width; text scales its font size and always keeps proportions) |
 | Rotate                              | drag just outside any corner (curved-arrow cursor); `⇧` in 15° steps |
 | Exact position, size, rotation      | Inspector (right): X, Y, W, H, °                       |
 | Cut / copy / paste / paste in place | `⌘X` / `⌘C` / `⌘V` (+10 px) / `⇧⌘V`                     |
@@ -71,12 +76,37 @@ The Select tool (`V`) is the only tool so far.
 | Send backward / to back             | `⌘↓` / `⇧⌘↓`                                           |
 | Align, distribute, flip             | Object menu                                            |
 
+### Text
+
+Simple, single-style labels (button captions, badges, headings) in the
+fonts installed on your computer. The fonts load in the background when
+Vextor starts; until then text is placed but not drawn.
+
+| Action                     | How                                                        |
+| :------------------------- | :--------------------------------------------------------- |
+| Add a label                | Text tool (`T`), click: "Text" appears selected, type over it |
+| Edit a label               | double-click it, or `Enter` with one label selected        |
+| Finish editing             | `Esc`, or click outside (one undo step per edit)           |
+| While editing              | arrows; `⌥`+arrows by word; `⌘`+arrows to the line ends; `⇧` selects; `⌘A`; `⌘C` / `⌘X` / `⌘V` (plain text); `Enter` new line |
+| Font, style, size, spacing | Inspector ▸ Text: searchable font list (recently used first, each name in its own face), the family's real styles, size, line height, letter spacing, alignment |
+| Colour, background, border | Inspector ▸ Text: text colour; Background (colour, padding, corner radius); Border (colour, width) |
+| Convert to outlines        | Object ▸ Convert Text to Outlines (`⇧⌘O`): a group with the background rect and one shape per letter (ungroup to move letters one by one) |
+
+A label emptied when editing ends is removed. A document keeps a font's
+name even when this computer does not have it: the inspector says
+"Font missing: X — showing Y", and converting such a label to outlines asks
+first, since the outlines would take the shape of the stand-in font. Copy
+writes labels into the clipboard SVG as live `<text>` (one `<tspan>` per
+line, the frame as a `<rect>`), so a web page needs the same font
+installed or loaded; convert to outlines for a font-free shape.
+
 Align lines up two or more objects with each other, or one object with its
 artboard (Object ▸ Align ▸ Align to Artboard forces the artboard).
 Distribute needs three or more. Hidden and locked objects cannot be
 selected. Copy also puts the selection on the system clipboard as SVG
-(shapes, groups, solid colours, strokes and clips; gradients are written as
-their first colour and images are left out until full export arrives).
+(shapes, groups, text, solid colours, strokes and clips; gradients are
+written as their first colour and images are left out until full export
+arrives).
 
 Ctrl replaces ⌘ on Windows and Linux.
 
@@ -95,8 +125,9 @@ colours from the palette in `crates/vextor-app/src/theme.rs`.
 
 ## Files, autosave and recovery
 
-Documents are saved as `.vextor` files (JSON, `format_version: 1`;
-embedded images as base64). Saving writes a temporary file next to the
+Documents are saved as `.vextor` files (JSON, `format_version: 2`, which
+added text; version-1 files still open and are saved as version 2;
+embedded images as base64; fonts are never embedded, only their names). Saving writes a temporary file next to the
 document and renames it into place, so a crash never leaves a half-written
 file. The title bar shows `•` while there are unsaved changes, and closing
 the window, opening a file or starting a new document asks
@@ -127,7 +158,7 @@ VEXTOR_DEBUG_MENU=1 cargo run -p vextor-app --release
 | Crate           | Holds                                                      |
 | :-------------- | :--------------------------------------------------------- |
 | `vextor-core`   | document model, commands, undo history, `.vextor` bytes (no UI, no file I/O) |
-| `vextor-geom`   | shape → Bézier conversion; later hit-testing, snapping, booleans |
+| `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`); later snapping, booleans |
 | `vextor-svg`    | SVG export and import                                      |
 | `vextor-render` | rasterising documents for the canvas (`tiny-skia`), sample documents |
 | `vextor-app`    | the desktop app (`eframe`/`egui`), file dialogs (`rfd`), autosave |
@@ -137,7 +168,7 @@ Dependencies point downwards only: `app → svg/render → geom → core`.
 ## Document model
 
 Everything the editor changes lives in `vextor_core::Document`: layers,
-groups, shapes (rect, ellipse, polygon, star, line, path), images,
+groups, shapes (rect, ellipse, polygon, star, line, path), text, images,
 gradients, patterns, artboards, grid and export settings. A document is
 changed only through `Command`s, applied with `History::apply`, so every
 edit is undoable; a command either applies completely or not at all, and

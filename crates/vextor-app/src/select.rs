@@ -164,7 +164,7 @@ impl SelectTool {
     #[must_use]
     pub fn target(s: &Session, p: Point, zoom: f64) -> Target {
         let selected = s.selected();
-        if let Some(b) = union_bounds(&s.doc, &selected) {
+        if let Some(b) = union_bounds(&s.doc, &s.fonts, &selected) {
             let near = |q: Point, reach: f64| {
                 (p.x - q.x).abs() * zoom <= reach && (p.y - q.y).abs() * zoom <= reach
             };
@@ -187,7 +187,7 @@ impl SelectTool {
             {
                 return Target::Rotate;
             }
-            if let Some(o) = pick(&s.doc, p, PICK_TOLERANCE / zoom) {
+            if let Some(o) = pick(&s.doc, &s.fonts, p, PICK_TOLERANCE / zoom) {
                 return Target::Object(o);
             }
             if b.contains(p) {
@@ -195,7 +195,7 @@ impl SelectTool {
             }
             return Target::Empty;
         }
-        pick(&s.doc, p, PICK_TOLERANCE / zoom).map_or(Target::Empty, Target::Object)
+        pick(&s.doc, &s.fonts, p, PICK_TOLERANCE / zoom).map_or(Target::Empty, Target::Object)
     }
 
     /// Primary button pressed at `p`.
@@ -236,7 +236,7 @@ impl SelectTool {
             }
         };
         let ids = s.selected();
-        let Some(bounds) = union_bounds(&s.doc, &ids) else {
+        let Some(bounds) = union_bounds(&s.doc, &s.fonts, &ids) else {
             return;
         };
         s.begin_gesture();
@@ -268,7 +268,7 @@ impl SelectTool {
             Drag::Marquee { start, now, base } => {
                 *now = p;
                 let mut sel = base.clone();
-                for id in touching(&s.doc, Rect::from_points(*start, p)) {
+                for id in touching(&s.doc, &s.fonts, Rect::from_points(*start, p)) {
                     if !sel.contains(&id) {
                         sel.push(id);
                     }
@@ -291,6 +291,13 @@ impl SelectTool {
                     return Ok(());
                 }
                 *moved = true;
+                // Text scales rather than stretches: Shift is implied.
+                let mods = Mods {
+                    shift: mods.shift
+                        || (matches!(kind, Kind::Scale(_))
+                            && crate::edit_ops::has_text(before, ids)),
+                    ..mods
+                };
                 let (change, label) = transform_for(*kind, *bounds, *start, p, mods);
                 *last = Some(change);
                 // A scale is baked into the shapes so strokes keep their
@@ -393,7 +400,7 @@ mod tests {
     }
 
     fn bounds(s: &Session, id: NodeId) -> Rect {
-        vextor_geom::bounds(&s.doc, id).expect("visible")
+        vextor_geom::bounds(&s.doc, &s.fonts, id).expect("visible")
     }
 
     fn click(t: &mut SelectTool, s: &mut Session, p: Point, mods: Mods) {
@@ -412,6 +419,43 @@ mod tests {
         .expect("drags");
         t.drag_to(s, to, mods, 1.0).expect("drags");
         t.release(s);
+    }
+
+    #[test]
+    fn scaling_text_keeps_its_proportions() {
+        let mut doc = new_document("a", 400.0, 400.0);
+        let layer = doc.layers[0];
+        let id = doc.alloc_node_id();
+        doc.apply(Command::Insert {
+            parent: Some(layer),
+            index: 0,
+            nodes: vec![Node::new(
+                id,
+                NodeKind::Text(vextor_core::Text::new("Hi", "Inter")),
+            )],
+        })
+        .expect("inserts");
+        let mut s = Session::new(doc);
+        s.select(vec![id]);
+        let b = bounds(&s, id);
+        let mut t = SelectTool::default();
+        // Drag the SE corner right only: the height follows.
+        let corner = Point::new(b.x1, b.y1);
+        drag(
+            &mut t,
+            &mut s,
+            corner,
+            corner + kurbo::Vec2::new(b.width(), 0.0),
+            NONE,
+        );
+        let after = bounds(&s, id);
+        assert!((after.width() - 2.0 * b.width()).abs() < 1e-6);
+        assert!((after.height() - 2.0 * b.height()).abs() < 1e-6);
+        let NodeKind::Text(text) = &s.doc.nodes[&id].kind else {
+            panic!("still text");
+        };
+        assert!((text.size - 32.0).abs() < 1e-9);
+        assert_eq!(s.edit_menu().undo, Some("Scale"));
     }
 
     #[test]

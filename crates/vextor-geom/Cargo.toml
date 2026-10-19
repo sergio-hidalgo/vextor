@@ -1,6 +1,6 @@
 [package]
 name = "vextor-geom"
-description = "Vextor geometry: hit-testing, snapping and path operations"
+description = "Vextor geometry: hit-testing, snapping, path operations and text layout"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,9 @@ publish.workspace = true
 [dependencies]
 vextor-core.workspace = true
 kurbo.workspace = true
+fontdb.workspace = true
+harfrust.workspace = true
+skrifa.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
@@ -20,3 +23,7 @@ harness = false
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "text"
+harness = false

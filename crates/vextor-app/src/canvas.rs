@@ -18,10 +18,12 @@ use vextor_render::{RenderCache, Viewport};
 
 use crate::select::SelectTool;
 use crate::session::Session;
+use crate::text_tool::TextTool;
 use crate::view;
 
 mod drag_layers;
 mod selection;
+mod text;
 
 /// Side of one checkerboard square, in points.
 const CHECKER_CELL: f32 = 8.0;
@@ -53,6 +55,8 @@ pub struct Canvas {
     tool: SelectTool,
     /// The layer textures of the drag in progress (spec 05b).
     drag_layers: Option<drag_layers::DragLayers>,
+    /// Text placing and editing (spec 05c).
+    text: TextTool,
 }
 
 impl Canvas {
@@ -77,8 +81,12 @@ impl Canvas {
             self.fit(session);
             session.needs_fit = false;
         }
-        handle_input(ui, &response, rect, &mut session.editor.view);
-        let message = self.tool_input(ui, &response, rect, session);
+        let typing = self.is_editing_text();
+        handle_input(ui, &response, rect, &mut session.editor.view, typing);
+        let key_message = self.text_keys(ui, session);
+        let message = self
+            .tool_input(ui, &response, rect, session)
+            .or(key_message);
 
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
@@ -86,7 +94,11 @@ impl Canvas {
         self.draw_checkerboards(ui.ctx(), &painter, rect.min, session);
         self.draw_document(ui, &painter, rect, session);
         draw_artboard_outlines(ui, &painter, rect.min, session);
-        self.draw_selection(ui, &painter, &response, rect, session);
+        if self.is_editing_text() {
+            self.draw_text_overlay(&painter, rect.min, session);
+        } else {
+            self.draw_selection(ui, &painter, &response, rect, session);
+        }
         self.draw_status(ui, &painter, rect, current);
         self.last_view = Some(current);
         message
@@ -110,7 +122,7 @@ impl Canvas {
             return;
         }
         // While the selection is dragged, its layers stand in for a render.
-        if self.draw_drag_layers(ui.ctx(), painter, rect, &viewport, &session.doc) {
+        if self.draw_drag_layers(ui.ctx(), painter, rect, &viewport, session) {
             return;
         }
         let settled = self.last_view == Some(viewport.view);
@@ -142,7 +154,10 @@ impl Canvas {
 
     fn render(&mut self, ctx: &egui::Context, session: &Session, viewport: &Viewport) {
         let started = Instant::now();
-        match self.cache.frame(&session.doc, session.revision(), viewport) {
+        match self
+            .cache
+            .frame(&session.doc, &session.fonts, session.revision(), viewport)
+        {
             Ok(frame) => {
                 if frame.fresh {
                     let size = [
@@ -226,8 +241,15 @@ impl Canvas {
 }
 
 /// Zoom (pinch, ⌘-scroll), pan (two-finger scroll, space-drag, middle-drag).
-fn handle_input(ui: &egui::Ui, response: &egui::Response, rect: egui::Rect, v: &mut View) {
-    let space = ui.input(|i| i.key_down(egui::Key::Space));
+/// While text is being typed, Space types a space instead of panning.
+fn handle_input(
+    ui: &egui::Ui,
+    response: &egui::Response,
+    rect: egui::Rect,
+    v: &mut View,
+    typing: bool,
+) {
+    let space = !typing && ui.input(|i| i.key_down(egui::Key::Space));
     if response.hovered() {
         let (zoom, scroll, hover) = ui.input(|i| {
             (

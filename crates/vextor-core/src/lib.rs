@@ -1,4 +1,4 @@
-//! Vextor document model: documents, layers, shapes, paths, paints, the
+//! Vextor document model: documents, layers, shapes, paths, text, paints, the
 //! commands that edit them and the undo history.
 //!
 //! Knows nothing about UI, rendering, file I/O or SVG (see the `rust-core`
@@ -22,6 +22,7 @@ mod path;
 mod resource;
 mod settings;
 mod style;
+mod text;
 mod validate;
 
 pub use change::{Change, Patch};
@@ -31,7 +32,9 @@ pub use document::{Artboard, Document, FORMAT_VERSION, Parent};
 pub use edit::Arrange;
 pub use editor::{ClipResource, ClipboardPayload, EditorState, Selection, ToolId, View};
 pub use error::{ColorError, CoreError};
-pub use format::{FormatError, MAX_FILE_BYTES, MAX_NODES, from_bytes, to_bytes};
+pub use format::{
+    FormatError, MAX_FILE_BYTES, MAX_NODES, MIN_FORMAT_VERSION, from_bytes, to_bytes,
+};
 pub use history::{DEFAULT_LIMIT, History};
 pub use ids::{ArtboardId, NodeId, ResourceId};
 pub use math::{EPS, Point, Rect, Transform, Vec2};
@@ -44,4 +47,7 @@ pub use resource::{
 };
 pub use settings::{GridSettings, IdMode, SnapSettings, Styling, SvgExportOptions};
 pub use style::{LineCap, LineJoin, Paint, Stroke, Style, Swatch};
+pub use text::{
+    FONT_WEIGHTS, FontSpec, MAX_FONT_FAMILY_CHARS, MAX_TEXT_CHARS, Text, TextAlign, TextFrame,
+};
 pub use validate::{MAX_POLYGON_SIDES, MAX_STAR_POINTS, Violation};

@@ -8,12 +8,13 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use eframe::egui;
-use vextor_core::Arrange;
+use vextor_core::{Arrange, ToolId};
 use vextor_geom::Align;
 
 use self::file_flow::Then;
 use crate::canvas::Canvas;
 use crate::files::{self, RecentFiles};
+use crate::fonts::SystemFonts;
 use crate::new_doc::{Outcome, Picker};
 use crate::recovery::{Orphan, Recovery};
 use crate::session::Session;
@@ -48,6 +49,8 @@ enum Action {
     Distribute { horizontal: bool },
     Flip { horizontal: bool },
     Nudge { dx: i32, dy: i32 },
+    Tool(ToolId),
+    OutlineText,
 }
 
 /// Editor root.
@@ -76,6 +79,11 @@ pub struct VextorApp {
     align_to_artboard: bool,
     /// SVG text to put on the system clipboard this frame.
     system_clipboard: Option<String>,
+    /// Fonts for text; the OS fonts arrive from a background thread.
+    fonts: SystemFonts,
+    /// Waiting on "Convert with the fallback font?" (a selected text's
+    /// font is missing).
+    outline_prompt: Option<vextor_geom::MissingFont>,
 }
 
 impl VextorApp {
@@ -85,6 +93,7 @@ impl VextorApp {
         // ⌘0 / ⌘+ / ⌘- belong to the canvas, not to egui's UI scale.
         cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
         theme::apply(&cc.egui_ctx);
+        let fonts = SystemFonts::load(&cc.egui_ctx);
         let data_dir = files::app_data_dir();
         let recent = data_dir
             .as_deref()
@@ -118,6 +127,8 @@ impl VextorApp {
             canvas_rect: egui::Rect::NOTHING,
             align_to_artboard: false,
             system_clipboard: None,
+            fonts,
+            outline_prompt: None,
         }
     }
 
@@ -130,11 +141,19 @@ impl VextorApp {
         if let Some(old) = &mut self.session {
             session.editor.clipboard = old.editor.clipboard.take();
         }
+        session.fonts = self.fonts.current();
         self.session = Some(session);
         self.picker = None;
     }
 
     fn run(&mut self, action: Action) {
+        // Anything but a view change ends a text edit first, so it is one
+        // undo step of its own (⌘Z then undoes the whole edit).
+        if !matches!(action, Action::Fit | Action::ActualSize)
+            && let Some(s) = self.session.as_mut()
+        {
+            self.canvas.finish_text(s);
+        }
         match action {
             Action::New => self.request(Then::New),
             Action::Open => self.request(Then::Open),
@@ -201,6 +220,18 @@ impl VextorApp {
             Action::Distribute { horizontal } => edit_ops::distribute(s, *horizontal),
             Action::Flip { horizontal } => edit_ops::flip(s, *horizontal),
             Action::Nudge { dx, dy } => edit_ops::nudge(s, f64::from(*dx), f64::from(*dy)),
+            Action::Tool(tool) => {
+                s.editor.tool = *tool;
+                Ok(())
+            }
+            Action::OutlineText => match crate::outline_text::missing_font(s) {
+                // Ask first: the fallback face would be outlined.
+                Some(missing) => {
+                    self.outline_prompt = Some(missing);
+                    Ok(())
+                }
+                None => crate::outline_text::convert(s),
+            },
             _ => Ok(()),
         };
         if let Err(e) = result {
@@ -223,10 +254,18 @@ impl VextorApp {
 impl eframe::App for VextorApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        if let Some(fonts) = self.fonts.poll()
+            && let Some(s) = &mut self.session
+        {
+            s.set_fonts(fonts);
+        }
         self.handle_close(&ctx);
-        let prompt_open = self.confirm.is_some() || !self.orphans.is_empty();
+        let prompt_open =
+            self.confirm.is_some() || !self.orphans.is_empty() || self.outline_prompt.is_some();
         if !prompt_open {
-            let editing = self.session.is_some() && self.picker.is_none();
+            // While text is typed, letters and Edit keys belong to it.
+            let editing =
+                self.session.is_some() && self.picker.is_none() && !self.canvas.is_editing_text();
             for action in Self::shortcuts(&ctx, editing) {
                 self.run(action);
             }
@@ -245,11 +284,28 @@ impl eframe::App for VextorApp {
         egui::Panel::left("tools")
             .resizable(false)
             .exact_size(48.0)
-            .show(ui, panels::tools);
+            .show(ui, |ui| {
+                let active = self
+                    .session
+                    .as_ref()
+                    .filter(|_| self.picker.is_none())
+                    .map(|s| s.editor.tool);
+                if let Some(tool) = panels::tools(ui, active) {
+                    self.run(Action::Tool(tool));
+                }
+            });
         egui::Panel::right("inspector")
             .resizable(true)
             .default_size(240.0)
             .show(ui, |ui| {
+                // Working in the inspector ends a text edit first, so the
+                // edit stays one undo step and the fields apply to it.
+                if ui.input(|i| i.pointer.primary_pressed())
+                    && ui.ui_contains_pointer()
+                    && let Some(s) = self.session.as_mut()
+                {
+                    self.canvas.finish_text(s);
+                }
                 let session = self.session.as_mut().filter(|_| self.picker.is_none());
                 if let Some(e) = panels::inspector_and_layers(ui, session) {
                     self.message = Some(e);

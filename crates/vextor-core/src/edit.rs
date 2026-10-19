@@ -9,7 +9,7 @@ use crate::editor::{ClipResource, ClipboardPayload};
 use crate::error::CoreError;
 use crate::ids::{NodeId, ResourceId};
 use crate::math::Transform;
-use crate::node::{Node, NodeKind};
+use crate::node::Node;
 use crate::resource::Resource;
 use crate::style::Paint;
 
@@ -242,31 +242,20 @@ impl Document {
 
 /// The resources a node's paints refer to.
 fn paint_refs(node: &Node) -> Vec<ResourceId> {
-    match &node.kind {
-        NodeKind::Shape(s) => s
-            .style
-            .paints()
-            .filter_map(|p| match p {
-                Paint::Gradient(r) | Paint::Pattern(r) => Some(r),
-                _ => None,
-            })
-            .collect(),
-        _ => Vec::new(),
-    }
+    node.paints()
+        .into_iter()
+        .filter_map(|p| match p {
+            Paint::Gradient(r) | Paint::Pattern(r) => Some(r),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Points a node's paints at the resources' new ids.
 fn remap_paints(node: &mut Node, map: &BTreeMap<ResourceId, ResourceId>) {
-    let NodeKind::Shape(s) = &mut node.kind else {
-        return;
-    };
-    let fix = |p: &mut Paint| {
+    for p in node.paints_mut() {
         if let Paint::Gradient(r) | Paint::Pattern(r) = p {
             *r = map.get(r).copied().unwrap_or(*r);
         }
-    };
-    fix(&mut s.style.fill);
-    if let Some(stroke) = &mut s.style.stroke {
-        fix(&mut stroke.paint);
     }
 }

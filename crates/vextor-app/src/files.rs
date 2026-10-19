@@ -310,15 +310,15 @@ mod tests {
         assert_eq!(err.to_string(), "the file is incomplete (it was cut off)");
 
         let newer = String::from_utf8(bytes).expect("utf-8").replacen(
-            "\"format_version\": 1",
             "\"format_version\": 2",
+            "\"format_version\": 3",
             1,
         );
         fs::write(&path, newer).expect("writes");
         let err = read_document(&path).expect_err("refused");
         assert_eq!(
             err.to_string(),
-            "the file uses format version 2; this Vextor reads version 1"
+            "the file uses format version 3; this Vextor reads versions 1 to 2"
         );
     }
 

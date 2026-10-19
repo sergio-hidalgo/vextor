@@ -295,6 +295,7 @@ fn editor_types() {
         round_trip(&s);
     }
     round_trip(&ToolId::Select);
+    round_trip(&ToolId::Text);
     round_trip(&View {
         zoom: 2.0,
         pan: Vec2::new(10.0, -5.0),

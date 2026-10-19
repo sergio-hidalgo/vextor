@@ -5,6 +5,7 @@ use vextor_core::{
     GradientUnits, LineCap, Node, NodeId, NodeKind, Paint, Point, Rect, Resource, Rgba, Shape,
     Spread, Stroke, Style, Transform,
 };
+use vextor_geom::Fonts;
 use vextor_svg::clipboard_svg;
 
 fn shape(id: NodeId, geometry: Geometry, style: Style) -> Node {
@@ -33,7 +34,7 @@ fn copy(doc: &mut Document, nodes: Vec<Node>, roots: &[NodeId]) -> String {
     })
     .expect("inserts");
     let payload = doc.copy(roots).expect("copies");
-    clipboard_svg(&payload).expect("something visible")
+    clipboard_svg(&payload, &Fonts::default()).expect("something visible")
 }
 
 #[test]
@@ -200,5 +201,8 @@ fn nothing_visible_gives_no_svg() {
         nodes: vec![hidden],
     })
     .expect("inserts");
-    assert_eq!(clipboard_svg(&doc.copy(&[a]).expect("copies")), None);
+    assert_eq!(
+        clipboard_svg(&doc.copy(&[a]).expect("copies"), &Fonts::default()),
+        None
+    );
 }

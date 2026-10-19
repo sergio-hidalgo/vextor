@@ -3,6 +3,7 @@
 
 use resvg::{tiny_skia, usvg};
 use vextor_core::{Vec2, View};
+use vextor_geom::Fonts;
 use vextor_render::{Pixmap, Viewport, fixtures, render};
 
 /// A pixel differs when any channel is off by more than this (of 255).
@@ -35,7 +36,7 @@ fn ours(width: u32, height: u32) -> Pixmap {
         height,
         pixels_per_point: 1.0,
     };
-    render(&fixtures::basic_shapes(), &viewport).expect("valid viewport")
+    render(&fixtures::basic_shapes(), &Fonts::default(), &viewport).expect("valid viewport")
 }
 
 /// RGBA of the pixel at `(x, y)`.

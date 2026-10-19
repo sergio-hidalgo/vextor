@@ -1,20 +1,24 @@
 //! A minimal SVG writer for the system clipboard (spec 05): copied objects
 //! as one standalone `<svg>`, framed by their bounds.
 //!
-//! Covers shapes, groups, transforms, opacity, solid paints, strokes and
-//! clips. Not yet (full export is spec 12): gradients are written as their
-//! first stop's colour, patterns as no paint, images are left out.
-//! Nothing taken from the document is written as text except numbers and
-//! colours, so no escaping is needed.
+//! Covers shapes, groups, transforms, opacity, solid paints, strokes, clips
+//! and text (spec 05c: live `<text>`, one `<tspan>` per line at the
+//! baselines Vextor lays out, the frame as a `<rect>` behind it). Not yet
+//! (full export is spec 12): gradients are written as their first stop's
+//! colour, patterns as no paint, images are left out. The only document
+//! strings written are text content and font family names, both escaped
+//! (`security-check` §3).
 
 use std::fmt::Write as _;
+
+mod text;
 
 use kurbo::{BezPath, PathEl};
 use vextor_core::{
     ClipboardPayload, Document, EPS, FillRule, Geometry, LineCap, LineJoin, Node, NodeId, NodeKind,
     Paint, Resource, Shape, Stroke, Transform,
 };
-use vextor_geom::{to_bezpath, union_bounds};
+use vextor_geom::{Fonts, to_bezpath, union_bounds};
 
 /// Decimals written for every number.
 const PRECISION: usize = 2;
@@ -22,7 +26,7 @@ const PRECISION: usize = 2;
 /// The copied objects as a standalone SVG, or `None` when nothing visible
 /// was copied.
 #[must_use]
-pub fn clipboard_svg(payload: &ClipboardPayload) -> Option<String> {
+pub fn clipboard_svg(payload: &ClipboardPayload, fonts: &Fonts) -> Option<String> {
     // Paste into an empty scratch document: ids stay unique, resources
     // resolve, and the roots land at their world positions.
     let mut doc = Document::new("clipboard");
@@ -31,10 +35,11 @@ pub fn clipboard_svg(payload: &ClipboardPayload) -> Option<String> {
         .paste(payload, layer, 0, Transform::IDENTITY, "Copy")
         .ok()?;
     doc.apply(cmd).ok()?;
-    let b = union_bounds(&doc, &roots)?;
+    let b = union_bounds(&doc, fonts, &roots)?;
 
     let mut w = Writer {
         doc: &doc,
+        fonts,
         body: String::new(),
         defs: String::new(),
         clips: 0,
@@ -60,6 +65,7 @@ pub fn clipboard_svg(payload: &ClipboardPayload) -> Option<String> {
 
 struct Writer<'a> {
     doc: &'a Document,
+    fonts: &'a Fonts,
     body: String,
     defs: String,
     clips: usize,
@@ -92,6 +98,7 @@ impl Writer<'_> {
                 let paint = self.style_attrs(s);
                 let _ = writeln!(self.body, "{pad}<{element}{common}{paint}/>");
             }
+            NodeKind::Text(t) => self.text(id, t, &common, &pad),
             NodeKind::Image(_) => {}
         }
     }

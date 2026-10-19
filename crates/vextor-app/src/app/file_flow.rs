@@ -201,6 +201,24 @@ impl VextorApp {
 
     /// "Save changes?" and the recovery prompt, one at a time.
     pub(super) fn prompts(&mut self, ctx: &egui::Context) {
+        if let Some(missing) = &self.outline_prompt {
+            let answer = prompts::outline_missing_font(
+                ctx,
+                self.canvas_rect,
+                &missing.wanted,
+                missing.shown.as_deref(),
+            );
+            if let Some(convert) = answer {
+                self.outline_prompt = None;
+                if convert
+                    && let Some(s) = self.session.as_mut()
+                    && let Err(e) = crate::outline_text::convert(s)
+                {
+                    self.message = Some(e);
+                }
+            }
+            return;
+        }
         if let Some(then) = &self.confirm {
             let name = self
                 .session

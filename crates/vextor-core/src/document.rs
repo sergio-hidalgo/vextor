@@ -14,7 +14,7 @@ use crate::settings::{GridSettings, SvgExportOptions};
 use crate::style::Swatch;
 
 /// Current `.vextor` file format version.
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
 
 /// A vextor document. Edited only through [`crate::Command`]s
 /// ([`Document::apply`]) so every change is undoable.
@@ -279,12 +279,10 @@ impl Document {
     #[must_use]
     pub fn resource_in_use(&self, id: ResourceId) -> bool {
         use crate::style::Paint;
-        self.nodes.values().any(|n| match &n.kind {
-            NodeKind::Shape(s) => s
-                .style
-                .paints()
-                .any(|p| matches!(p, Paint::Gradient(r) | Paint::Pattern(r) if r == id)),
-            _ => false,
+        self.nodes.values().any(|n| {
+            n.paints()
+                .into_iter()
+                .any(|p| matches!(p, Paint::Gradient(r) | Paint::Pattern(r) if r == id))
         })
     }
 }

@@ -9,6 +9,7 @@ use crate::path::{NodeType, Path, PathNode, PathNodeRef};
 use crate::resource::Resource;
 use crate::settings::GridSettings;
 use crate::style::Style;
+use crate::text::{FontSpec, TextAlign, TextFrame};
 
 /// One undoable edit. Applied with [`crate::Document::apply`]; either it
 /// succeeds completely or the document is left unchanged.
@@ -57,9 +58,30 @@ pub enum Command {
     SetTransforms {
         items: Vec<(NodeId, Transform)>,
     },
+    /// Fill and stroke of shapes, or glyph paint of text objects.
     SetStyle {
         ids: Vec<NodeId>,
         style: Style,
+    },
+    /// Replaces a text object's characters.
+    SetText {
+        id: NodeId,
+        content: String,
+    },
+    /// Font and metrics of text objects (glyph paint goes through
+    /// [`Command::SetStyle`]).
+    SetTextStyle {
+        ids: Vec<NodeId>,
+        font: FontSpec,
+        size: f64,
+        line_height: f64,
+        letter_spacing: f64,
+        align: TextAlign,
+    },
+    /// Background and border of text objects; `None` removes them.
+    SetTextFrame {
+        ids: Vec<NodeId>,
+        frame: Option<TextFrame>,
     },
     /// Replaces shape geometries (a resize baked into the shape, so its
     /// stroke keeps its width).
@@ -185,6 +207,9 @@ impl Command {
             Self::Ungroup { .. } => "Ungroup",
             Self::SetTransform { .. } | Self::SetTransforms { .. } => "Transform",
             Self::SetStyle { .. } => "Change style",
+            Self::SetText { .. } => "Edit text",
+            Self::SetTextStyle { .. } => "Change text style",
+            Self::SetTextFrame { .. } => "Change text frame",
             Self::SetGeometry { .. } => "Change shape",
             Self::SetProps { .. } => "Change properties",
             Self::AddPathNode { .. } => "Add node",

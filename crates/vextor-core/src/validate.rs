@@ -6,9 +6,10 @@ use std::fmt;
 use crate::document::Document;
 use crate::ids::{NodeId, ResourceId};
 use crate::math::{Point, Rect};
-use crate::node::{Geometry, Node, NodeKind};
+use crate::node::{CornerRadii, Geometry, Node, NodeKind};
 use crate::resource::{GradientKind, Resource};
-use crate::style::{Paint, Style};
+use crate::style::{Paint, Stroke, Style};
+use crate::text::{FONT_WEIGHTS, MAX_FONT_FAMILY_CHARS, MAX_TEXT_CHARS, Text};
 
 /// Most sides of a polygon; more looks like a circle.
 pub const MAX_POLYGON_SIDES: u32 = 20;
@@ -56,6 +57,10 @@ struct Checker<'a> {
 
 fn nonneg(v: f64) -> bool {
     v.is_finite() && v >= 0.0
+}
+
+fn radii_ok(r: CornerRadii) -> bool {
+    [r.tl, r.tr, r.br, r.bl].into_iter().all(nonneg)
 }
 
 fn rect_ok(r: Rect) -> bool {
@@ -179,17 +184,45 @@ impl Checker<'_> {
             NodeKind::Image(img) => self.check(rect_ok(img.rect), || {
                 format!("{id:?} image rect is invalid")
             }),
+            NodeKind::Text(t) => self.text(id, t),
+        }
+    }
+
+    fn text(&mut self, id: NodeId, t: &Text) {
+        let chars = t.content.chars().count();
+        self.check(chars <= MAX_TEXT_CHARS, || {
+            format!("{id:?} text has {chars} characters, more than {MAX_TEXT_CHARS}")
+        });
+        let family = t.font.family.trim();
+        self.check(
+            !family.is_empty() && family.chars().count() <= MAX_FONT_FAMILY_CHARS,
+            || format!("{id:?} font family is empty or too long"),
+        );
+        self.check(FONT_WEIGHTS.contains(&t.font.weight), || {
+            format!("{id:?} font weight {} is outside 100..=900", t.font.weight)
+        });
+        let metrics_ok = t.size.is_finite()
+            && t.size > 0.0
+            && t.line_height.is_finite()
+            && t.line_height > 0.0
+            && t.letter_spacing.is_finite();
+        self.check(metrics_ok, || {
+            format!("{id:?} text size, line height or letter spacing is invalid")
+        });
+        self.style(id, &t.style);
+        if let Some(f) = &t.frame {
+            let ok = f.padding.into_iter().all(nonneg) && radii_ok(f.radius);
+            self.check(ok, || format!("{id:?} text frame has invalid numbers"));
+            self.paint(id, f.fill);
+            if let Some(s) = &f.stroke {
+                self.stroke(id, s);
+            }
         }
     }
 
     fn geometry(&mut self, id: NodeId, g: &Geometry) {
         let ok = match g {
-            Geometry::Rect { rect, radius } => {
-                rect_ok(*rect)
-                    && [radius.tl, radius.tr, radius.br, radius.bl]
-                        .into_iter()
-                        .all(nonneg)
-            }
+            Geometry::Rect { rect, radius } => rect_ok(*rect) && radii_ok(*radius),
             Geometry::Ellipse { center, rx, ry } => {
                 center.is_finite() && nonneg(*rx) && nonneg(*ry)
             }
@@ -251,13 +284,23 @@ impl Checker<'_> {
             self.paint(id, paint);
         }
         if let Some(s) = &style.stroke {
-            let ok = nonneg(s.width)
-                && s.miter_limit.is_finite()
-                && s.miter_limit >= 1.0
-                && s.dash.iter().copied().all(nonneg)
-                && s.dash_offset.is_finite();
-            self.check(ok, || format!("{id:?} stroke has invalid numbers"));
+            self.stroke_numbers(id, s);
         }
+    }
+
+    /// A stroke outside a [`Style`]: its paint and its numbers.
+    fn stroke(&mut self, id: NodeId, s: &Stroke) {
+        self.paint(id, s.paint);
+        self.stroke_numbers(id, s);
+    }
+
+    fn stroke_numbers(&mut self, id: NodeId, s: &Stroke) {
+        let ok = nonneg(s.width)
+            && s.miter_limit.is_finite()
+            && s.miter_limit >= 1.0
+            && s.dash.iter().copied().all(nonneg)
+            && s.dash_offset.is_finite();
+        self.check(ok, || format!("{id:?} stroke has invalid numbers"));
     }
 
     fn paint(&mut self, id: NodeId, paint: Paint) {
