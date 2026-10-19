@@ -182,6 +182,9 @@ pub enum Command {
 
     // ----- document -----
     SetArtboards(Vec<Artboard>),
+    /// Renames the document (the name an unsaved document is saved under).
+    /// Refused when empty or only whitespace.
+    SetName(String),
     SetGrid(GridSettings),
     /// How colours are written when the document is saved.
     SetColorFormat(ColorFormat),
@@ -228,6 +231,7 @@ impl Command {
             Self::PutResource { .. } => "Edit resource",
             Self::RemoveResource { .. } => "Remove resource",
             Self::SetArtboards(_) => "Edit artboards",
+            Self::SetName(_) => "Rename document",
             Self::SetGrid(_) => "Edit grid",
             Self::SetColorFormat(_) => "Change colour format",
             Self::Batch { label, .. } => label,

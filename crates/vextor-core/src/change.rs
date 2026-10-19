@@ -31,6 +31,8 @@ pub struct Patch {
     pub artboards: Option<Vec<Artboard>>,
     pub grid: Option<GridSettings>,
     pub color_format: Option<ColorFormat>,
+    /// The document's name.
+    pub name: Option<String>,
 }
 
 impl Patch {
@@ -43,6 +45,7 @@ impl Patch {
             && self.artboards.is_some() == other.artboards.is_some()
             && self.grid.is_some() == other.grid.is_some()
             && self.color_format.is_some() == other.color_format.is_some()
+            && self.name.is_some() == other.name.is_some()
     }
 
     /// Adds `other`'s entries for parts this patch does not cover yet.
@@ -57,6 +60,7 @@ impl Patch {
         self.artboards = self.artboards.take().or(other.artboards);
         self.grid = self.grid.take().or(other.grid);
         self.color_format = self.color_format.or(other.color_format);
+        self.name = self.name.take().or(other.name);
     }
 
     /// Replaces this patch's entries by `other`'s where both exist.
@@ -67,6 +71,7 @@ impl Patch {
         self.artboards = other.artboards.or(self.artboards.take());
         self.grid = other.grid.or(self.grid.take());
         self.color_format = other.color_format.or(self.color_format);
+        self.name = other.name.or(self.name.take());
     }
 }
 
@@ -104,6 +109,9 @@ impl Document {
         }
         if let Some(format) = patch.color_format {
             self.color_format = format;
+        }
+        if let Some(name) = &patch.name {
+            self.name.clone_from(name);
         }
     }
 }

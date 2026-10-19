@@ -92,6 +92,12 @@ impl Session {
         self.saved_revision = Some(self.revision);
     }
 
+    /// The document's file was renamed to `path`; whether it has unsaved
+    /// changes stays as it was.
+    pub fn moved_to(&mut self, path: PathBuf) {
+        self.path = Some(path);
+    }
+
     /// What the title bar and dialogs call the document: the file name,
     /// or the document name before the first save.
     #[must_use]

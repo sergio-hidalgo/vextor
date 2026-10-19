@@ -13,6 +13,16 @@ pub(super) const SAVE_AS: KeyboardShortcut =
 pub(super) const UNDO: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Z);
 pub(super) const REDO: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::Z);
+pub(super) const CLOSE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::W);
+// Documents (spec 05f): ⌥⌘ arrows (shown in the Window menu) and ⌃Tab.
+// No `[ ]` keys: they need Option on Spanish and other layouts.
+pub(super) const NEXT_DOC: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::ALT), Key::ArrowRight);
+pub(super) const PREV_DOC: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::ALT), Key::ArrowLeft);
+pub(super) const NEXT_DOC_TAB: KeyboardShortcut = KeyboardShortcut::new(Modifiers::CTRL, Key::Tab);
+pub(super) const PREV_DOC_TAB: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::CTRL.plus(Modifiers::SHIFT), Key::Tab);
 pub(super) const FIT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Num0);
 pub(super) const ACTUAL_SIZE: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND, Key::Num1);
@@ -113,8 +123,10 @@ impl VextorApp {
         actions
     }
 
-    /// File, Undo/Redo and View shortcuts.
+    /// File, Window, Undo/Redo and View shortcuts.
     fn document_shortcuts(ctx: &egui::Context) -> Vec<Action> {
+        let next = Action::CycleTab { forward: true };
+        let prev = Action::CycleTab { forward: false };
         ctx.input_mut(|i| {
             [
                 (REDO, Action::Redo),
@@ -123,6 +135,11 @@ impl VextorApp {
                 (OPEN, Action::Open),
                 (SAVE_AS, Action::SaveAs),
                 (SAVE, Action::Save),
+                (CLOSE, Action::Close),
+                (PREV_DOC_TAB, prev.clone()),
+                (NEXT_DOC_TAB, next.clone()),
+                (PREV_DOC, prev),
+                (NEXT_DOC, next),
                 (FIT, Action::Fit),
                 (ACTUAL_SIZE, Action::ActualSize),
             ]
@@ -200,6 +217,19 @@ mod tests {
             actions(Key::ArrowLeft, Modifiers::SHIFT),
             vec![Action::Nudge { dx: -10, dy: 0 }]
         );
+    }
+
+    #[test]
+    fn document_keys_close_and_switch_tabs() {
+        assert_eq!(actions(Key::W, Modifiers::COMMAND), vec![Action::Close]);
+        let alt_cmd = Modifiers::COMMAND.plus(Modifiers::ALT);
+        let next = Action::CycleTab { forward: true };
+        let prev = Action::CycleTab { forward: false };
+        assert_eq!(actions(Key::ArrowRight, alt_cmd), vec![next.clone()]);
+        assert_eq!(actions(Key::ArrowLeft, alt_cmd), vec![prev.clone()]);
+        assert_eq!(actions(Key::Tab, Modifiers::CTRL), vec![next]);
+        let ctrl_shift = Modifiers::CTRL.plus(Modifiers::SHIFT);
+        assert_eq!(actions(Key::Tab, ctrl_shift), vec![prev]);
     }
 
     #[test]
