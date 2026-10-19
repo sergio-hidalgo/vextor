@@ -6,8 +6,10 @@
 use eframe::egui::{self, RichText};
 use vextor_core::{NodeId, NodeKind, Paint, Rgba, Stroke, Text, TextAlign};
 
+use super::GRID_SPACING;
 use super::fonts::{family_picker, remember_family, style_picker};
 use super::restyle::{Edit, empty_frame, restyle};
+use crate::icons::{self, Icon};
 use crate::session::Session;
 use crate::theme;
 
@@ -36,7 +38,7 @@ pub fn section(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
     let db = std::sync::Arc::clone(s.fonts.db());
     egui::Grid::new("text-inspector")
         .num_columns(2)
-        .spacing([6.0, 6.0])
+        .spacing(GRID_SPACING)
         .show(ui, |ui| {
             ui.label("Font");
             if let Some(family) = family_picker(ui, &db, &first.font.family) {
@@ -81,12 +83,13 @@ pub fn section(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
             );
             ui.label("Align");
             ui.horizontal(|ui| {
-                for (align, name) in [
-                    (TextAlign::Left, "Left"),
-                    (TextAlign::Centre, "Centre"),
-                    (TextAlign::Right, "Right"),
+                ui.spacing_mut().item_spacing.x = 2.0;
+                for (align, icon, tip) in [
+                    (TextAlign::Left, Icon::TextLeft, "Align text left"),
+                    (TextAlign::Centre, Icon::TextCentre, "Centre text"),
+                    (TextAlign::Right, Icon::TextRight, "Align text right"),
                 ] {
-                    if ui.selectable_label(first.align == align, name).clicked() {
+                    if icons::button(ui, icon, first.align == align, tip).clicked() {
                         edit = Some(Edit::Align(align));
                     }
                 }
@@ -122,24 +125,26 @@ fn font_note(ui: &mut egui::Ui, s: &Session, id: NodeId, t: &Text) {
     ui.label(RichText::new(note).color(theme::YELLOW).small());
 }
 
-/// Background (fill, padding, radius) and border (colour, width).
+/// Background (colour, padding, radius) and Border (colour, width): each
+/// a ticked section title with its fields underneath while it is on.
 fn frame_fields(ui: &mut egui::Ui, s: &mut Session, t: &Text, edit: &mut Option<Edit>) {
     let frame = t.frame.clone().unwrap_or_else(empty_frame);
     let background = frame.fill != Paint::None;
-    let border = frame.stroke.clone();
-    egui::Grid::new("text-frame-inspector")
-        .num_columns(2)
-        .spacing([6.0, 6.0])
-        .show(ui, |ui| {
-            let mut on = background;
-            if ui.checkbox(&mut on, "Background").changed() {
-                *edit = Some(Edit::Background(on.then_some(Rgba::rgb(0xE7, 0xE7, 0xE7))));
-            }
-            if background && let Some(c) = color_field(ui, "text-background", solid(frame.fill)) {
-                *edit = Some(Edit::Background(Some(c)));
-            }
-            ui.end_row();
-            if background {
+    if section_toggle(ui, "Background", background) {
+        *edit = Some(Edit::Background(
+            (!background).then_some(Rgba::rgb(0xE7, 0xE7, 0xE7)),
+        ));
+    }
+    if background {
+        egui::Grid::new("text-background-inspector")
+            .num_columns(2)
+            .spacing(GRID_SPACING)
+            .show(ui, |ui| {
+                ui.label("Colour");
+                if let Some(c) = color_field(ui, "text-background", solid(frame.fill)) {
+                    *edit = Some(Edit::Background(Some(c)));
+                }
+                ui.end_row();
                 let [top, right, ..] = frame.padding;
                 number(
                     ui,
@@ -171,37 +176,53 @@ fn frame_fields(ui: &mut egui::Ui, s: &mut Session, t: &Text, edit: &mut Option<
                     edit,
                     Edit::Radius,
                 );
-            }
-            let mut on = border.is_some();
-            if ui.checkbox(&mut on, "Border").changed() {
-                *edit = Some(Edit::Border(on.then(|| Stroke {
-                    paint: Paint::Solid(Rgba::BLACK),
-                    ..Stroke::default()
-                })));
-            }
-            if let Some(b) = &border
-                && let Some(c) = color_field(ui, "text-border", solid(b.paint))
-            {
-                *edit = Some(Edit::Border(Some(Stroke {
-                    paint: Paint::Solid(c),
-                    ..b.clone()
-                })));
-            }
-            ui.end_row();
-            if border.is_some() {
-                let width = border.as_ref().map_or(1.0, |b| b.width);
+            });
+    }
+
+    let border = frame.stroke.clone();
+    if section_toggle(ui, "Border", border.is_some()) {
+        *edit = Some(Edit::Border(border.is_none().then(|| Stroke {
+            paint: Paint::Solid(Rgba::BLACK),
+            ..Stroke::default()
+        })));
+    }
+    if let Some(b) = &border {
+        egui::Grid::new("text-border-inspector")
+            .num_columns(2)
+            .spacing(GRID_SPACING)
+            .show(ui, |ui| {
+                ui.label("Colour");
+                if let Some(c) = color_field(ui, "text-border", solid(b.paint)) {
+                    *edit = Some(Edit::Border(Some(Stroke {
+                        paint: Paint::Solid(c),
+                        ..b.clone()
+                    })));
+                }
+                ui.end_row();
                 number(
                     ui,
                     s,
-                    "Border width",
-                    width,
+                    "Width",
+                    b.width,
                     0.1,
                     0.0..=100.0,
                     edit,
                     Edit::BorderWidth,
                 );
-            }
-        });
+            });
+    }
+}
+
+/// A section title with a tick box that turns the section on and off.
+/// Returns true when it was clicked.
+fn section_toggle(ui: &mut egui::Ui, title: &str, on: bool) -> bool {
+    ui.add_space(8.0);
+    let mut checked = on;
+    let clicked = ui
+        .checkbox(&mut checked, egui::RichText::new(title).strong())
+        .clicked();
+    ui.add_space(2.0);
+    clicked
 }
 
 /// A labelled number; a drag is one undo step (a history gesture).

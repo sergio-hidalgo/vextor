@@ -7,6 +7,7 @@ mod edit_ops;
 mod files;
 mod fonts;
 mod icon;
+mod icons;
 mod new_doc;
 mod outline_text;
 mod panels;

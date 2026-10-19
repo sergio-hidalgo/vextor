@@ -10,6 +10,9 @@ use vextor_core::ToolId;
 use crate::edit_ops;
 use crate::session::Session;
 
+/// Gap between a label and its field, and between rows, in points.
+const GRID_SPACING: [f32; 2] = [12.0, 6.0];
+
 mod fonts;
 mod restyle;
 mod text;
