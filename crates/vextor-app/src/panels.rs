@@ -76,7 +76,7 @@ pub fn inspector_and_layers(
         .min_size(48.0)
         .show(ui, |ui| {
             ui.add_space(6.0);
-            ui.strong("Layers");
+            panel_title(ui, "Layers");
             egui::ScrollArea::vertical()
                 .id_salt("layers-scroll")
                 .auto_shrink(false)
@@ -91,6 +91,16 @@ pub fn inspector_and_layers(
             right_margin(ui, |ui| inspector_sections(ui, session, to_artboard))
         })
         .inner
+}
+
+/// A panel's title (Inspector, Layers), in the title yellow so it reads
+/// above its sections, as "New document" does on the start screen.
+fn panel_title(ui: &mut egui::Ui, title: &str) {
+    ui.label(
+        egui::RichText::new(title)
+            .strong()
+            .color(crate::theme::YELLOW_SOFT),
+    );
 }
 
 /// `add` with [`RIGHT_MARGIN`] kept free on its right.
@@ -111,7 +121,7 @@ fn inspector_sections(
     to_artboard: &mut bool,
 ) -> (Option<String>, Vec<PanelAction>) {
     ui.add_space(6.0);
-    ui.strong("Inspector");
+    panel_title(ui, "Inspector");
     let mut actions = Vec::new();
     let message = if let Some(s) = session {
         let message = inspector(ui, s);
