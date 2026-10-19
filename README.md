@@ -90,7 +90,7 @@ Vextor starts; until then text is placed but not drawn.
 | While editing              | arrows; `⌥`+arrows by word; `⌘`+arrows to the line ends; `⇧` selects; `⌘A`; `⌘C` / `⌘X` / `⌘V` (plain text); `Enter` new line |
 | Font, style, size, spacing | Inspector ▸ Text: searchable font list (recently used first, each name in its own face), the family's real styles, size, line height, letter spacing, alignment |
 | Colour, background, border | Inspector ▸ Text: text colour; Background (colour, padding, corner radius); Border (colour, width) |
-| Convert to outlines        | Object ▸ Convert Text to Outlines (`⇧⌘O`): a group with the background rect and one compound path |
+| Convert to outlines        | Object ▸ Convert Text to Outlines (`⇧⌘O`): a group with the background rect and one shape per letter (ungroup to move letters one by one) |
 
 A label emptied when editing ends is removed. A document keeps a font's
 name even when this computer does not have it: the inspector says

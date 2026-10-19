@@ -1,7 +1,7 @@
 //! Object ▸ Convert Text to Outlines (`⇧⌘O`, spec 05c): each selected
 //! text becomes a group, named after the text, holding a rect for its
-//! frame and one compound path with its glyphs — ordinary shapes, in one
-//! undo step.
+//! frame and one path per letter (named after it) — ordinary shapes that
+//! come apart when ungrouped, in one undo step.
 
 use vextor_core::{Command, Container, Node, NodeId, NodeKind, Parent};
 use vextor_geom::{MissingFont, text_outlines};
@@ -85,10 +85,16 @@ pub fn convert(s: &mut Session) -> Result<(), String> {
         let group_id = alloc();
         let mut children = Vec::new();
         let mut inserted = Vec::new();
-        for shape in [frame, glyphs].into_iter().flatten() {
+        let shapes = frame
+            .map(|f| (None, f))
+            .into_iter()
+            .chain(glyphs.into_iter().map(|(name, g)| (Some(name), g)));
+        for (name, shape) in shapes {
             let child = alloc();
             children.push(child);
-            inserted.push(Node::new(child, NodeKind::Shape(shape)));
+            let mut leaf = Node::new(child, NodeKind::Shape(shape));
+            leaf.name = name.filter(|n| !n.trim().is_empty());
+            inserted.push(leaf);
         }
         let group = Node {
             id: group_id,
@@ -207,19 +213,23 @@ mod tests {
             "node properties carry over"
         );
         let children = group.container().expect("group").children.clone();
-        assert_eq!(children.len(), 2);
+        // The frame, then "Buynowsecondline": a path per letter, none for
+        // the space.
+        assert_eq!(children.len(), 1 + 16);
         let NodeKind::Shape(rect) = &s.doc.nodes[&children[0]].kind else {
             panic!("frame first");
         };
         assert!(matches!(rect.geometry, Geometry::Rect { .. }));
         assert_eq!(rect.style.fill, Paint::Solid(Rgba::rgb(30, 144, 255)));
-        let NodeKind::Shape(path) = &s.doc.nodes[&children[1]].kind else {
+        let letter = &s.doc.nodes[&children[1]];
+        assert_eq!(letter.name.as_deref(), Some("B"));
+        let NodeKind::Shape(path) = &letter.kind else {
             panic!("glyphs on top");
         };
         let Geometry::Path(p) = &path.geometry else {
             panic!("a path");
         };
-        assert!(p.subpaths.len() > 10, "one compound path for every glyph");
+        assert_eq!(p.subpaths.len(), 3, "B: outline and two holes");
         assert_eq!(path.style.fill, Paint::Solid(Rgba::rgb(255, 255, 255)));
         assert_eq!(
             s.doc.nodes[&layer].container().expect("layer").children,
@@ -253,8 +263,33 @@ mod tests {
             .expect("group")
             .children
             .len();
-        assert_eq!(unframed, 1, "no frame, only the glyphs");
+        assert_eq!(unframed, 16, "no frame, only the letters");
         s.doc.validate().expect("valid");
+    }
+
+    #[test]
+    fn ungrouping_the_result_frees_every_letter() {
+        let mut t = label("Noto Sans");
+        t.frame = None;
+        t.content = "Hi".to_owned();
+        let (mut s, _) = session(vec![t]);
+        let layer = s.doc.layers[0];
+        convert(&mut s).expect("converts");
+        crate::edit_ops::ungroup(&mut s).expect("ungroups");
+        let letters = s.doc.nodes[&layer]
+            .container()
+            .expect("layer")
+            .children
+            .clone();
+        assert_eq!(letters.len(), 2, "H and i, each its own object");
+        let names: Vec<_> = letters
+            .iter()
+            .map(|id| s.doc.nodes[id].name.clone().unwrap_or_default())
+            .collect();
+        assert_eq!(names, ["H", "i"]);
+        // The group's place carried into each letter.
+        let world = s.doc.world_transform(letters[0]);
+        assert_eq!((world.0[4], world.0[5]), (20.0, 30.0));
     }
 
     #[test]

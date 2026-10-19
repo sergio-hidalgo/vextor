@@ -131,18 +131,22 @@ fn text_draws_like_the_shapes_of_its_outlines_and_frame() {
     let live = render(&d, &fonts, &viewport()).expect("renders");
 
     // What Convert to Outlines makes: a rounded rect for the frame, then
-    // one compound path holding every glyph.
+    // one path per letter.
     let layout = fonts.layout(NodeId(100), &text);
     let (rect, glyphs) = text_outlines(&text, &layout);
-    let (rect, glyphs) = (rect.expect("framed"), glyphs.expect("inked"));
-    let twin = doc(vec![
-        at(NodeId(101), NodeKind::Shape(rect), 20.0, 20.0),
-        at(NodeId(102), NodeKind::Shape(glyphs), 20.0, 20.0),
-    ]);
+    let rect = rect.expect("framed");
+    assert_eq!(glyphs.len(), 6, "B u y n o w");
+    let mut nodes = vec![at(NodeId(101), NodeKind::Shape(rect), 20.0, 20.0)];
+    for (i, (_, glyph)) in (102..).zip(glyphs) {
+        nodes.push(at(NodeId(i), NodeKind::Shape(glyph), 20.0, 20.0));
+    }
+    let twin = doc(nodes);
     let shapes = render(&twin, &fonts, &viewport()).expect("renders");
 
-    let share = differing(live.data(), shapes.data(), 0);
-    assert!(share <= 0.0, "{:.4} % of pixels differ", share * 100.0);
+    // Letters drawn one by one blend their own edges where they touch:
+    // the spec 03 tolerance.
+    let share = differing(live.data(), shapes.data(), 8);
+    assert!(share <= 0.001, "{:.4} % of pixels differ", share * 100.0);
     assert!(ink(&live) > 1_000, "something was drawn");
 }
 

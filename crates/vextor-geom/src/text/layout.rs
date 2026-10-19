@@ -18,6 +18,9 @@ use super::fonts::{FontDb, ResolvedFace};
 pub struct TextLayout {
     /// Every glyph outline, as one compound path (non-zero fill).
     pub glyphs: BezPath,
+    /// Which elements of `glyphs` each drawn glyph is, in order, with the
+    /// characters it draws (one glyph can draw several, e.g. a ligature).
+    pub glyph_spans: Vec<GlyphSpan>,
     /// One per line of the content, top to bottom; never empty.
     pub lines: Vec<LineBox>,
     /// Union of the line boxes: what selects and resizes the text.
@@ -41,6 +44,15 @@ pub struct LineBox {
     /// `(byte index, x)` at every character boundary of the line, from
     /// `range.start` to `range.end` inclusive, ascending.
     pub carets: Vec<(usize, f64)>,
+}
+
+/// One glyph inside [`TextLayout::glyphs`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GlyphSpan {
+    /// Element range of the glyph in `glyphs`.
+    pub elements: Range<usize>,
+    /// Byte range of the characters it draws in the content.
+    pub text: Range<usize>,
 }
 
 /// The requested family is not drawn as asked.
@@ -84,6 +96,7 @@ pub fn layout(text: &Text, fonts: &FontDb) -> TextLayout {
     let half_leading = (line_px - (ascent + descent)) / 2.0;
 
     let mut glyphs = BezPath::new();
+    let mut glyph_spans = Vec::new();
     let mut lines = Vec::new();
     let mut start = 0;
     for (i, line) in text.content.split('\n').enumerate() {
@@ -110,9 +123,14 @@ pub fn layout(text: &Text, fonts: &FontDb) -> TextLayout {
             TextAlign::Centre => (widest - run.width) / 2.0,
             TextAlign::Right => widest - run.width,
         };
+        let base = glyphs.elements().len();
         for el in run.glyphs.elements() {
             glyphs.push(kurbo::Affine::translate((dx, 0.0)) * *el);
         }
+        glyph_spans.extend(run.spans.into_iter().map(|s| GlyphSpan {
+            elements: s.elements.start + base..s.elements.end + base,
+            text: s.text,
+        }));
         out_lines.push(LineBox {
             range,
             rect: Rect::new(dx, top, dx + run.width, top + line_px),
@@ -129,6 +147,7 @@ pub fn layout(text: &Text, fonts: &FontDb) -> TextLayout {
     let ink = (!glyphs.is_empty()).then(|| glyphs.bounding_box());
     TextLayout {
         glyphs,
+        glyph_spans,
         lines: out_lines,
         bounds,
         ink,
@@ -176,6 +195,8 @@ impl TextLayout {
 /// A shaped line before alignment.
 struct Run {
     glyphs: BezPath,
+    /// Element ranges relative to `glyphs`.
+    spans: Vec<GlyphSpan>,
     width: f64,
     carets: Vec<(usize, f64)>,
 }
@@ -266,6 +287,7 @@ impl Face {
             start: Point::ZERO,
         };
         let mut carets = Vec::with_capacity(line.len() + 1);
+        let mut spans = Vec::new();
         let mut x = 0.0;
         let mut g = 0;
         for (k, &start) in clusters.iter().enumerate() {
@@ -277,9 +299,17 @@ impl Face {
                     x + f64::from(pos.x_offset) * self.scale,
                     baseline - f64::from(pos.y_offset) * self.scale,
                 );
+                let before = pen.path.elements().len();
                 if let Some(glyph) = outlines.get(GlyphId::new(infos[g].glyph_id)) {
                     // A glyph that fails to draw is left out, never a panic.
                     let _ = glyph.draw(DrawSettings::unhinted(px, &location), &mut pen);
+                }
+                let after = pen.path.elements().len();
+                if after > before {
+                    spans.push(GlyphSpan {
+                        elements: before..after,
+                        text: offset + start..offset + end,
+                    });
                 }
                 x += f64::from(pos.x_advance) * self.scale;
                 g += 1;
@@ -297,6 +327,7 @@ impl Face {
         carets.push((offset + line.len(), x));
         Run {
             glyphs: pen.path,
+            spans,
             width: x,
             carets,
         }
@@ -332,6 +363,7 @@ fn estimate(line: &str, offset: usize, size: f64, spacing: f64) -> Run {
     carets.push((offset + line.len(), x));
     Run {
         glyphs: BezPath::new(),
+        spans: Vec::new(),
         width: x,
         carets,
     }

@@ -11,8 +11,8 @@ pub use convert::{bezpath_to_path, geometry_to_path, path_to_bezpath, to_bezpath
 pub use hit::{bounds, from_affine, pick, selectable, to_affine, touching, union_bounds};
 pub use resize::{Resized, polar, resize, stretched};
 pub use text::{
-    FaceStyle, FontDb, Fonts, LineBox, MissingFont, ResolvedFace, TextLayout, layout, text_box,
-    text_outlines,
+    FaceStyle, FontDb, Fonts, GlyphSpan, LineBox, MissingFont, ResolvedFace, TextLayout, layout,
+    text_box, text_outlines,
 };
 pub use transform::{
     Align, Handle, ROTATE_STEP, align, distribute, flip, retarget, rotate, rotation_angle,

@@ -456,3 +456,37 @@ fn an_uneven_stretch_scales_text_by_its_mean() {
     let r = vextor_geom::resize(&doc, &[id], kurbo::Affine::scale_non_uniform(4.0, 1.0));
     assert_close(r.texts[0].1.size, 200.0);
 }
+
+// ----- glyph spans and outlines -----
+
+#[test]
+fn every_inked_glyph_has_a_span_with_its_characters() {
+    let l = lay(&text("Hé H\nab"));
+    let texts: Vec<_> = l.glyph_spans.iter().map(|s| s.text.clone()).collect();
+    // "H", "é" (2 bytes), no span for the blank space, "H", then line 2.
+    assert_eq!(texts, [0..1, 1..3, 4..5, 6..7, 7..8]);
+    let total: usize = l.glyph_spans.iter().map(|s| s.elements.len()).sum();
+    assert_eq!(
+        total,
+        l.glyphs.elements().len(),
+        "spans cover every element"
+    );
+    for s in &l.glyph_spans {
+        assert!(matches!(
+            l.glyphs.elements()[s.elements.start],
+            kurbo::PathEl::MoveTo(_)
+        ));
+    }
+}
+
+#[test]
+fn outlines_are_one_named_path_per_letter_plus_the_frame() {
+    let t = framed(text("Hi o"));
+    let l = lay(&t);
+    let (frame, letters) = vextor_geom::text_outlines(&t, &l);
+    assert!(frame.is_some());
+    let names: Vec<&str> = letters.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(names, ["H", "i", "o"]);
+    let (_, plain) = vextor_geom::text_outlines(&text("x"), &layout(&text("x"), &FontDb::new()));
+    assert_eq!(plain.len(), 0, "no font, no outlines");
+}
