@@ -2,6 +2,7 @@
 
 use tiny_skia::Pixmap;
 use vextor_core::Document;
+use vextor_geom::Fonts;
 
 use crate::error::RenderError;
 use crate::render::{Viewport, render_into};
@@ -31,7 +32,8 @@ impl RenderCache {
         Self::default()
     }
 
-    /// The frame for `doc` at `revision` seen through `viewport`, rendered
+    /// The frame for `doc` (text laid out with `fonts`) at `revision` seen
+    /// through `viewport`, rendered
     /// only when either differs from the cached one.
     ///
     /// # Errors
@@ -40,6 +42,7 @@ impl RenderCache {
     pub fn frame(
         &mut self,
         doc: &Document,
+        fonts: &Fonts,
         revision: u64,
         viewport: &Viewport,
     ) -> Result<CachedFrame<'_>, RenderError> {
@@ -48,9 +51,9 @@ impl RenderCache {
         if fresh {
             self.key = None;
             let result = if let Some(pixmap) = self.pixmap.as_mut() {
-                render_into(doc, viewport, pixmap)
+                render_into(doc, fonts, viewport, pixmap)
             } else {
-                crate::render(doc, viewport).map(|p| self.pixmap = Some(p))
+                crate::render(doc, fonts, viewport).map(|p| self.pixmap = Some(p))
             };
             if let Err(e) = result {
                 self.pixmap = None;
@@ -77,6 +80,7 @@ impl RenderCache {
 #[cfg(test)]
 mod tests {
     use vextor_core::{Vec2, View};
+    use vextor_geom::Fonts;
 
     use super::*;
 
@@ -96,43 +100,81 @@ mod tests {
     fn same_revision_and_view_reuse_the_frame() {
         let doc = Document::new("t");
         let mut cache = RenderCache::new();
-        assert!(cache.frame(&doc, 1, &vp(0.0)).expect("valid").fresh);
-        assert!(!cache.frame(&doc, 1, &vp(0.0)).expect("valid").fresh);
+        assert!(
+            cache
+                .frame(&doc, &Fonts::default(), 1, &vp(0.0))
+                .expect("valid")
+                .fresh
+        );
+        assert!(
+            !cache
+                .frame(&doc, &Fonts::default(), 1, &vp(0.0))
+                .expect("valid")
+                .fresh
+        );
     }
 
     #[test]
     fn new_revision_renders_again() {
         let doc = Document::new("t");
         let mut cache = RenderCache::new();
-        cache.frame(&doc, 1, &vp(0.0)).expect("valid");
-        assert!(cache.frame(&doc, 2, &vp(0.0)).expect("valid").fresh);
+        cache
+            .frame(&doc, &Fonts::default(), 1, &vp(0.0))
+            .expect("valid");
+        assert!(
+            cache
+                .frame(&doc, &Fonts::default(), 2, &vp(0.0))
+                .expect("valid")
+                .fresh
+        );
     }
 
     #[test]
     fn new_view_renders_again() {
         let doc = Document::new("t");
         let mut cache = RenderCache::new();
-        cache.frame(&doc, 1, &vp(0.0)).expect("valid");
-        assert!(cache.frame(&doc, 1, &vp(5.0)).expect("valid").fresh);
+        cache
+            .frame(&doc, &Fonts::default(), 1, &vp(0.0))
+            .expect("valid");
+        assert!(
+            cache
+                .frame(&doc, &Fonts::default(), 1, &vp(5.0))
+                .expect("valid")
+                .fresh
+        );
     }
 
     #[test]
     fn invalidate_forces_a_render() {
         let doc = Document::new("t");
         let mut cache = RenderCache::new();
-        cache.frame(&doc, 1, &vp(0.0)).expect("valid");
+        cache
+            .frame(&doc, &Fonts::default(), 1, &vp(0.0))
+            .expect("valid");
         cache.invalidate();
-        assert!(cache.frame(&doc, 1, &vp(0.0)).expect("valid").fresh);
+        assert!(
+            cache
+                .frame(&doc, &Fonts::default(), 1, &vp(0.0))
+                .expect("valid")
+                .fresh
+        );
     }
 
     #[test]
     fn failed_render_empties_the_cache() {
         let doc = Document::new("t");
         let mut cache = RenderCache::new();
-        cache.frame(&doc, 1, &vp(0.0)).expect("valid");
+        cache
+            .frame(&doc, &Fonts::default(), 1, &vp(0.0))
+            .expect("valid");
         let mut bad = vp(0.0);
         bad.width = 0;
-        assert!(cache.frame(&doc, 1, &bad).is_err());
-        assert!(cache.frame(&doc, 1, &vp(0.0)).expect("valid").fresh);
+        assert!(cache.frame(&doc, &Fonts::default(), 1, &bad).is_err());
+        assert!(
+            cache
+                .frame(&doc, &Fonts::default(), 1, &vp(0.0))
+                .expect("valid")
+                .fresh
+        );
     }
 }

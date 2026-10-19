@@ -1,8 +1,10 @@
 //! Rasterising a document region.
 
 use tiny_skia::{Mask, Pixmap, PixmapPaint};
-use vextor_core::{Container, Document, EPS, NodeId, NodeKind, Shape, Transform, View};
-use vextor_geom::to_bezpath;
+use vextor_core::{
+    Container, Document, EPS, Geometry, NodeId, NodeKind, Rect, Shape, Text, Transform, View,
+};
+use vextor_geom::{Fonts, text_box, to_bezpath};
 
 use crate::error::RenderError;
 use crate::paint;
@@ -59,10 +61,10 @@ impl Viewport {
 ///
 /// # Errors
 /// [`RenderError`] when the viewport is empty, too large or invalid.
-pub fn render(doc: &Document, viewport: &Viewport) -> Result<Pixmap, RenderError> {
+pub fn render(doc: &Document, fonts: &Fonts, viewport: &Viewport) -> Result<Pixmap, RenderError> {
     viewport.check()?;
     let mut pixmap = new_pixmap(viewport.width, viewport.height)?;
-    draw(doc, viewport, &mut pixmap);
+    draw(doc, fonts, viewport, &mut pixmap);
     Ok(pixmap)
 }
 
@@ -72,6 +74,7 @@ pub fn render(doc: &Document, viewport: &Viewport) -> Result<Pixmap, RenderError
 /// [`RenderError`] when the viewport is empty, too large or invalid.
 pub fn render_into(
     doc: &Document,
+    fonts: &Fonts,
     viewport: &Viewport,
     pixmap: &mut Pixmap,
 ) -> Result<(), RenderError> {
@@ -81,7 +84,7 @@ pub fn render_into(
     } else {
         *pixmap = new_pixmap(viewport.width, viewport.height)?;
     }
-    draw(doc, viewport, pixmap);
+    draw(doc, fonts, viewport, pixmap);
     Ok(())
 }
 
@@ -89,11 +92,11 @@ fn new_pixmap(width: u32, height: u32) -> Result<Pixmap, RenderError> {
     Pixmap::new(width, height).ok_or(RenderError::Empty { width, height })
 }
 
-fn draw(doc: &Document, viewport: &Viewport, target: &mut Pixmap) {
+fn draw(doc: &Document, fonts: &Fonts, viewport: &Viewport, target: &mut Pixmap) {
     let base = viewport.to_pixels();
     draw_artboard_backgrounds(doc, base, target);
     for &id in &doc.layers {
-        draw_node(doc, id, base, target, 0);
+        draw_node(doc, fonts, id, base, target, 0);
     }
 }
 
@@ -114,7 +117,14 @@ fn draw_artboard_backgrounds(doc: &Document, base: Transform, target: &mut Pixma
 
 /// Draws one node and its subtree. `parent` maps the parent's coordinates
 /// to pixmap pixels.
-fn draw_node(doc: &Document, id: NodeId, parent: Transform, target: &mut Pixmap, depth: usize) {
+fn draw_node(
+    doc: &Document,
+    fonts: &Fonts,
+    id: NodeId,
+    parent: Transform,
+    target: &mut Pixmap,
+    depth: usize,
+) {
     let Some(node) = doc.nodes.get(&id) else {
         return;
     };
@@ -124,7 +134,7 @@ fn draw_node(doc: &Document, id: NodeId, parent: Transform, target: &mut Pixmap,
     let world = node.transform.then(parent);
     let clip = node.container().and_then(|c| c.clip);
     if node.opacity >= 1.0 - EPS && clip.is_none() {
-        draw_content(doc, &node.kind, world, target, depth);
+        draw_content(doc, fonts, id, &node.kind, world, target, depth);
         return;
     }
     // Group opacity and clips are applied to the subtree as a whole, so it
@@ -132,7 +142,7 @@ fn draw_node(doc: &Document, id: NodeId, parent: Transform, target: &mut Pixmap,
     let Some(mut layer) = Pixmap::new(target.width(), target.height()) else {
         return;
     };
-    draw_content(doc, &node.kind, world, &mut layer, depth);
+    draw_content(doc, fonts, id, &node.kind, world, &mut layer, depth);
     if let Some(clip) = clip {
         apply_clip(doc, clip, world, &mut layer);
     }
@@ -153,22 +163,27 @@ fn draw_node(doc: &Document, id: NodeId, parent: Transform, target: &mut Pixmap,
 
 fn draw_content(
     doc: &Document,
+    fonts: &Fonts,
+    id: NodeId,
     kind: &NodeKind,
     world: Transform,
     target: &mut Pixmap,
     depth: usize,
 ) {
     match kind {
-        NodeKind::Layer(c) | NodeKind::Group(c) => draw_children(doc, c, world, target, depth),
+        NodeKind::Layer(c) | NodeKind::Group(c) => {
+            draw_children(doc, fonts, c, world, target, depth);
+        }
         NodeKind::Shape(shape) => draw_shape(shape, world, target),
-        // Embedded images are drawn from a later spec; text from its
-        // layout outlines from spec 05c, step 3.
-        NodeKind::Image(_) | NodeKind::Text(_) => {}
+        NodeKind::Text(text) => draw_text(fonts, id, text, world, target),
+        // Embedded images are drawn from a later spec.
+        NodeKind::Image(_) => {}
     }
 }
 
 fn draw_children(
     doc: &Document,
+    fonts: &Fonts,
     c: &Container,
     world: Transform,
     target: &mut Pixmap,
@@ -176,7 +191,7 @@ fn draw_children(
 ) {
     for &child in &c.children {
         if Some(child) != c.clip {
-            draw_node(doc, child, world, target, depth + 1);
+            draw_node(doc, fonts, child, world, target, depth + 1);
         }
     }
 }
@@ -190,6 +205,43 @@ fn draw_shape(shape: &Shape, world: Transform, target: &mut Pixmap) {
         target.fill_path(&path, &fill, paint::fill_rule(&shape.geometry), ts, None);
     }
     if let Some(stroke) = &shape.style.stroke
+        && stroke.width > EPS
+        && let Some(color) = paint::solid(stroke.paint)
+    {
+        target.stroke_path(&path, &color, &paint::stroke(stroke), ts, None);
+    }
+}
+
+/// Draws a text: its frame (background, then border) behind the glyph
+/// outlines, which are filled and stroked like a shape (non-zero rule).
+fn draw_text(fonts: &Fonts, id: NodeId, text: &Text, world: Transform, target: &mut Pixmap) {
+    let layout = fonts.layout(id, text);
+    let ts = paint::transform(world);
+    if let Some(frame) = &text.frame {
+        let b = text_box(text, &layout);
+        let geometry = Geometry::Rect {
+            rect: Rect::new(b.x0, b.y0, b.width(), b.height()),
+            radius: frame.radius,
+        };
+        if let Some(path) = paint::path(&to_bezpath(&geometry)) {
+            if let Some(fill) = paint::solid(frame.fill) {
+                target.fill_path(&path, &fill, tiny_skia::FillRule::Winding, ts, None);
+            }
+            if let Some(stroke) = &frame.stroke
+                && stroke.width > EPS
+                && let Some(color) = paint::solid(stroke.paint)
+            {
+                target.stroke_path(&path, &color, &paint::stroke(stroke), ts, None);
+            }
+        }
+    }
+    let Some(path) = paint::path(&layout.glyphs) else {
+        return;
+    };
+    if let Some(fill) = paint::solid(text.style.fill) {
+        target.fill_path(&path, &fill, tiny_skia::FillRule::Winding, ts, None);
+    }
+    if let Some(stroke) = &text.style.stroke
         && stroke.width > EPS
         && let Some(color) = paint::solid(stroke.paint)
     {
@@ -233,7 +285,7 @@ mod tests {
     fn empty_viewport_is_an_error() {
         let doc = Document::new("t");
         assert_eq!(
-            render(&doc, &viewport(0, 10)),
+            render(&doc, &Fonts::default(), &viewport(0, 10)),
             Err(RenderError::Empty {
                 width: 0,
                 height: 10
@@ -245,7 +297,7 @@ mod tests {
     fn oversized_viewport_is_an_error() {
         let doc = Document::new("t");
         assert!(matches!(
-            render(&doc, &viewport(MAX_PIXMAP_SIDE + 1, 1)),
+            render(&doc, &Fonts::default(), &viewport(MAX_PIXMAP_SIDE + 1, 1)),
             Err(RenderError::TooLarge { .. })
         ));
     }
@@ -255,7 +307,10 @@ mod tests {
         let doc = Document::new("t");
         let mut vp = viewport(4, 4);
         vp.view.zoom = f64::NAN;
-        assert_eq!(render(&doc, &vp), Err(RenderError::InvalidView));
+        assert_eq!(
+            render(&doc, &Fonts::default(), &vp),
+            Err(RenderError::InvalidView)
+        );
     }
 
     #[test]
@@ -277,7 +332,7 @@ mod tests {
         let doc = Document::new("t");
         let mut pixmap = Pixmap::new(8, 8).expect("8×8 is a valid size");
         pixmap.fill(tiny_skia::Color::WHITE);
-        render_into(&doc, &viewport(8, 8), &mut pixmap).expect("valid viewport");
+        render_into(&doc, &Fonts::default(), &viewport(8, 8), &mut pixmap).expect("valid viewport");
         assert!(
             pixmap.data().iter().all(|&b| b == 0),
             "cleared to transparent"

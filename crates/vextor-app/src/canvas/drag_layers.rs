@@ -202,7 +202,7 @@ fn layer(
         height: (area.height() * ppp).round() as u32,
         pixels_per_point: ppp,
     };
-    let pixmap = render(doc, &cropped)?;
+    let pixmap = render(doc, fonts, &cropped)?;
     let size = [pixmap.width() as usize, pixmap.height() as usize];
     let image = ColorImage::from_rgba_premultiplied(size, pixmap.data());
     Ok(Some(Layer {

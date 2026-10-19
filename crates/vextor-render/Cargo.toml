@@ -15,7 +15,8 @@ tiny-skia.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
-resvg.workspace = true
+# `text`: the text reference renders (tests only; fonts loaded explicitly).
+resvg = { workspace = true, features = ["text"] }
 
 [[bench]]
 name = "render"

@@ -142,7 +142,10 @@ impl Canvas {
 
     fn render(&mut self, ctx: &egui::Context, session: &Session, viewport: &Viewport) {
         let started = Instant::now();
-        match self.cache.frame(&session.doc, session.revision(), viewport) {
+        match self
+            .cache
+            .frame(&session.doc, &session.fonts, session.revision(), viewport)
+        {
             Ok(frame) => {
                 if frame.fresh {
                     let size = [

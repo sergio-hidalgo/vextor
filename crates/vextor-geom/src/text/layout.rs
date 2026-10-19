@@ -262,6 +262,8 @@ impl Face {
         let mut pen = Pen {
             path: BezPath::new(),
             origin: Point::ZERO,
+            last: Point::ZERO,
+            start: Point::ZERO,
         };
         let mut carets = Vec::with_capacity(line.len() + 1);
         let mut x = 0.0;
@@ -336,9 +338,15 @@ fn estimate(line: &str, offset: usize, size: f64, spacing: f64) -> Run {
 }
 
 /// Collects glyph outlines, flipping font y-up into node y-down.
+/// Quadratics are raised to cubics, as editable paths store them, so text
+/// and its converted outlines are the same curves.
 struct Pen {
     path: BezPath,
     origin: Point,
+    /// Current point, for raising quadratics.
+    last: Point,
+    /// Start of the current contour (the current point after a close).
+    start: Point,
 }
 
 impl Pen {
@@ -351,20 +359,28 @@ impl OutlinePen for Pen {
     fn move_to(&mut self, x: f32, y: f32) {
         let p = self.p(x, y);
         self.path.move_to(p);
+        self.last = p;
+        self.start = p;
     }
     fn line_to(&mut self, x: f32, y: f32) {
         let p = self.p(x, y);
         self.path.line_to(p);
+        self.last = p;
     }
     fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-        let (c, p) = (self.p(cx0, cy0), self.p(x, y));
-        self.path.quad_to(c, p);
+        let (q, p) = (self.p(cx0, cy0), self.p(x, y));
+        let c1 = self.last + (q - self.last) * (2.0 / 3.0);
+        let c2 = p + (q - p) * (2.0 / 3.0);
+        self.path.curve_to(c1, c2, p);
+        self.last = p;
     }
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
         let (c0, c1, p) = (self.p(cx0, cy0), self.p(cx1, cy1), self.p(x, y));
         self.path.curve_to(c0, c1, p);
+        self.last = p;
     }
     fn close(&mut self) {
         self.path.close_path();
+        self.last = self.start;
     }
 }
