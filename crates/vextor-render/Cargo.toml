@@ -17,6 +17,8 @@ tiny-skia.workspace = true
 criterion.workspace = true
 # `text`: the text reference renders (tests only; fonts loaded explicitly).
 resvg = { workspace = true, features = ["text"] }
+# The clipboard SVG renders like the canvas (text placement end to end).
+vextor-svg.workspace = true
 
 [[bench]]
 name = "render"

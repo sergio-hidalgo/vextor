@@ -4004,6 +4004,7 @@ dependencies = [
  "tiny-skia 0.12.0",
  "vextor-core",
  "vextor-geom",
+ "vextor-svg",
 ]
 
 [[package]]

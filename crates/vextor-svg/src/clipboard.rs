@@ -1,20 +1,22 @@
 //! A minimal SVG writer for the system clipboard (spec 05): copied objects
 //! as one standalone `<svg>`, framed by their bounds.
 //!
-//! Covers shapes, groups, transforms, opacity, solid paints, strokes and
-//! clips. Not yet (full export is spec 12): gradients are written as their
-//! first stop's colour, patterns as no paint, images are left out.
-//! Nothing taken from the document is written as text except numbers and
-//! colours, so no escaping is needed.
+//! Covers shapes, groups, transforms, opacity, solid paints, strokes, clips
+//! and text (spec 05c: live `<text>`, one `<tspan>` per line at the
+//! baselines Vextor lays out, the frame as a `<rect>` behind it). Not yet
+//! (full export is spec 12): gradients are written as their first stop's
+//! colour, patterns as no paint, images are left out. The only document
+//! strings written are text content and font family names, both escaped
+//! (`security-check` §3).
 
 use std::fmt::Write as _;
 
 use kurbo::{BezPath, PathEl};
 use vextor_core::{
     ClipboardPayload, Document, EPS, FillRule, Geometry, LineCap, LineJoin, Node, NodeId, NodeKind,
-    Paint, Resource, Shape, Stroke, Transform,
+    Paint, Rect, Resource, Shape, Stroke, Style, Text, TextAlign, Transform,
 };
-use vextor_geom::{Fonts, to_bezpath, union_bounds};
+use vextor_geom::{Fonts, text_box, to_bezpath, union_bounds};
 
 /// Decimals written for every number.
 const PRECISION: usize = 2;
@@ -35,6 +37,7 @@ pub fn clipboard_svg(payload: &ClipboardPayload, fonts: &Fonts) -> Option<String
 
     let mut w = Writer {
         doc: &doc,
+        fonts,
         body: String::new(),
         defs: String::new(),
         clips: 0,
@@ -60,6 +63,7 @@ pub fn clipboard_svg(payload: &ClipboardPayload, fonts: &Fonts) -> Option<String
 
 struct Writer<'a> {
     doc: &'a Document,
+    fonts: &'a Fonts,
     body: String,
     defs: String,
     clips: usize,
@@ -92,8 +96,79 @@ impl Writer<'_> {
                 let paint = self.style_attrs(s);
                 let _ = writeln!(self.body, "{pad}<{element}{common}{paint}/>");
             }
-            // Written as `<text>` from spec 05c, step 7.
-            NodeKind::Image(_) | NodeKind::Text(_) => {}
+            NodeKind::Text(t) => self.text(id, t, &common, &pad),
+            NodeKind::Image(_) => {}
+        }
+    }
+
+    /// A text as live `<text>`: one `<tspan>` per non-empty line at its
+    /// baseline, anchored like its alignment; with a frame, a `<rect>`
+    /// behind it and both in a `<g>`.
+    fn text(&mut self, id: NodeId, t: &Text, common: &str, pad: &str) {
+        let layout = self.fonts.layout(id, t);
+        let mut inner = pad.to_owned();
+        if let Some(f) = &t.frame {
+            let _ = writeln!(self.body, "{pad}<g{common}>");
+            inner.push_str("  ");
+            let b = text_box(t, &layout);
+            let rect = Shape {
+                geometry: Geometry::Rect {
+                    rect: Rect::new(b.x0, b.y0, b.width(), b.height()),
+                    radius: f.radius,
+                },
+                style: Style {
+                    fill: f.fill,
+                    stroke: f.stroke.clone(),
+                },
+            };
+            let paint = self.style_attrs(&rect);
+            let _ = writeln!(self.body, "{inner}<{}{paint}/>", shape_element(&rect));
+        }
+        let own = if t.frame.is_some() { "" } else { common };
+        let mut a = format!(
+            r#" font-family="{}" font-size="{}""#,
+            attr_escape(&font_family(&t.font.family)),
+            num(t.size)
+        );
+        if t.font.weight != 400 {
+            let _ = write!(a, r#" font-weight="{}""#, t.font.weight);
+        }
+        if t.font.italic {
+            a.push_str(r#" font-style="italic""#);
+        }
+        if !same(t.letter_spacing, 0.0) {
+            let _ = write!(a, r#" letter-spacing="{}""#, num(t.letter_spacing));
+        }
+        let (anchor, x) = match t.align {
+            TextAlign::Left => ("", layout.bounds.x0),
+            TextAlign::Centre => (r#" text-anchor="middle""#, layout.bounds.center().x),
+            TextAlign::Right => (r#" text-anchor="end""#, layout.bounds.x1),
+        };
+        a.push_str(anchor);
+        self.paint_attrs(&mut a, "fill", t.style.fill, true);
+        if let Some(st) = &t.style.stroke {
+            self.stroke_attrs(&mut a, st);
+        }
+        if needs_preserve(&t.content) {
+            a.push_str(r#" xml:space="preserve""#);
+        }
+        let _ = write!(self.body, "{inner}<text{own}{a}>");
+        for line in &layout.lines {
+            let content = &t.content[line.range.clone()];
+            if content.is_empty() {
+                continue;
+            }
+            let _ = write!(
+                self.body,
+                r#"<tspan x="{}" y="{}">{}</tspan>"#,
+                num(x),
+                num(line.baseline),
+                xml_escape(content)
+            );
+        }
+        let _ = writeln!(self.body, "</text>");
+        if t.frame.is_some() {
+            let _ = writeln!(self.body, "{pad}</g>");
         }
     }
 
@@ -184,6 +259,56 @@ impl Writer<'_> {
             }
         }
     }
+}
+
+/// `'Family', sans-serif`: the family quoted for CSS, with the characters
+/// that could end the quote or the declaration removed, and a generic
+/// fallback for pages without the font.
+fn font_family(family: &str) -> String {
+    let clean: String = family
+        .chars()
+        .filter(|c| {
+            !matches!(c, '\'' | '"' | '\\' | ';' | '<' | '>' | '{' | '}') && !c.is_control()
+        })
+        .collect();
+    let clean = clean.trim();
+    if clean.is_empty() {
+        "sans-serif".to_owned()
+    } else {
+        format!("'{clean}', sans-serif")
+    }
+}
+
+/// Text with `& < > " '` as entities and characters XML 1.0 does not allow
+/// left out.
+fn xml_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            '\t' | '\n' | '\r' => out.push(c),
+            c if c.is_control() || matches!(c, '\u{FFFE}' | '\u{FFFF}') => {}
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// An attribute value in double quotes: `& < > "` as entities; the
+/// apostrophes CSS quoting uses stay as they are.
+fn attr_escape(s: &str) -> String {
+    xml_escape(s).replace("&apos;", "'")
+}
+
+/// Spaces that SVG would collapse: leading, trailing or doubled.
+fn needs_preserve(content: &str) -> bool {
+    content
+        .split('\n')
+        .any(|l| l.starts_with(' ') || l.ends_with(' ') || l.contains("  "))
 }
 
 /// Equal within [`EPS`].
@@ -344,6 +469,33 @@ mod tests {
         assert_eq!(num(-0.001), "0");
         assert_eq!(num(12.345_6), "12.35");
         assert_eq!(num(100.0), "100");
+    }
+
+    #[test]
+    fn markup_and_quotes_are_escaped() {
+        assert_eq!(
+            xml_escape(r#"<script>alert("x")</script> & 'q'"#),
+            "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &apos;q&apos;"
+        );
+        assert_eq!(xml_escape("a\u{0}b\u{1b}c\u{FFFF}"), "abc");
+    }
+
+    #[test]
+    fn font_families_cannot_break_out_of_their_quotes() {
+        assert_eq!(font_family("Inter"), "'Inter', sans-serif");
+        assert_eq!(
+            font_family(r#"Evil"' onload="x"; }<b>"#),
+            "'Evil onload=x b', sans-serif"
+        );
+        assert_eq!(font_family("'\""), "sans-serif");
+    }
+
+    #[test]
+    fn only_collapsible_spaces_ask_for_preserve() {
+        assert!(!needs_preserve("Buy now\nsave"));
+        assert!(needs_preserve("Buy  now"));
+        assert!(needs_preserve(" lead"));
+        assert!(needs_preserve("ok\ntrail "));
     }
 
     #[test]

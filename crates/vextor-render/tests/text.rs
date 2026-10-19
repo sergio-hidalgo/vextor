@@ -258,3 +258,52 @@ fn a_line_of_text_matches_resvg() {
     let share = differing(ours.data(), reference.data(), 16);
     assert!(share <= 0.002, "{:.3} % of pixels differ", share * 100.0);
 }
+
+/// The clipboard SVG of a framed, centred two-line label, rendered by
+/// resvg with the same font, looks like the canvas: `<text>`, `<tspan>`
+/// baselines and `text-anchor` land where Vextor draws the glyphs.
+#[test]
+fn clipboard_svg_text_renders_like_the_canvas() {
+    let fonts = fonts();
+    let d = doc(vec![at(NodeId(100), NodeKind::Text(label()), 20.0, 20.0)]);
+    let payload = d.copy(&[NodeId(100)]).expect("copies");
+    let svg = vextor_svg::clipboard_svg(&payload, &fonts).expect("visible");
+
+    let b = vextor_geom::bounds(&d, &fonts, NodeId(100)).expect("visible");
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let (w, h) = (
+        (b.width() * ZOOM).ceil() as u32,
+        (b.height() * ZOOM).ceil() as u32,
+    );
+    let vp = Viewport {
+        view: View {
+            zoom: ZOOM,
+            pan: Vec2::new(-b.x0 * ZOOM, -b.y0 * ZOOM),
+        },
+        width: w,
+        height: h,
+        pixels_per_point: 1.0,
+    };
+    let ours = render(&d, &fonts, &vp).expect("renders");
+
+    let mut opt = usvg::Options::default();
+    opt.fontdb_mut().load_font_data(REGULAR.to_vec());
+    opt.fontdb_mut().load_font_data(BOLD.to_vec());
+    let tree = usvg::Tree::from_str(&svg, &opt).expect("parses");
+    let mut reference = tiny_skia::Pixmap::new(w, h).expect("size");
+    // The SVG's size is its viewBox (the label's bounds): same zoom.
+    #[allow(clippy::cast_possible_truncation)] // constant 2.0
+    let scale = ZOOM as f32;
+    resvg::render(
+        &tree,
+        tiny_skia::Transform::from_scale(scale, scale),
+        &mut reference.as_mut(),
+    );
+
+    let share = differing(ours.data(), reference.data(), 16);
+    assert!(
+        share <= 0.002,
+        "{:.3} % of pixels differ\n{svg}",
+        share * 100.0
+    );
+}
