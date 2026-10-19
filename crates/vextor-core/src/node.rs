@@ -1,11 +1,12 @@
-//! The node tree: layers, groups, shapes and images.
+//! The node tree: layers, groups, shapes, images and text.
 
 use serde::{Deserialize, Serialize};
 
 use crate::ids::NodeId;
 use crate::math::{Point, Rect, Transform};
 use crate::path::Path;
-use crate::style::Style;
+use crate::style::{Paint, Style};
+use crate::text::Text;
 
 /// One entry of [`crate::Document::nodes`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -31,6 +32,8 @@ pub enum NodeKind {
     Group(Container),
     Shape(Shape),
     Image(Image),
+    /// Point text (spec 05c).
+    Text(Text),
 }
 
 /// Children of a layer or group.
@@ -142,7 +145,7 @@ impl Node {
     pub fn container(&self) -> Option<&Container> {
         match &self.kind {
             NodeKind::Layer(c) | NodeKind::Group(c) => Some(c),
-            NodeKind::Shape(_) | NodeKind::Image(_) => None,
+            NodeKind::Shape(_) | NodeKind::Image(_) | NodeKind::Text(_) => None,
         }
     }
 
@@ -150,7 +153,26 @@ impl Node {
     pub fn container_mut(&mut self) -> Option<&mut Container> {
         match &mut self.kind {
             NodeKind::Layer(c) | NodeKind::Group(c) => Some(c),
-            NodeKind::Shape(_) | NodeKind::Image(_) => None,
+            NodeKind::Shape(_) | NodeKind::Image(_) | NodeKind::Text(_) => None,
+        }
+    }
+
+    /// Every paint of a shape or text; none for other kinds.
+    #[must_use]
+    pub fn paints(&self) -> Vec<Paint> {
+        match &self.kind {
+            NodeKind::Shape(s) => s.style.paints().collect(),
+            NodeKind::Text(t) => t.paints().collect(),
+            NodeKind::Layer(_) | NodeKind::Group(_) | NodeKind::Image(_) => Vec::new(),
+        }
+    }
+
+    /// Mutable access to every paint, in [`Node::paints`] order.
+    pub fn paints_mut(&mut self) -> Vec<&mut Paint> {
+        match &mut self.kind {
+            NodeKind::Shape(s) => s.style.paints_mut(),
+            NodeKind::Text(t) => t.paints_mut(),
+            NodeKind::Layer(_) | NodeKind::Group(_) | NodeKind::Image(_) => Vec::new(),
         }
     }
 

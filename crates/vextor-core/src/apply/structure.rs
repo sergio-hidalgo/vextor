@@ -293,7 +293,8 @@ pub(super) fn set_style(tx: &mut Tx<'_>, ids: &[NodeId], style: &Style) -> Resul
     for &id in ids {
         match &mut tx.node_mut(id)?.kind {
             NodeKind::Shape(s) => s.style = style.clone(),
-            _ => return Err(CoreError::WrongKind(id, "shape")),
+            NodeKind::Text(t) => t.style = style.clone(),
+            _ => return Err(CoreError::WrongKind(id, "shape or text")),
         }
     }
     Ok(())

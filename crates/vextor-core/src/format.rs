@@ -9,6 +9,10 @@ use serde::Deserialize;
 use thiserror::Error;
 
 use crate::document::{Document, FORMAT_VERSION};
+use crate::node::NodeKind;
+
+/// Oldest `.vextor` format version still read (version 1 had no text).
+pub const MIN_FORMAT_VERSION: u32 = 1;
 
 /// Largest `.vextor` file that is loaded, in bytes (50 MB).
 pub const MAX_FILE_BYTES: u64 = 50 * 1024 * 1024;
@@ -26,7 +30,9 @@ pub enum FormatError {
     Truncated,
     #[error("not a Vextor file ({0})")]
     NotVextor(String),
-    #[error("the file uses format version {0}; this Vextor reads version {FORMAT_VERSION}")]
+    #[error(
+        "the file uses format version {0}; this Vextor reads versions {MIN_FORMAT_VERSION} to {FORMAT_VERSION}"
+    )]
     UnknownVersion(u32),
     #[error("the file has {0} objects, more than the {MAX_NODES} limit")]
     TooManyNodes(usize),
@@ -62,13 +68,13 @@ pub fn from_bytes(bytes: &[u8]) -> Result<Document, FormatError> {
     // Read only the version first, so a file from a newer Vextor is refused
     // with that reason rather than as a shape mismatch.
     let probe: Probe = serde_json::from_slice(bytes).map_err(|e| json_error(&e))?;
-    match probe.format_version {
+    let version = match probe.format_version {
         None => return Err(FormatError::NotVextor("no format_version".to_owned())),
-        Some(FORMAT_VERSION) => {}
+        Some(v @ MIN_FORMAT_VERSION..=FORMAT_VERSION) => v,
         Some(v) => return Err(FormatError::UnknownVersion(v)),
-    }
+    };
 
-    let doc: Document = serde_json::from_slice(bytes).map_err(|e| json_error(&e))?;
+    let mut doc: Document = serde_json::from_slice(bytes).map_err(|e| json_error(&e))?;
     if doc.nodes.len() > MAX_NODES {
         return Err(FormatError::TooManyNodes(doc.nodes.len()));
     }
@@ -78,7 +84,28 @@ pub fn from_bytes(bytes: &[u8]) -> Result<Document, FormatError> {
             .map_or_else(String::new, ToString::to_string);
         return Err(FormatError::Invalid(first));
     }
+    migrate(&mut doc, version)?;
     Ok(doc)
+}
+
+/// Brings a loaded older version up to [`FORMAT_VERSION`]; saving then
+/// writes the current version.
+///
+/// 1 → 2: same shape, text objects added. A version-1 file holding text
+/// was not written by Vextor and is refused.
+fn migrate(doc: &mut Document, version: u32) -> Result<(), FormatError> {
+    if version < 2
+        && doc
+            .nodes
+            .values()
+            .any(|n| matches!(n.kind, NodeKind::Text(_)))
+    {
+        return Err(FormatError::Invalid(
+            "text objects need format version 2".to_owned(),
+        ));
+    }
+    doc.format_version = FORMAT_VERSION;
+    Ok(())
 }
 
 /// The only field read before the version is known.

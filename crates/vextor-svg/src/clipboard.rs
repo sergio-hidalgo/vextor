@@ -92,7 +92,8 @@ impl Writer<'_> {
                 let paint = self.style_attrs(s);
                 let _ = writeln!(self.body, "{pad}<{element}{common}{paint}/>");
             }
-            NodeKind::Image(_) => {}
+            // Written as `<text>` from spec 05c, step 7.
+            NodeKind::Image(_) | NodeKind::Text(_) => {}
         }
     }
 

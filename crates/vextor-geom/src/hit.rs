@@ -159,6 +159,8 @@ fn subtree_bounds(doc: &Document, id: NodeId, parent: Affine, depth: usize) -> O
     match &node.kind {
         NodeKind::Shape(s) => Some((world * to_bezpath(&s.geometry)).bounding_box()),
         NodeKind::Image(img) => Some((world * image_outline(img.rect)).bounding_box()),
+        // Text has no extent until its layout exists (spec 05c, step 2).
+        NodeKind::Text(_) => None,
         NodeKind::Layer(c) | NodeKind::Group(c) => {
             let inner = c
                 .children
@@ -249,6 +251,8 @@ fn collect(
             half_stroke: 0.0,
             clips: clips.to_vec(),
         }),
+        // Hit by its layout box from spec 05c, step 2.
+        NodeKind::Text(_) => {}
         NodeKind::Layer(c) | NodeKind::Group(c) => {
             let mut inner = clips.to_vec();
             inner.extend(clip_of(doc, c.clip, world));

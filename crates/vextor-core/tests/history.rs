@@ -193,9 +193,9 @@ fn paste_and_duplicate_get_unique_ids() {
             .expect("paste applies");
     }
     fx.doc.validate().expect("valid after two pastes");
-    assert_eq!(fx.doc.nodes.len(), 9 + 8);
+    assert_eq!(fx.doc.nodes.len(), 10 + 8);
     // undo does not hand out the same ids again
     h.undo(&mut fx.doc);
     let id = fx.doc.alloc_node_id();
-    assert!(id.0 >= 18, "allocator went back to {id:?}");
+    assert!(id.0 >= 19, "allocator went back to {id:?}");
 }

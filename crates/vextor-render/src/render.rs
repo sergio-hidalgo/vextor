@@ -161,8 +161,9 @@ fn draw_content(
     match kind {
         NodeKind::Layer(c) | NodeKind::Group(c) => draw_children(doc, c, world, target, depth),
         NodeKind::Shape(shape) => draw_shape(shape, world, target),
-        // Embedded images are drawn from a later spec.
-        NodeKind::Image(_) => {}
+        // Embedded images are drawn from a later spec; text from its
+        // layout outlines from spec 05c, step 3.
+        NodeKind::Image(_) | NodeKind::Text(_) => {}
     }
 }
 

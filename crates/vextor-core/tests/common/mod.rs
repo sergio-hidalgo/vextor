@@ -7,7 +7,7 @@ use vextor_core::{
     Container, CornerRadii, Document, Geometry, Gradient, GradientKind, GradientStop,
     GradientUnits, History, Image, ImageMime, ImageSource, Node, NodeId, NodeKind, NodeType, Paint,
     Path, PathNode, Pattern, Point, Rect, Resource, ResourceId, Rgba, Selection, Shape, Spread,
-    Stroke, Style, SubPath, Vec2,
+    Stroke, Style, SubPath, Text, TextAlign, TextFrame, Vec2,
 };
 
 /// The fixture document and the ids of everything in it.
@@ -21,6 +21,7 @@ pub struct Fx {
     pub path: NodeId,
     pub star: NodeId,
     pub image: NodeId,
+    pub text: NodeId,
     pub gradient: ResourceId,
     pub pattern: ResourceId,
     pub pattern_rect: NodeId,
@@ -34,6 +35,35 @@ pub fn shape(id: NodeId, geometry: Geometry) -> Node {
             style: Style::default(),
         }),
     )
+}
+
+/// "Buy now" over two lines, centred, bold, with a framed background.
+pub fn label_text() -> Text {
+    Text {
+        size: 18.0,
+        align: TextAlign::Centre,
+        frame: Some(TextFrame {
+            padding: [8.0, 16.0, 8.0, 16.0],
+            radius: CornerRadii {
+                tl: 6.0,
+                tr: 6.0,
+                br: 6.0,
+                bl: 6.0,
+            },
+            fill: Paint::Solid(Rgba::rgb(30, 144, 255)),
+            stroke: Some(Stroke::default()),
+        }),
+        font: vextor_core::FontSpec {
+            family: "Inter".to_owned(),
+            weight: 700,
+            italic: false,
+        },
+        ..Text::new("Buy\nnow", "Inter")
+    }
+}
+
+pub fn text(id: NodeId, text: Text) -> Node {
+    Node::new(id, NodeKind::Text(text))
 }
 
 pub fn group(id: NodeId, children: Vec<NodeId>) -> Node {
@@ -129,13 +159,13 @@ pub fn pattern(content: Vec<NodeId>) -> Resource {
     })
 }
 
-/// Layer 1: group(rect, ellipse), path, star. Layer 2: image.
+/// Layer 1: group(rect, ellipse), path, star. Layer 2: image, text.
 /// Rect is filled with a gradient; an unused pattern holds one rect.
 #[allow(clippy::too_many_lines)] // builds one document step by step
 pub fn fixture() -> Fx {
     let mut doc = Document::new("fixture");
     let layer = doc.layers[0];
-    let ids: Vec<NodeId> = (0..8).map(|_| doc.alloc_node_id()).collect();
+    let ids: Vec<NodeId> = (0..9).map(|_| doc.alloc_node_id()).collect();
     let [
         layer2,
         group_id,
@@ -145,7 +175,8 @@ pub fn fixture() -> Fx {
         star,
         image,
         pattern_rect,
-    ] = ids.try_into().expect("8 ids");
+        text_id,
+    ] = ids.try_into().expect("9 ids");
     let gradient_id = doc.alloc_resource_id();
     let pattern_id = doc.alloc_resource_id();
 
@@ -229,7 +260,11 @@ pub fn fixture() -> Fx {
         Command::Insert {
             parent: None,
             index: 1,
-            nodes: vec![self::layer(layer2, vec![image]), image_node],
+            nodes: vec![
+                self::layer(layer2, vec![image, text_id]),
+                image_node,
+                text(text_id, label_text()),
+            ],
         },
     );
 
@@ -244,6 +279,7 @@ pub fn fixture() -> Fx {
         path,
         star,
         image,
+        text: text_id,
         gradient: gradient_id,
         pattern: pattern_id,
         pattern_rect,

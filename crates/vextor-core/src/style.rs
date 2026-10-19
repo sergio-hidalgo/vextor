@@ -95,4 +95,13 @@ impl Style {
     pub fn paints(&self) -> impl Iterator<Item = Paint> + '_ {
         std::iter::once(self.fill).chain(self.stroke.as_ref().map(|s| s.paint))
     }
+
+    /// Mutable fill and stroke paints, in that order.
+    pub fn paints_mut(&mut self) -> Vec<&mut Paint> {
+        let mut out = vec![&mut self.fill];
+        if let Some(s) = &mut self.stroke {
+            out.push(&mut s.paint);
+        }
+        out
+    }
 }

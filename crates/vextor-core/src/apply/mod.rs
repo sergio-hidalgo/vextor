@@ -6,6 +6,7 @@
 
 mod paths;
 mod structure;
+mod text;
 
 use crate::change::{Change, Patch};
 use crate::command::Command;
@@ -93,6 +94,9 @@ fn run(tx: &mut Tx<'_>, cmd: Command) -> Result<(), CoreError> {
         C::SetTransforms { items } => structure::set_transforms(tx, items),
         C::SetStyle { ids, style } => structure::set_style(tx, &ids, &style),
         C::SetGeometry { items } => structure::set_geometry(tx, items),
+        cmd @ (C::SetText { .. } | C::SetTextStyle { .. } | C::SetTextFrame { .. }) => {
+            text::run(tx, cmd)
+        }
         C::SetProps {
             id,
             name,

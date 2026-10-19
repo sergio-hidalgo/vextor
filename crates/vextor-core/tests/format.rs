@@ -5,10 +5,11 @@ mod common;
 use common::{fixture, rect_geom, shape};
 use vextor_core::{
     Document, FORMAT_VERSION, FormatError, Geometry, MAX_FILE_BYTES, MAX_NODES, NodeKind, Paint,
-    Point, Rgba, from_bytes, to_bytes,
+    Point, Rgba, TextAlign, from_bytes, to_bytes,
 };
 
 const MINIMAL_V1: &str = include_str!("fixtures/minimal_v1.vextor");
+const LABEL_V2: &str = include_str!("fixtures/label_v2.vextor");
 
 fn round_trip(doc: &Document) {
     let bytes = to_bytes(doc).expect("encodes");
@@ -22,6 +23,61 @@ fn every_fixture_round_trips() {
     round_trip(&Document::new("empty"));
     round_trip(&fixture().doc);
     round_trip(&from_bytes(MINIMAL_V1.as_bytes()).expect("fixture loads"));
+    round_trip(&from_bytes(LABEL_V2.as_bytes()).expect("fixture loads"));
+}
+
+#[test]
+fn hand_written_v2_file_with_text_loads() {
+    let doc = from_bytes(LABEL_V2.as_bytes()).expect("loads");
+    let label = doc
+        .nodes
+        .values()
+        .find(|n| n.name.as_deref() == Some("label"))
+        .expect("label exists");
+    let NodeKind::Text(t) = &label.kind else {
+        panic!("label is text");
+    };
+    assert_eq!(t.content, "Buy\nnow & <save>");
+    assert_eq!(t.font.family, "Inter");
+    assert_eq!(t.font.weight, 700);
+    assert_eq!(t.align, TextAlign::Centre);
+    let frame = t.frame.as_ref().expect("framed");
+    assert_eq!(frame.fill, Paint::Solid(Rgba::rgb(30, 144, 255)));
+    assert!(frame.stroke.is_some());
+}
+
+#[test]
+fn a_v1_file_is_saved_as_the_current_version() {
+    let doc = from_bytes(MINIMAL_V1.as_bytes()).expect("loads");
+    let saved = String::from_utf8(to_bytes(&doc).expect("encodes")).expect("utf-8");
+    assert!(saved.contains(&format!("\"format_version\": {FORMAT_VERSION}")));
+}
+
+#[test]
+fn a_v1_file_holding_text_is_refused() {
+    let old = LABEL_V2.replace("\"format_version\": 2", "\"format_version\": 1");
+    assert_eq!(
+        from_bytes(old.as_bytes()),
+        Err(FormatError::Invalid(
+            "text objects need format version 2".to_owned()
+        ))
+    );
+}
+
+#[test]
+fn a_file_with_invalid_text_is_refused() {
+    for (from, to) in [
+        ("\"family\": \"Inter\"", "\"family\": \"\""),
+        ("\"size\": 18", "\"size\": 0"),
+        ("\"weight\": 700", "\"weight\": 7000"),
+        ("\"padding\": [8, 16", "\"padding\": [-8, 16"),
+    ] {
+        let bad = LABEL_V2.replace(from, to);
+        assert!(
+            matches!(from_bytes(bad.as_bytes()), Err(FormatError::Invalid(_))),
+            "{to}"
+        );
+    }
 }
 
 #[test]
@@ -163,6 +219,6 @@ fn error_messages_read_as_sentences() {
     );
     assert_eq!(
         FormatError::UnknownVersion(7).to_string(),
-        "the file uses format version 7; this Vextor reads version 1"
+        "the file uses format version 7; this Vextor reads versions 1 to 2"
     );
 }

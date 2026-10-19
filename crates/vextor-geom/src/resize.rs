@@ -63,6 +63,8 @@ fn walk(
                 walk(doc, child, world, change, depth + 1, out);
             }
         }
+        // Resizing scales the font size from spec 05c, step 5.
+        NodeKind::Text(_) => {}
         NodeKind::Image(_) => {
             let t = from_affine(parent.inverse() * change * parent * local);
             if t.is_finite() {
