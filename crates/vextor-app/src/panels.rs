@@ -19,6 +19,9 @@ const LABEL_WIDTH: f32 = 84.0;
 /// Size of every number field: fixed, so typing or dragging a longer
 /// value never shifts the panel.
 const FIELD_SIZE: [f32; 2] = [64.0, 20.0];
+/// Space kept free at the right of the inspector's content, matching the
+/// panel's own margin on the left (the scroll bar floats over it).
+const RIGHT_MARGIN: i8 = 10;
 /// Starting height of the Layers area, in points.
 const LAYERS_HEIGHT: f32 = 160.0;
 
@@ -77,30 +80,52 @@ pub fn inspector_and_layers(
             egui::ScrollArea::vertical()
                 .id_salt("layers-scroll")
                 .auto_shrink(false)
-                .show(ui, |ui| ui.weak("The layer list will appear here."));
+                .show(ui, |ui| {
+                    right_margin(ui, |ui| ui.weak("The layer list will appear here."));
+                });
         });
     egui::ScrollArea::vertical()
         .id_salt("inspector-scroll")
         .auto_shrink(false)
         .show(ui, |ui| {
-            ui.add_space(6.0);
-            ui.strong("Inspector");
-            let mut actions = Vec::new();
-            let message = if let Some(s) = session {
-                let message = inspector(ui, s);
-                if !s.selected().is_empty() {
-                    let can = edit_ops::can(s);
-                    arrange::align_section(ui, can, to_artboard, &mut actions);
-                    arrange::group_section(ui, can, &mut actions);
-                }
-                message
-            } else {
-                ui.weak("Nothing selected.");
-                None
-            };
-            (message, actions)
+            right_margin(ui, |ui| inspector_sections(ui, session, to_artboard))
         })
         .inner
+}
+
+/// `add` with [`RIGHT_MARGIN`] kept free on its right.
+fn right_margin<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    egui::Frame::new()
+        .inner_margin(egui::Margin {
+            right: RIGHT_MARGIN,
+            ..egui::Margin::ZERO
+        })
+        .show(ui, add)
+        .inner
+}
+
+/// The inspector's title and its sections for the current selection.
+fn inspector_sections(
+    ui: &mut egui::Ui,
+    session: Option<&mut Session>,
+    to_artboard: &mut bool,
+) -> (Option<String>, Vec<PanelAction>) {
+    ui.add_space(6.0);
+    ui.strong("Inspector");
+    let mut actions = Vec::new();
+    let message = if let Some(s) = session {
+        let message = inspector(ui, s);
+        if !s.selected().is_empty() {
+            let can = edit_ops::can(s);
+            arrange::align_section(ui, can, to_artboard, &mut actions);
+            arrange::group_section(ui, can, &mut actions);
+        }
+        message
+    } else {
+        ui.weak("Nothing selected.");
+        None
+    };
+    (message, actions)
 }
 
 /// A collapsible inspector section, open until the user folds it (egui

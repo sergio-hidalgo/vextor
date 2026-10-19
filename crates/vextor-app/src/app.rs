@@ -308,7 +308,7 @@ impl eframe::App for VextorApp {
             });
         egui::Panel::right("inspector")
             .resizable(true)
-            .default_size(240.0)
+            .default_size(280.0)
             .show(ui, |ui| {
                 // Working in the inspector ends a text edit first, so the
                 // edit stays one undo step and the fields apply to it.
