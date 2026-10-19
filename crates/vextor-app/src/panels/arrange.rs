@@ -35,7 +35,10 @@ pub fn align_section(
     to_artboard: &mut bool,
     out: &mut Vec<PanelAction>,
 ) {
-    section_title(ui, "Align");
+    super::section(ui, "Align", |ui| align_buttons(ui, can, to_artboard, out));
+}
+
+fn align_buttons(ui: &mut egui::Ui, can: Can, to_artboard: &mut bool, out: &mut Vec<PanelAction>) {
     let select_first = "Select an object first";
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
@@ -68,8 +71,7 @@ pub fn align_section(
             }
         }
         ui.add_space(8.0);
-        let tip = "Align to Artboard: align to the artboard instead of each other \
-                   (one selected object always does)";
+        let tip = "Align to artboard";
         if icons::button(ui, Icon::Artboard, *to_artboard, true, tip, "").clicked() {
             *to_artboard = !*to_artboard;
         }
@@ -78,7 +80,10 @@ pub fn align_section(
 
 /// Group: Group and Ungroup buttons, disabled with the reason.
 pub fn group_section(ui: &mut egui::Ui, can: Can, out: &mut Vec<PanelAction>) {
-    section_title(ui, "Group");
+    super::section(ui, "Group", |ui| group_buttons(ui, can, out));
+}
+
+fn group_buttons(ui: &mut egui::Ui, can: Can, out: &mut Vec<PanelAction>) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         let group = icons::button(
@@ -104,13 +109,6 @@ pub fn group_section(ui: &mut egui::Ui, can: Can, out: &mut Vec<PanelAction>) {
             out.push(PanelAction::Ungroup);
         }
     });
-}
-
-fn section_title(ui: &mut egui::Ui, title: &str) {
-    ui.add_space(12.0);
-    ui.separator();
-    ui.strong(title);
-    ui.add_space(2.0);
 }
 
 #[cfg(test)]
