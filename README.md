@@ -32,6 +32,7 @@ All four checks must pass before a change is merged.
 
 ```sh
 cargo bench -p vextor-render     # canvas render timings (criterion)
+cargo bench -p vextor-geom       # hit-testing and drag-frame timings
 ```
 
 ## Using the editor
@@ -50,14 +51,47 @@ transparent artboards and grey around them.
 | Fit artboard / actual size  | `⌘0` / `⌘1` (View menu)                    |
 | Undo / redo                 | `⌘Z` / `⇧⌘Z` (Edit menu shows what)        |
 
+### Selecting and transforming
+
+The Select tool (`V`) is the only tool so far.
+
+| Action                              | How                                                    |
+| :---------------------------------- | :----------------------------------------------------- |
+| Select / add or remove              | click / `⇧`-click (a group is selected whole)          |
+| Select by area                      | drag on empty canvas: selects what the box touches     |
+| Select all / clear                  | `⌘A` / `Esc`                                           |
+| Move                                | drag the selection; arrows nudge 1 px, `⇧`+arrows 10 px |
+| Scale                               | drag a handle; `⇧` keeps proportions, `⌥` from the centre (strokes keep their width) |
+| Rotate                              | drag just outside any corner (curved-arrow cursor); `⇧` in 15° steps |
+| Exact position, size, rotation      | Inspector (right): X, Y, W, H, °                       |
+| Cut / copy / paste / paste in place | `⌘X` / `⌘C` / `⌘V` (+10 px) / `⇧⌘V`                     |
+| Duplicate / delete                  | `⌘D` (+10 px) / `⌫`                                    |
+| Group / ungroup                     | `⌘G` / `⇧⌘G`                                           |
+| Bring forward / to front            | `⌘↑` / `⇧⌘↑`                                           |
+| Send backward / to back             | `⌘↓` / `⇧⌘↓`                                           |
+| Align, distribute, flip             | Object menu                                            |
+
+Align lines up two or more objects with each other, or one object with its
+artboard (Object ▸ Align ▸ Align to Artboard forces the artboard).
+Distribute needs three or more. Hidden and locked objects cannot be
+selected. Copy also puts the selection on the system clipboard as SVG
+(shapes, groups, solid colours, strokes and clips; gradients are written as
+their first colour and images are left out until full export arrives).
+
 Ctrl replaces ⌘ on Windows and Linux.
 
-The app icon comes from `crates/vextor-app/assets/icon.svg`; after
-editing it, regenerate the PNG the OS uses:
+The app icon comes from `crates/vextor-app/assets/icon.svg` and the
+"vextor" wordmark on the new-document screen from `assets/wordmark.svg`
+(Poppins semi-bold outlines, SIL OFL 1.1, with the logo as the "o"). After
+editing either, regenerate the PNG the app uses:
 
 ```sh
 cargo test -p vextor-app -- --ignored regenerate_icon_png
+cargo test -p vextor-app -- --ignored regenerate_wordmark_png
 ```
+
+The app always uses its dark theme. Text, icons and accents take their
+colours from the palette in `crates/vextor-app/src/theme.rs`.
 
 ## Files, autosave and recovery
 

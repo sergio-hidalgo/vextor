@@ -11,6 +11,7 @@ vextor-core.workspace = true
 vextor-geom.workspace = true
 vextor-svg.workspace = true
 vextor-render.workspace = true
+kurbo.workspace = true
 directories.workspace = true
 eframe.workspace = true
 rfd.workspace = true

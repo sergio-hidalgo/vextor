@@ -8,11 +8,11 @@ use common::{fixture, gradient, pattern, sample_path};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use vextor_core::{
-    Artboard, ArtboardId, ClipboardPayload, ColorFormat, Container, CornerRadii, Document,
-    FillRule, Geometry, GradientKind, GradientStop, GradientUnits, GridSettings, IdMode, Image,
-    ImageMime, ImageSource, LineCap, LineJoin, Node, NodeId, NodeKind, NodeType, Paint, PathNode,
-    PathNodeRef, Point, Rect, ResourceId, Rgba, Selection, Shape, SnapSettings, Spread, Stroke,
-    Style, Styling, SvgExportOptions, Swatch, ToolId, Transform, Vec2, View,
+    Artboard, ArtboardId, ClipResource, ClipboardPayload, ColorFormat, Container, CornerRadii,
+    Document, FillRule, Geometry, GradientKind, GradientStop, GradientUnits, GridSettings, IdMode,
+    Image, ImageMime, ImageSource, LineCap, LineJoin, Node, NodeId, NodeKind, NodeType, Paint,
+    PathNode, PathNodeRef, Point, Rect, ResourceId, Rgba, Selection, Shape, SnapSettings, Spread,
+    Stroke, Style, Styling, SvgExportOptions, Swatch, ToolId, Transform, Vec2, View,
 };
 
 fn round_trip<T: Serialize + DeserializeOwned + PartialEq + Debug>(value: &T) -> String {
@@ -300,5 +300,12 @@ fn editor_types() {
         pan: Vec2::new(10.0, -5.0),
     });
     let node = Node::new(NodeId(1), NodeKind::Group(Container::default()));
-    round_trip(&ClipboardPayload { nodes: vec![node] });
+    round_trip(&ClipboardPayload {
+        nodes: vec![node.clone()],
+        resources: vec![ClipResource {
+            id: ResourceId(7),
+            resource: pattern(vec![NodeId(1)]),
+            content: vec![node],
+        }],
+    });
 }

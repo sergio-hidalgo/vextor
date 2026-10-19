@@ -3,10 +3,11 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::ids::NodeId;
+use crate::ids::{NodeId, ResourceId};
 use crate::math::Vec2;
 use crate::node::Node;
 use crate::path::PathNodeRef;
+use crate::resource::Resource;
 
 /// What the user is working with right now.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -61,8 +62,23 @@ impl Default for View {
     }
 }
 
-/// Copied nodes: whole subtrees, roots listed in z-order.
+/// Copied nodes: whole subtrees, roots listed bottom → top. Each root's
+/// transform is in document (world) space, so it can be pasted under any
+/// parent ([`crate::Document::copy`], [`crate::Document::paste`]).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClipboardPayload {
     pub nodes: Vec<Node>,
+    /// The gradients and patterns the nodes paint with.
+    pub resources: Vec<ClipResource>,
+}
+
+/// A resource copied with the nodes that use it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ClipResource {
+    /// Its id in the document it was copied from; reused on paste when the
+    /// target holds the same resource under this id.
+    pub id: ResourceId,
+    pub resource: Resource,
+    /// A pattern's content subtrees (empty for a gradient).
+    pub content: Vec<Node>,
 }

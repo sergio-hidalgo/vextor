@@ -3920,6 +3920,7 @@ version = "0.1.0"
 dependencies = [
  "directories",
  "eframe",
+ "kurbo",
  "resvg",
  "rfd",
  "serde",
@@ -3946,7 +3947,9 @@ dependencies = [
 name = "vextor-geom"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "kurbo",
+ "proptest",
  "vextor-core",
 ]
 
@@ -3967,6 +3970,7 @@ dependencies = [
 name = "vextor-svg"
 version = "0.1.0"
 dependencies = [
+ "kurbo",
  "vextor-core",
  "vextor-geom",
 ]

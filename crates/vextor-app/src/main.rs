@@ -3,14 +3,18 @@
 mod app;
 mod canvas;
 mod debug;
+mod edit_ops;
 mod files;
 mod icon;
 mod new_doc;
 mod panels;
 mod prompts;
 mod recovery;
+mod select;
 mod session;
+mod theme;
 mod view;
+mod wordmark;
 
 use eframe::egui;
 

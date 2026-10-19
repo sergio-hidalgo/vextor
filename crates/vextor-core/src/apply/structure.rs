@@ -7,7 +7,7 @@ use crate::document::Parent;
 use crate::error::CoreError;
 use crate::ids::{NodeId, ResourceId};
 use crate::math::Transform;
-use crate::node::{Container, Node, NodeKind};
+use crate::node::{Container, Geometry, Node, NodeKind};
 use crate::resource::Resource;
 use crate::style::Style;
 
@@ -154,10 +154,31 @@ pub(super) fn reparent(
             return Err(CoreError::InvalidCommand("cannot move a node into itself"));
         }
     }
+    let mut clips = Vec::new();
     for &id in ids {
-        detach(tx, id)?;
+        let (old_parent, _) = detach(tx, id)?;
+        if let Some(p) = old_parent
+            && tx
+                .before
+                .nodes
+                .get(&p)
+                .and_then(|n| n.as_ref()?.container()?.clip)
+                == Some(id)
+        {
+            clips.push((p, id));
+        }
     }
-    attach(tx, new_parent, index, ids)
+    attach(tx, new_parent, index, ids)?;
+    // A clip moved within its own container (a reorder) stays its clip.
+    for (p, id) in clips {
+        if new_parent == Some(p) {
+            tx.node_mut(p)?
+                .container_mut()
+                .expect("held children: is a container")
+                .clip = Some(id);
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn group(tx: &mut Tx<'_>, ids: &[NodeId]) -> Result<(), CoreError> {
@@ -241,6 +262,29 @@ pub(super) fn set_transform(
 ) -> Result<(), CoreError> {
     for &id in ids {
         tx.node_mut(id)?.transform = transform;
+    }
+    Ok(())
+}
+
+pub(super) fn set_transforms(
+    tx: &mut Tx<'_>,
+    items: Vec<(NodeId, Transform)>,
+) -> Result<(), CoreError> {
+    for (id, transform) in items {
+        tx.node_mut(id)?.transform = transform;
+    }
+    Ok(())
+}
+
+pub(super) fn set_geometry(
+    tx: &mut Tx<'_>,
+    items: Vec<(NodeId, Geometry)>,
+) -> Result<(), CoreError> {
+    for (id, geometry) in items {
+        match &mut tx.node_mut(id)?.kind {
+            NodeKind::Shape(s) => s.geometry = geometry,
+            _ => return Err(CoreError::WrongKind(id, "shape")),
+        }
     }
     Ok(())
 }

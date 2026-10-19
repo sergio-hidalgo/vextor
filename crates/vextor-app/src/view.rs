@@ -18,6 +18,15 @@ pub fn doc_to_screen(view: View, p: Point) -> Point {
     Point::new(p.x * view.zoom + view.pan.x, p.y * view.zoom + view.pan.y)
 }
 
+/// The document point under a canvas position.
+#[must_use]
+pub fn screen_to_doc(view: View, s: Point) -> Point {
+    Point::new(
+        (s.x - view.pan.x) / view.zoom,
+        (s.y - view.pan.y) / view.zoom,
+    )
+}
+
 /// The view moved by `delta` points.
 #[must_use]
 pub fn pan_by(view: View, delta: Vec2) -> View {
@@ -111,14 +120,6 @@ mod tests {
     use vextor_core::EPS;
 
     use super::*;
-
-    /// The document point under a canvas position.
-    fn screen_to_doc(view: View, s: Point) -> Point {
-        Point::new(
-            (s.x - view.pan.x) / view.zoom,
-            (s.y - view.pan.y) / view.zoom,
-        )
-    }
 
     fn close(a: Point, b: Point) -> bool {
         (a.x - b.x).abs() < 1e-6 && (a.y - b.y).abs() < 1e-6

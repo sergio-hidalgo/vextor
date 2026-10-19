@@ -175,6 +175,7 @@ fn paste_and_duplicate_get_unique_ids() {
     let mut fx = fixture();
     let clipboard = ClipboardPayload {
         nodes: fx.doc.copy_subtrees(&[fx.group, fx.star]).expect("exists"),
+        resources: vec![],
     };
     assert_eq!(clipboard.nodes.len(), 4); // group, rect, ellipse, star
     let mut h = History::new();

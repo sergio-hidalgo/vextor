@@ -284,6 +284,41 @@ fn set_transform() {
 }
 
 #[test]
+fn set_transforms_gives_each_node_its_own() {
+    let fx = fixture();
+    let a = Transform::translate(1.0, 2.0);
+    let b = Transform::scale(2.0, 3.0);
+    check(
+        &fx.doc,
+        Command::SetTransforms {
+            items: vec![(fx.rect, a), (fx.star, b)],
+        },
+        |d| {
+            node_mut(d, fx.rect).transform = a;
+            node_mut(d, fx.star).transform = b;
+        },
+    );
+}
+
+#[test]
+fn set_transforms_rejects_non_finite_and_missing() {
+    let fx = fixture();
+    let nan = Transform([f64::NAN, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    rejects(
+        &fx.doc,
+        Command::SetTransforms {
+            items: vec![(fx.rect, Transform::IDENTITY), (fx.star, nan)],
+        },
+    );
+    rejects(
+        &fx.doc,
+        Command::SetTransforms {
+            items: vec![(new_id(&fx, 0), Transform::IDENTITY)],
+        },
+    );
+}
+
+#[test]
 fn set_transform_rejects_non_finite() {
     let fx = fixture();
     let t = Transform([f64::NAN, 0.0, 0.0, 1.0, 0.0, 0.0]);
@@ -292,6 +327,40 @@ fn set_transform_rejects_non_finite() {
         Command::SetTransform {
             ids: vec![fx.rect],
             transform: t,
+        },
+    );
+}
+
+#[test]
+fn set_geometry_replaces_shape_geometry() {
+    let fx = fixture();
+    let g = rect_geom(1.0, 2.0, 30.0, 40.0);
+    check(
+        &fx.doc,
+        Command::SetGeometry {
+            items: vec![(fx.star, g.clone())],
+        },
+        |d| {
+            if let NodeKind::Shape(s) = &mut node_mut(d, fx.star).kind {
+                s.geometry = g.clone();
+            }
+        },
+    );
+}
+
+#[test]
+fn set_geometry_rejects_non_shapes_and_bad_geometry() {
+    let fx = fixture();
+    rejects(
+        &fx.doc,
+        Command::SetGeometry {
+            items: vec![(fx.group, rect_geom(0.0, 0.0, 1.0, 1.0))],
+        },
+    );
+    rejects(
+        &fx.doc,
+        Command::SetGeometry {
+            items: vec![(fx.star, rect_geom(0.0, 0.0, -1.0, 1.0))],
         },
     );
 }
@@ -958,5 +1027,64 @@ fn invalid_error_message_survives_an_empty_list() {
         CoreError::Invalid(vec![])
             .to_string()
             .contains("0 document invariant")
+    );
+}
+
+// ----- composite -----
+
+#[test]
+fn batch_is_one_step() {
+    let fx = fixture();
+    let t = Transform::translate(5.0, 0.0);
+    let cmd = Command::Batch {
+        label: "Tidy",
+        commands: vec![
+            Command::SetTransform {
+                ids: vec![fx.star],
+                transform: t,
+            },
+            Command::Delete { ids: vec![fx.path] },
+        ],
+    };
+    assert_eq!(cmd.label(), "Tidy");
+    check(&fx.doc, cmd, |d| {
+        node_mut(d, fx.star).transform = t;
+        d.nodes.remove(&fx.path);
+        children_mut(d, fx.layer).retain(|&c| c != fx.path);
+    });
+}
+
+#[test]
+fn batch_applies_nothing_when_a_step_fails() {
+    let fx = fixture();
+    rejects(
+        &fx.doc,
+        Command::Batch {
+            label: "Tidy",
+            commands: vec![
+                Command::Delete { ids: vec![fx.path] },
+                Command::Delete {
+                    ids: vec![new_id(&fx, 0)],
+                },
+            ],
+        },
+    );
+}
+
+#[test]
+fn reparent_within_a_container_keeps_its_clip() {
+    let mut fx = fixture();
+    node_mut(&mut fx.doc, fx.group)
+        .container_mut()
+        .expect("group")
+        .clip = Some(fx.rect);
+    check(
+        &fx.doc,
+        Command::Reparent {
+            ids: vec![fx.ellipse, fx.rect],
+            new_parent: Some(fx.group),
+            index: 0,
+        },
+        |d| *children_mut(d, fx.group) = vec![fx.ellipse, fx.rect],
     );
 }
