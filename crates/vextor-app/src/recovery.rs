@@ -13,6 +13,7 @@
 use std::fs::{self, File, OpenOptions, TryLockError};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use vextor_core::Document;
@@ -24,6 +25,10 @@ pub const INTERVAL: Duration = Duration::from_secs(60);
 
 /// Name of the autosave folder inside the app-data folder.
 const FOLDER: &str = "recovery";
+
+/// Slots claimed by this process so far; part of the slot id so two starts
+/// within one millisecond get their own slots (I-001).
+static STARTS: AtomicU64 = AtomicU64::new(0);
 
 /// This run's autosave slot.
 pub struct Recovery {
@@ -60,7 +65,8 @@ impl Recovery {
         let millis = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_millis());
-        let id = format!("{}-{millis}", std::process::id());
+        let n = STARTS.fetch_add(1, Ordering::Relaxed);
+        let id = format!("{}-{millis}-{n}", std::process::id());
         let lock = OpenOptions::new()
             .write(true)
             .create(true)
@@ -312,6 +318,23 @@ mod tests {
             .expect("writes");
         let (_other, orphans) = Recovery::start(dir.path(), Instant::now()).expect("starts");
         assert!(orphans.is_empty());
+    }
+
+    #[test]
+    fn two_starts_in_the_same_millisecond_get_their_own_slots() {
+        let dir = TestDir::new();
+        // Back-to-back starts land in the same millisecond almost always.
+        let slots: Vec<Recovery> = (0..20)
+            .map(|_| {
+                Recovery::start(dir.path(), Instant::now())
+                    .expect("starts")
+                    .0
+            })
+            .collect();
+        let mut ids: Vec<&str> = slots.iter().map(|r| r.id.as_str()).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), slots.len(), "every start has its own id");
     }
 
     #[test]
