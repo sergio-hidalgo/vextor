@@ -1,6 +1,7 @@
 //! Vextor desktop editor: window, tools, panels and input.
 
 mod app;
+mod artboard;
 mod canvas;
 mod debug;
 mod edit_ops;

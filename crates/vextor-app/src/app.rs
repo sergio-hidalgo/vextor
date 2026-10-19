@@ -154,6 +154,7 @@ impl VextorApp {
             session.editor.clipboard = old.editor.clipboard.take();
         }
         session.fonts = self.fonts.current();
+        self.canvas.cancel_rename();
         self.session = Some(session);
         self.picker = None;
     }
