@@ -13,9 +13,8 @@ mod prompts;
 mod recovery;
 mod select;
 mod session;
-// Wired to the canvas by the Text tool (spec 05c, step 5).
-#[cfg_attr(not(test), expect(dead_code))]
 mod text_edit;
+mod text_tool;
 mod theme;
 mod view;
 mod wordmark;

@@ -1,7 +1,7 @@
 //! Keyboard shortcuts: their keys, and reading them each frame.
 
 use eframe::egui::{self, Key, KeyboardShortcut, Modifiers};
-use vextor_core::Arrange;
+use vextor_core::{Arrange, ToolId};
 
 use super::{Action, VextorApp};
 
@@ -41,6 +41,10 @@ pub(super) const BACKWARD: KeyboardShortcut =
 pub(super) const FRONT: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::ArrowUp);
 pub(super) const BACK: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::ArrowDown);
 
+// Tools: plain letters (every layout has them).
+pub(super) const SELECT_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::V);
+pub(super) const TEXT_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::T);
+
 /// Nudge distance, and with Shift, in document px.
 pub(super) const NUDGE: i32 = 1;
 pub(super) const BIG_NUDGE: i32 = 10;
@@ -78,6 +82,8 @@ impl VextorApp {
                 (DELETE, Action::Delete),
                 (DELETE_FORWARD, Action::Delete),
                 (DESELECT, Action::Deselect),
+                (SELECT_TOOL, Action::Tool(ToolId::Select)),
+                (TEXT_TOOL, Action::Tool(ToolId::Text)),
             ];
             for (shortcut, action) in keys {
                 if i.consume_shortcut(&shortcut) {
@@ -166,6 +172,18 @@ mod tests {
         assert_eq!(
             actions(Key::ArrowDown, CMD_SHIFT),
             vec![Action::Arrange(Arrange::Back)]
+        );
+    }
+
+    #[test]
+    fn letters_pick_tools() {
+        assert_eq!(
+            actions(Key::T, Modifiers::NONE),
+            vec![Action::Tool(ToolId::Text)]
+        );
+        assert_eq!(
+            actions(Key::V, Modifiers::NONE),
+            vec![Action::Tool(ToolId::Select)]
         );
     }
 

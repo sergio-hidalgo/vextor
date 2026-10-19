@@ -42,7 +42,7 @@ impl Canvas {
                 i.key_down(egui::Key::Space),
             )
         });
-        let mut message = None;
+        let mut message: Option<String> = None;
         if pressed
             && response.hovered()
             && !space
@@ -53,7 +53,14 @@ impl Canvas {
             if let Some(id) = ui.ctx().memory(egui::Memory::focused) {
                 ui.ctx().memory_mut(|m| m.surrender_focus(id));
             }
-            self.tool.press(session, to_doc(p), mods, view.zoom);
+            let (used, text_message) = self.text_press(ui.ctx(), session, to_doc(p), mods.shift);
+            message = text_message;
+            if !used {
+                self.tool.press(session, to_doc(p), mods, view.zoom);
+            }
+        }
+        if self.is_editing_text() {
+            self.text_drag(session, at.filter(|_| down).map(to_doc), down);
         }
         if self.tool.is_dragging() {
             if down && let Some(p) = at {
@@ -62,6 +69,15 @@ impl Canvas {
             if released || !down {
                 self.tool.release(session);
             }
+        }
+        // After the selection tool's release, which closes its own gesture.
+        if response.double_clicked()
+            && !space
+            && session.editor.tool == vextor_core::ToolId::Select
+            && !self.is_editing_text()
+            && let Some(p) = at
+        {
+            self.text_double_click(session, to_doc(p));
         }
         if response.hovered() && !space {
             self.set_cursor(ui, session, ui.input(|i| i.pointer.hover_pos()).map(to_doc));
@@ -72,7 +88,9 @@ impl Canvas {
     /// Resize arrows over (or dragging) a handle, the move cursor while
     /// moving, and no system cursor where the drawn rotate cursor shows.
     fn set_cursor(&self, ui: &egui::Ui, session: &Session, at: Option<kurbo::Point>) {
-        let cursor = if self.tool.is_moving() {
+        let cursor = if self.is_editing_text() || session.editor.tool == vextor_core::ToolId::Text {
+            Some(egui::CursorIcon::Text)
+        } else if self.tool.is_moving() {
             Some(egui::CursorIcon::Move)
         } else if let Some(h) = self.tool.scaling() {
             Some(resize_cursor(h))
@@ -150,7 +168,7 @@ impl Canvas {
         if let Some(b) = vextor_geom::union_bounds(&session.doc, &session.fonts, selected) {
             let r = screen(b);
             painter.rect_stroke(r, 0.0, Stroke::new(1.0, theme::YELLOW), StrokeKind::Middle);
-            if !self.tool.is_moving() {
+            if !self.tool.is_moving() && session.editor.tool == vextor_core::ToolId::Select {
                 for (_, p) in crate::select::handles(b) {
                     let s = view::doc_to_screen(view, Point::new(p.x, p.y));
                     let handle = egui::Rect::from_center_size(

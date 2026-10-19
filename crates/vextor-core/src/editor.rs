@@ -42,6 +42,8 @@ pub enum Selection {
 pub enum ToolId {
     #[default]
     Select,
+    /// Places and edits text (spec 05c).
+    Text,
 }
 
 /// Canvas zoom and pan.

@@ -169,6 +169,21 @@ impl FontDb {
             .or_else(|| self.families.first().map(String::as_str))
     }
 
+    /// The font file of `family`'s regular face (or its nearest) and the
+    /// face's index in it, to show the family's name in its own face.
+    #[must_use]
+    pub fn sample_face(&self, family: &str) -> Option<(Arc<Vec<u8>>, u32)> {
+        let face = self.resolve(&FontSpec {
+            family: family.to_owned(),
+            weight: 400,
+            italic: false,
+        })?;
+        if face.missing {
+            return None;
+        }
+        self.face_data(face.id)
+    }
+
     /// The bytes of the file holding face `id`, and the face's index in it.
     pub(crate) fn face_data(&self, id: fontdb::ID) -> Option<(Arc<Vec<u8>>, u32)> {
         let index = self.db.face(id)?.index;

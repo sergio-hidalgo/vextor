@@ -5,16 +5,40 @@ use eframe::egui;
 use kurbo::{Affine, Rect};
 use vextor_geom::{rotation_degrees, union_bounds};
 
+use vextor_core::ToolId;
+
 use crate::edit_ops;
 use crate::session::Session;
 
-/// Tools (left). Only selection exists until the drawing tools arrive.
-pub fn tools(ui: &mut egui::Ui) {
+mod text;
+
+pub use text::recent_families;
+
+/// Tools (left): the active one is highlighted. Returns the tool clicked.
+pub fn tools(ui: &mut egui::Ui, active: Option<ToolId>) -> Option<ToolId> {
     ui.add_space(6.0);
+    let mut picked = None;
     ui.vertical_centered(|ui| {
-        ui.add(egui::Button::selectable(true, "V").min_size(egui::vec2(32.0, 32.0)))
-            .on_hover_text("Select (V)");
+        for (tool, key, hint) in [
+            (ToolId::Select, "V", "Select (V)"),
+            (
+                ToolId::Text,
+                "T",
+                "Text (T): click to add a label, then type",
+            ),
+        ] {
+            let button = egui::Button::selectable(active == Some(tool), key)
+                .min_size(egui::vec2(32.0, 32.0));
+            if ui
+                .add_enabled(active.is_some(), button)
+                .on_hover_text(hint)
+                .clicked()
+            {
+                picked = Some(tool);
+            }
+        }
     });
+    picked
 }
 
 /// Inspector and Layers (right). Returns a message for the user when an
@@ -71,7 +95,10 @@ fn inspector(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
             }
             ui.end_row();
         });
-    let change = edit?;
+    let text_message = text::section(ui, s);
+    let Some(change) = edit else {
+        return text_message;
+    };
     let keep_ratio = edit_ops::has_text(&s.doc, &ids);
     let (affine, label) = change.affine(b, keep_ratio);
     match change {

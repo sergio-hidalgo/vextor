@@ -343,9 +343,9 @@ fn apply(s: &mut Session, cmd: Command) -> Result<(), String> {
     s.apply(cmd).map_err(|e| format!("{label} failed: {e}"))
 }
 
-/// Where a paste goes: above the topmost selected object, else on top of
-/// the topmost visible, unlocked layer.
-fn paste_target(s: &Session) -> Option<(NodeId, usize)> {
+/// Where a paste (or a new object) goes: above the topmost selected
+/// object, else on top of the topmost visible, unlocked layer.
+pub(crate) fn paste_target(s: &Session) -> Option<(NodeId, usize)> {
     if let Some(&top) = s.selected().last()
         && let Some(Parent::Node(p)) = s.doc.parent_of(top)
     {

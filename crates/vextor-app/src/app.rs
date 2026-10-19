@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use eframe::egui;
-use vextor_core::Arrange;
+use vextor_core::{Arrange, ToolId};
 use vextor_geom::Align;
 
 use self::file_flow::Then;
@@ -49,6 +49,7 @@ enum Action {
     Distribute { horizontal: bool },
     Flip { horizontal: bool },
     Nudge { dx: i32, dy: i32 },
+    Tool(ToolId),
 }
 
 /// Editor root.
@@ -141,6 +142,13 @@ impl VextorApp {
     }
 
     fn run(&mut self, action: Action) {
+        // Anything but a view change ends a text edit first, so it is one
+        // undo step of its own (⌘Z then undoes the whole edit).
+        if !matches!(action, Action::Fit | Action::ActualSize)
+            && let Some(s) = self.session.as_mut()
+        {
+            self.canvas.finish_text(s);
+        }
         match action {
             Action::New => self.request(Then::New),
             Action::Open => self.request(Then::Open),
@@ -207,6 +215,10 @@ impl VextorApp {
             Action::Distribute { horizontal } => edit_ops::distribute(s, *horizontal),
             Action::Flip { horizontal } => edit_ops::flip(s, *horizontal),
             Action::Nudge { dx, dy } => edit_ops::nudge(s, f64::from(*dx), f64::from(*dy)),
+            Action::Tool(tool) => {
+                s.editor.tool = *tool;
+                Ok(())
+            }
             _ => Ok(()),
         };
         if let Err(e) = result {
@@ -237,7 +249,9 @@ impl eframe::App for VextorApp {
         self.handle_close(&ctx);
         let prompt_open = self.confirm.is_some() || !self.orphans.is_empty();
         if !prompt_open {
-            let editing = self.session.is_some() && self.picker.is_none();
+            // While text is typed, letters and Edit keys belong to it.
+            let editing =
+                self.session.is_some() && self.picker.is_none() && !self.canvas.is_editing_text();
             for action in Self::shortcuts(&ctx, editing) {
                 self.run(action);
             }
@@ -256,7 +270,16 @@ impl eframe::App for VextorApp {
         egui::Panel::left("tools")
             .resizable(false)
             .exact_size(48.0)
-            .show(ui, panels::tools);
+            .show(ui, |ui| {
+                let active = self
+                    .session
+                    .as_ref()
+                    .filter(|_| self.picker.is_none())
+                    .map(|s| s.editor.tool);
+                if let Some(tool) = panels::tools(ui, active) {
+                    self.run(Action::Tool(tool));
+                }
+            });
         egui::Panel::right("inspector")
             .resizable(true)
             .default_size(240.0)
