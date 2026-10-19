@@ -21,6 +21,7 @@ use crate::session::Session;
 use crate::text_tool::TextTool;
 use crate::view;
 
+mod artboard_label;
 mod drag_layers;
 mod selection;
 mod text;
@@ -57,6 +58,8 @@ pub struct Canvas {
     drag_layers: Option<drag_layers::DragLayers>,
     /// Text placing and editing (spec 05c).
     text: TextTool,
+    /// An artboard label being renamed (spec 05e).
+    rename: Option<artboard_label::Rename>,
 }
 
 impl Canvas {
@@ -81,25 +84,29 @@ impl Canvas {
             self.fit(session);
             session.needs_fit = false;
         }
-        let typing = self.is_editing_text();
+        let typing = self.is_editing_text() || self.rename.is_some();
         handle_input(ui, &response, rect, &mut session.editor.view, typing);
         let key_message = self.text_keys(ui, session);
-        let message = self
-            .tool_input(ui, &response, rect, session)
-            .or(key_message);
+        let message = if self.label_input(ui, &response, rect, session) {
+            key_message
+        } else {
+            self.tool_input(ui, &response, rect, session)
+                .or(key_message)
+        };
 
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
         let current = session.editor.view;
         self.draw_checkerboards(ui.ctx(), &painter, rect.min, session);
         self.draw_document(ui, &painter, rect, session);
-        draw_artboard_outlines(ui, &painter, rect.min, session);
+        draw_artboard_outlines(ui, &painter, rect.min, session, self.renaming());
         if self.is_editing_text() {
             self.draw_text_overlay(&painter, rect.min, session);
         } else {
             self.draw_selection(ui, &painter, &response, rect, session);
         }
         self.draw_status(ui, &painter, rect, current);
+        self.rename_ui(ui, rect, session);
         self.last_view = Some(current);
         message
     }
@@ -281,14 +288,25 @@ fn handle_input(
     }
 }
 
-fn draw_artboard_outlines(ui: &egui::Ui, painter: &Painter, origin: Pos2, session: &Session) {
+/// Each artboard's outline and name label, except the label of `renaming`
+/// (its rename field stands there instead).
+fn draw_artboard_outlines(
+    ui: &egui::Ui,
+    painter: &Painter,
+    origin: Pos2,
+    session: &Session,
+    renaming: Option<vextor_core::ArtboardId>,
+) {
     let stroke = Stroke::new(1.0, ui.visuals().weak_text_color());
-    let font = egui::FontId::proportional(11.0);
+    let font = egui::FontId::proportional(artboard_label::LABEL_FONT);
     for artboard in &session.doc.artboards {
         let r = screen_rect(session.editor.view, origin, artboard.rect);
         painter.rect_stroke(r, 0.0, stroke, StrokeKind::Outside);
+        if renaming == Some(artboard.id) {
+            continue;
+        }
         painter.text(
-            r.left_top() - egui::vec2(0.0, 4.0),
+            r.left_top() - egui::vec2(0.0, artboard_label::LABEL_GAP),
             egui::Align2::LEFT_BOTTOM,
             &artboard.name,
             font.clone(),

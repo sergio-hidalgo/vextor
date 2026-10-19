@@ -54,6 +54,8 @@ transparent artboards and grey around them.
 | Zoom at the pointer         | pinch, or `⌘`-scroll                       |
 | Pan                         | two-finger scroll, space-drag, middle-drag |
 | Fit artboard / actual size  | `⌘0` / `⌘1` (View menu)                    |
+| Rename the artboard         | double-click its name above it; `Enter` or click elsewhere keeps it, `Esc` cancels (up to 64 characters) |
+| Artboard name, background   | Inspector ▸ Artboard, with nothing selected: Name, and Background on (starts white) with a colour; off is transparent |
 | Undo / redo                 | `⌘Z` / `⇧⌘Z` (Edit menu shows what)        |
 
 ### Selecting and transforming

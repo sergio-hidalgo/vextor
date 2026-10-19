@@ -225,7 +225,7 @@ fn frame_fields(ui: &mut egui::Ui, s: &mut Session, t: &Text, edit: &mut Option<
 
 /// A section title with a tick box that turns the section on and off.
 /// Returns true when it was clicked.
-fn section_toggle(ui: &mut egui::Ui, title: &str, on: bool) -> bool {
+pub(super) fn section_toggle(ui: &mut egui::Ui, title: &str, on: bool) -> bool {
     ui.add_space(8.0);
     let mut checked = on;
     let clicked = ui
@@ -272,7 +272,7 @@ fn number(
 }
 
 /// A hex field with a swatch (spec 09's paint picker replaces it).
-fn color_field(ui: &mut egui::Ui, id: &str, current: Option<Rgba>) -> Option<Rgba> {
+pub(super) fn color_field(ui: &mut egui::Ui, id: &str, current: Option<Rgba>) -> Option<Rgba> {
     let mut picked = None;
     ui.horizontal(|ui| {
         let color = current.unwrap_or(Rgba::BLACK);

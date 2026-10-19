@@ -26,6 +26,7 @@ const RIGHT_MARGIN: i8 = 10;
 const LAYERS_HEIGHT: f32 = 160.0;
 
 mod arrange;
+mod artboard;
 mod fonts;
 mod restyle;
 mod text;
@@ -124,12 +125,14 @@ fn inspector_sections(
     panel_title(ui, "Inspector");
     let mut actions = Vec::new();
     let message = if let Some(s) = session {
-        let message = inspector(ui, s);
-        if !s.selected().is_empty() {
-            let can = edit_ops::can(s);
-            arrange::align_section(ui, can, to_artboard, &mut actions);
-            arrange::group_section(ui, can, &mut actions);
+        if s.selected().is_empty() {
+            artboard::section(ui, s);
+            return (None, actions);
         }
+        let message = inspector(ui, s);
+        let can = edit_ops::can(s);
+        arrange::align_section(ui, can, to_artboard, &mut actions);
+        arrange::group_section(ui, can, &mut actions);
         message
     } else {
         ui.weak("Nothing selected.");
