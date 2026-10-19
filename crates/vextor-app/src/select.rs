@@ -291,6 +291,13 @@ impl SelectTool {
                     return Ok(());
                 }
                 *moved = true;
+                // Text scales rather than stretches: Shift is implied.
+                let mods = Mods {
+                    shift: mods.shift
+                        || (matches!(kind, Kind::Scale(_))
+                            && crate::edit_ops::has_text(before, ids)),
+                    ..mods
+                };
                 let (change, label) = transform_for(*kind, *bounds, *start, p, mods);
                 *last = Some(change);
                 // A scale is baked into the shapes so strokes keep their
@@ -412,6 +419,43 @@ mod tests {
         .expect("drags");
         t.drag_to(s, to, mods, 1.0).expect("drags");
         t.release(s);
+    }
+
+    #[test]
+    fn scaling_text_keeps_its_proportions() {
+        let mut doc = new_document("a", 400.0, 400.0);
+        let layer = doc.layers[0];
+        let id = doc.alloc_node_id();
+        doc.apply(Command::Insert {
+            parent: Some(layer),
+            index: 0,
+            nodes: vec![Node::new(
+                id,
+                NodeKind::Text(vextor_core::Text::new("Hi", "Inter")),
+            )],
+        })
+        .expect("inserts");
+        let mut s = Session::new(doc);
+        s.select(vec![id]);
+        let b = bounds(&s, id);
+        let mut t = SelectTool::default();
+        // Drag the SE corner right only: the height follows.
+        let corner = Point::new(b.x1, b.y1);
+        drag(
+            &mut t,
+            &mut s,
+            corner,
+            corner + kurbo::Vec2::new(b.width(), 0.0),
+            NONE,
+        );
+        let after = bounds(&s, id);
+        assert!((after.width() - 2.0 * b.width()).abs() < 1e-6);
+        assert!((after.height() - 2.0 * b.height()).abs() < 1e-6);
+        let NodeKind::Text(text) = &s.doc.nodes[&id].kind else {
+            panic!("still text");
+        };
+        assert!((text.size - 32.0).abs() < 1e-9);
+        assert_eq!(s.edit_menu().undo, Some("Scale"));
     }
 
     #[test]

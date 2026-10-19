@@ -6,10 +6,13 @@
 //! Each shape's new local transform is split (polar decomposition) into a
 //! rigid part — rotation or mirror, plus position — kept as its transform,
 //! and a stretch applied to its points. Groups pass the resize down to the
-//! shapes inside; images keep a stretched transform.
+//! shapes inside; images keep a stretched transform. Text keeps its rigid
+//! transform and scales its font size and letter spacing by the stretch's
+//! mean scale, so it keeps its proportions (frame padding, corner radii and
+//! stroke widths stay as they are).
 
 use kurbo::{Affine, Vec2};
-use vextor_core::{Document, Geometry, NodeId, NodeKind, Path, Point, Rect, Transform};
+use vextor_core::{Document, Geometry, NodeId, NodeKind, Path, Point, Rect, Text, Transform};
 
 use crate::convert::geometry_to_path;
 use crate::hit::{from_affine, to_affine};
@@ -17,12 +20,14 @@ use crate::hit::{from_affine, to_affine};
 /// Deepest nesting followed, matching the renderer's guard.
 const MAX_DEPTH: usize = 64;
 
-/// The edits that resize objects: new transforms (shapes and images) and
-/// new geometries (shapes whose stretch changed).
+/// The edits that resize objects: new transforms (shapes, images, text),
+/// new geometries (shapes whose stretch changed) and rescaled text.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Resized {
     pub transforms: Vec<(NodeId, Transform)>,
     pub geometries: Vec<(NodeId, Geometry)>,
+    /// Text objects with their new size and letter spacing.
+    pub texts: Vec<(NodeId, Text)>,
 }
 
 /// The edits that apply `change` (document space, typically a scale from
@@ -63,8 +68,22 @@ fn walk(
                 walk(doc, child, world, change, depth + 1, out);
             }
         }
-        // Resizing scales the font size from spec 05c, step 5.
-        NodeKind::Text(_) => {}
+        NodeKind::Text(text) => {
+            let new_local = parent.inverse() * change * parent * local;
+            let (rigid, stretch) = polar(new_local);
+            let t = from_affine(rigid);
+            let k = stretch.determinant().abs().sqrt();
+            if !t.is_finite() || !k.is_finite() || k < vextor_core::EPS {
+                return;
+            }
+            out.transforms.push((id, t));
+            if (k - 1.0).abs() > 1e-9 {
+                let mut scaled = text.clone();
+                scaled.size *= k;
+                scaled.letter_spacing *= k;
+                out.texts.push((id, scaled));
+            }
+        }
         NodeKind::Image(_) => {
             let t = from_affine(parent.inverse() * change * parent * local);
             if t.is_finite() {

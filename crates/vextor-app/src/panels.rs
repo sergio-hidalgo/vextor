@@ -72,7 +72,8 @@ fn inspector(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
             ui.end_row();
         });
     let change = edit?;
-    let (affine, label) = change.affine(b);
+    let keep_ratio = edit_ops::has_text(&s.doc, &ids);
+    let (affine, label) = change.affine(b, keep_ratio);
     match change {
         Change::W(_) | Change::H(_) => edit_ops::resize(s, affine),
         _ => edit_ops::transform(s, affine, label),
@@ -92,8 +93,9 @@ enum Change {
 }
 
 impl Change {
-    /// The document-space change for box `b`, and its undo label.
-    fn affine(self, b: Rect) -> (Affine, &'static str) {
+    /// The document-space change for box `b`, and its undo label. With
+    /// `keep_ratio` (text selected) W and H scale both sides alike.
+    fn affine(self, b: Rect, keep_ratio: bool) -> (Affine, &'static str) {
         let about = |sx: f64, sy: f64| {
             Affine::translate((b.x0, b.y0))
                 * Affine::scale_non_uniform(sx, sy)
@@ -102,8 +104,14 @@ impl Change {
         match self {
             Self::X(x) => (Affine::translate((x - b.x0, 0.0)), "Move"),
             Self::Y(y) => (Affine::translate((0.0, y - b.y0)), "Move"),
-            Self::W(w) => (about(w.max(0.01) / b.width(), 1.0), "Resize"),
-            Self::H(h) => (about(1.0, h.max(0.01) / b.height()), "Resize"),
+            Self::W(w) => {
+                let k = w.max(0.01) / b.width();
+                (about(k, if keep_ratio { k } else { 1.0 }), "Resize")
+            }
+            Self::H(h) => {
+                let k = h.max(0.01) / b.height();
+                (about(if keep_ratio { k } else { 1.0 }, k), "Resize")
+            }
             Self::Rotation(deg) => (Affine::rotate_about(deg.to_radians(), b.center()), "Rotate"),
         }
     }
@@ -151,7 +159,7 @@ mod tests {
 
     #[test]
     fn size_fields_scale_from_the_top_left() {
-        let (a, _) = Change::W(80.0).affine(B);
+        let (a, _) = Change::W(80.0).affine(B, false);
         assert_eq!(
             a * kurbo::Point::new(10.0, 20.0),
             kurbo::Point::new(10.0, 20.0)
@@ -163,8 +171,17 @@ mod tests {
     }
 
     #[test]
+    fn size_fields_keep_proportions_for_text() {
+        let (a, _) = Change::H(40.0).affine(B, true);
+        assert_eq!(
+            a * kurbo::Point::new(50.0, 40.0),
+            kurbo::Point::new(90.0, 60.0)
+        );
+    }
+
+    #[test]
     fn position_fields_move_the_box_there() {
-        let (a, label) = Change::Y(0.0).affine(B);
+        let (a, label) = Change::Y(0.0).affine(B, false);
         assert_eq!(
             a * kurbo::Point::new(10.0, 20.0),
             kurbo::Point::new(10.0, 0.0)
@@ -174,7 +191,7 @@ mod tests {
 
     #[test]
     fn rotation_turns_about_the_centre() {
-        let (a, _) = Change::Rotation(180.0).affine(B);
+        let (a, _) = Change::Rotation(180.0).affine(B, false);
         let p = a * kurbo::Point::new(10.0, 20.0);
         assert!((p - kurbo::Point::new(50.0, 40.0)).hypot() < 1e-9);
     }

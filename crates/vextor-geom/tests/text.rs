@@ -375,3 +375,84 @@ fn a_label_is_picked_anywhere_in_its_box() {
     );
     assert_eq!(touching(&doc, &fonts, Rect::new(0.0, 0.0, 80.0, 40.0)), []);
 }
+
+// ----- resize -----
+
+#[test]
+fn resizing_text_scales_its_size_about_the_box_corner() {
+    let mut doc = Document::new("t");
+    let layer = doc.layers[0];
+    let id = doc.alloc_node_id();
+    let mut t = text("HH");
+    t.letter_spacing = 2.0;
+    let mut node = Node::new(id, NodeKind::Text(t));
+    node.transform = Transform([1.0, 0.0, 0.0, 1.0, 10.0, 20.0]);
+    doc.apply(vextor_core::Command::Insert {
+        parent: Some(layer),
+        index: 0,
+        nodes: vec![node],
+    })
+    .expect("inserts");
+    let fonts = Fonts::new(Arc::new(db()));
+    let before = bounds(&doc, &fonts, id).expect("visible");
+
+    // Twice as big, about the box's top-left corner.
+    let change = kurbo::Affine::translate((before.x0, before.y0))
+        * kurbo::Affine::scale(2.0)
+        * kurbo::Affine::translate((-before.x0, -before.y0));
+    let r = vextor_geom::resize(&doc, &[id], change);
+    assert_eq!(r.geometries, []);
+    let [(tid, scaled)] = r.texts.as_slice() else {
+        panic!("one text rescaled");
+    };
+    assert_eq!(*tid, id);
+    assert_close(scaled.size, 200.0);
+    assert_close(scaled.letter_spacing, 4.0);
+    assert_close(scaled.line_height, 1.2);
+    let [(_, moved)] = r.transforms.as_slice() else {
+        panic!("one transform");
+    };
+    assert_eq!(
+        moved.0[..4],
+        [1.0, 0.0, 0.0, 1.0],
+        "no stretch in the transform"
+    );
+
+    doc.apply(vextor_core::Command::Batch {
+        label: "Resize",
+        commands: vec![
+            vextor_core::Command::SetTransforms {
+                items: r.transforms.clone(),
+            },
+            vextor_core::Command::SetTextStyle {
+                ids: vec![id],
+                font: scaled.font.clone(),
+                size: scaled.size,
+                line_height: scaled.line_height,
+                letter_spacing: scaled.letter_spacing,
+                align: scaled.align,
+            },
+        ],
+    })
+    .expect("applies");
+    let after = bounds(&doc, &fonts, id).expect("visible");
+    assert_close(after.x0, before.x0);
+    assert_close(after.y0, before.y0);
+    assert_close(after.width(), 2.0 * before.width());
+    assert_close(after.height(), 2.0 * before.height());
+}
+
+#[test]
+fn an_uneven_stretch_scales_text_by_its_mean() {
+    let mut doc = Document::new("t");
+    let layer = doc.layers[0];
+    let id = doc.alloc_node_id();
+    doc.apply(vextor_core::Command::Insert {
+        parent: Some(layer),
+        index: 0,
+        nodes: vec![Node::new(id, NodeKind::Text(text("H")))],
+    })
+    .expect("inserts");
+    let r = vextor_geom::resize(&doc, &[id], kurbo::Affine::scale_non_uniform(4.0, 1.0));
+    assert_close(r.texts[0].1.size, 200.0);
+}

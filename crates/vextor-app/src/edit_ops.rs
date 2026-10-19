@@ -293,7 +293,28 @@ pub fn resize_commands(doc: &Document, ids: &[NodeId], change: Affine) -> Vec<Co
             items: r.geometries,
         });
     }
+    for (id, t) in r.texts {
+        commands.push(Command::SetTextStyle {
+            ids: vec![id],
+            font: t.font,
+            size: t.size,
+            line_height: t.line_height,
+            letter_spacing: t.letter_spacing,
+            align: t.align,
+        });
+    }
     commands
+}
+
+/// True when any of `ids`, or anything inside them, is a text object:
+/// resizing then keeps proportions (text scales, it does not stretch).
+#[must_use]
+pub fn has_text(doc: &Document, ids: &[NodeId]) -> bool {
+    ids.iter().any(|&id| {
+        doc.subtree(id)
+            .iter()
+            .any(|n| matches!(doc.nodes.get(n).map(|n| &n.kind), Some(NodeKind::Text(_))))
+    })
 }
 
 /// Applies `change` (document space) to every selected object, as one
