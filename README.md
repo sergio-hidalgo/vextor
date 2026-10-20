@@ -7,7 +7,7 @@ SVG, HTML or JSX out of them.
 **Status:** the editor window, canvas, document model and `.vxtr`
 files are in place. You can create, open and save documents, draw
 rectangles, ellipses, polygons, stars and lines, select and transform
-objects, and add text labels; the pen tool arrives in a later milestone.
+objects, add text labels, draw paths with the pen and edit their nodes.
 
 ## Requirements
 
@@ -74,8 +74,9 @@ turn, and after a crash every unsaved document is offered back.
 
 ### Selecting and transforming
 
-Tools (left panel): Select (`V`), Text (`T`), and the shape tools
-Rectangle (`R`), Ellipse (`E`), Polygon (`G`), Star (`S`) and Line (`L`).
+Tools (left panel): Select (`V`), Nodes (`A`), Pen (`P`), Text (`T`), and
+the shape tools Rectangle (`R`), Ellipse (`E`), Polygon (`G`), Star (`S`)
+and Line (`L`).
 
 | Action                              | How                                                    |
 | :---------------------------------- | :----------------------------------------------------- |
@@ -115,6 +116,38 @@ New shapes take the last fill and stroke given to a shape in the document
 black, and no fill. The corner dots show only when the rectangle is at
 least 40 points on screen; zoom in for small ones. Each drag, dialog or
 inspector change is one undo step.
+
+### Pen and paths
+
+The pen draws paths node by node, with straight and curved segments. The
+Nodes tool then edits any path: its nodes, handles and segments. Other
+shapes are never converted behind your back: Object ▸ Convert to Path
+(`⇧⌘P`) first, then edit their nodes.
+
+| Action                        | How                                                        |
+| :---------------------------- | :--------------------------------------------------------- |
+| Straight / curved node        | Pen (`P`): click / click and drag (symmetric handles); `⌥` while dragging moves only the outgoing handle (a corner) |
+| Keep to 45° steps             | hold `⇧` while clicking or dragging a handle (the document's angle step) |
+| Close the path                | click the first node (a ring shows on it); drag there to curve the closing segment |
+| End the path open             | `Enter` or `Esc` (any other command or tool also ends it first) |
+| Remove the last node          | `⌫` while drawing                                          |
+| Continue an open path         | with the pen, start on one of its open ends (a ring shows)  |
+| Join two paths                | while drawing, click another open path's end; or select two open paths, or two end nodes of one path, and Join (`⌘J`) |
+| Add a node                    | pen click on the selected path's segment (a `+` shows), or `+` on a selected segment: the shape does not change |
+| Edit nodes                    | Nodes (`A`), or double-click a path: click / `⇧`-click / drag a box to select nodes; drag or arrows to move them (`⇧` 45° steps) |
+| Handles                       | drag a handle: a smooth node's other handle follows; `⌥`-drag moves it alone (the node becomes a corner) |
+| Node type                     | double-click a node: corner → smooth → symmetric → corner (sharp, no handles); or Inspector ▸ Node |
+| Segments                      | click one to select it; `C` toggles straight ↔ curve; drag a segment to bend it through the pointer |
+| Delete nodes                  | `⌫`: the path stays joined around them; deleting the last ones deletes the path |
+| Round a corner node           | select corner nodes between straight segments and drag the dot inside one: every selected corner rounds; or Inspector ▸ Node ▸ Corner radius |
+| Close, open, join, split, reverse | Object ▸ Path, right-click on the canvas, or Inspector ▸ Path |
+| Exact node position, handles  | Inspector ▸ Node: X, Y, type, each handle's length and angle |
+| Leave node editing            | `Esc` (nodes → path → Select tool), or double-click empty canvas |
+
+Each drawn path, drag, key press or inspector change is one undo step.
+A new path takes the last style given to a shape, with a 1 px black
+stroke when that style has none, so open segments show. The pen stays
+active for the next path.
 
 ### Text
 
@@ -198,7 +231,7 @@ VEXTOR_DEBUG_MENU=1 cargo run -p vextor-app --release
 | Crate           | Holds                                                      |
 | :-------------- | :--------------------------------------------------------- |
 | `vextor-core`   | document model, commands, undo history, `.vxtr` bytes (no UI, no file I/O) |
-| `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`); later snapping, booleans |
+| `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, path editing (segment hit-tests, split, bend, joins), text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`); later snapping, booleans |
 | `vextor-svg`    | SVG export and import                                      |
 | `vextor-render` | rasterising documents for the canvas (`tiny-skia`), sample documents |
 | `vextor-app`    | the desktop app (`eframe`/`egui`), file dialogs (`rfd`), autosave |

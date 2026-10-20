@@ -4,6 +4,7 @@ use eframe::egui::{self, Key, KeyboardShortcut, Modifiers};
 use vextor_core::{Arrange, ToolId};
 
 use super::{Action, VextorApp};
+use crate::path_ops::PathAction;
 
 pub(super) const NEW: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::N);
 pub(super) const OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
@@ -58,6 +59,11 @@ pub(super) const CONVERT_TO_PATH: KeyboardShortcut = KeyboardShortcut::new(CMD_S
 pub(super) const SELECT_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::V);
 pub(super) const TEXT_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::T);
 pub(super) const PEN_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::P);
+pub(super) const NODE_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::A);
+// Path editing (spec 07).
+pub(super) const JOIN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::J);
+pub(super) const TOGGLE_SEGMENT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::C);
+pub(super) const ADD_NODE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::Plus);
 /// The shape tools' keys, in `ToolId::SHAPES` order.
 pub(super) const SHAPE_TOOLS: [(KeyboardShortcut, ToolId); 5] = [
     (KeyboardShortcut::new(Modifiers::NONE, Key::R), ToolId::Rect),
@@ -99,6 +105,9 @@ impl VextorApp {
             }
             let keys = [
                 (OUTLINE_TEXT, Action::OutlineText),
+                (JOIN, Action::Path(PathAction::Join)),
+                (TOGGLE_SEGMENT, Action::Path(PathAction::ToggleSegment)),
+                (ADD_NODE, Action::Path(PathAction::AddNode)),
                 (CONVERT_TO_PATH, Action::ConvertToPath),
                 (PASTE_IN_PLACE, Action::PasteInPlace),
                 (DUPLICATE, Action::Duplicate),
@@ -115,6 +124,7 @@ impl VextorApp {
                 (SELECT_TOOL, Action::Tool(ToolId::Select)),
                 (TEXT_TOOL, Action::Tool(ToolId::Text)),
                 (PEN_TOOL, Action::Tool(ToolId::Pen)),
+                (NODE_TOOL, Action::Tool(ToolId::Node)),
             ];
             let tools = SHAPE_TOOLS.map(|(key, tool)| (key, Action::Tool(tool)));
             for (shortcut, action) in keys.into_iter().chain(tools) {
@@ -227,6 +237,31 @@ mod tests {
         assert_eq!(
             actions(Key::P, Modifiers::NONE),
             vec![Action::Tool(ToolId::Pen)]
+        );
+        assert_eq!(
+            actions(Key::A, Modifiers::NONE),
+            vec![Action::Tool(ToolId::Node)]
+        );
+    }
+
+    #[test]
+    fn path_keys_join_toggle_and_add_nodes() {
+        assert_eq!(
+            actions(Key::J, Modifiers::COMMAND),
+            vec![Action::Path(PathAction::Join)]
+        );
+        assert_eq!(
+            actions(Key::C, Modifiers::NONE),
+            vec![Action::Path(PathAction::ToggleSegment)]
+        );
+        assert_eq!(
+            actions(Key::Plus, Modifiers::NONE),
+            vec![Action::Path(PathAction::AddNode)]
+        );
+        assert_eq!(
+            actions(Key::C, Modifiers::COMMAND),
+            vec![],
+            "⌘C is a copy event"
         );
     }
 

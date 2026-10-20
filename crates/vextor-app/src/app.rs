@@ -161,23 +161,8 @@ impl VextorApp {
         if !matches!(action, Action::Fit | Action::ActualSize) {
             self.finish_text();
         }
-        // While the pen draws, ⌫ removes its last node and Esc ends the
-        // path; anything else ends the path first (⌘Z then undoes it).
-        if self.canvas.pen_drawing()
-            && let Some(s) = self.docs.session_mut()
-        {
-            match action {
-                Action::Delete => {
-                    self.message = self.canvas.pen_backspace(s).or(self.message.take());
-                    return;
-                }
-                Action::Deselect => {
-                    self.canvas.finish_pen(s);
-                    return;
-                }
-                Action::Fit | Action::ActualSize => {}
-                _ => self.canvas.finish_pen(s),
-            }
+        if self.pen_action(&action) {
+            return;
         }
         match action {
             Action::New => self.picker = Some(Picker::default()),

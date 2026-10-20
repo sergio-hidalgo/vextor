@@ -13,18 +13,19 @@ use vextor_geom::{from_vec, to_affine};
 
 use crate::session::Session;
 
+mod action;
 mod nodes;
 mod structure;
 
-#[allow(unused_imports)] // the node tool (next commit) uses the rest
+pub use action::PathAction;
+
 pub use nodes::{
     anchor_in_doc, delete_nodes, insert_in_segment, insert_node, local_point, move_node_to,
     next_type, nudge_nodes, select_all_nodes, set_corner_radius, set_handle, set_node_type,
     set_segment_handles, toggle_segment,
 };
-#[allow(unused_imports)] // the node tool (next commit) uses the rest
 pub use structure::{
-    Join, close, close_target, join, join_target, open, open_target, reverse, reverse_targets,
+    close, close_target, join, join_target, open, open_target, reverse, reverse_targets,
     segment_target, split, split_target,
 };
 

@@ -1,7 +1,9 @@
 //! Scripted pen events → the expected `Path` (spec 07 acceptance).
 
 use kurbo::Point;
-use vextor_core::{NodeId, NodeKind, NodeType, Path, PathNode, Selection, Vec2};
+use vextor_core::{
+    Command, NodeId, NodeKind, NodeType, Path, PathNode, Selection, Transform, Vec2,
+};
 
 use super::*;
 use crate::new_doc::new_document;
@@ -64,7 +66,9 @@ fn run(s: &mut Session, pen: &mut PenTool, events: &[Ev]) {
             Ev::Backspace => {
                 pen.backspace(s).expect("backspace");
             }
-            Ev::Finish => pen.finish(s),
+            Ev::Finish => {
+                pen.finish(s);
+            }
         }
     }
 }
@@ -444,4 +448,46 @@ fn clicking_the_last_node_again_adds_nothing_and_a_drag_reshapes_its_handle() {
     assert_eq!(n[1].kind, NodeType::Corner);
     assert_eq!(n[1].handle_in, Some(Vec2::new(-20.0, 0.0)), "kept");
     assert_eq!(n[1].handle_out, Some(Vec2::new(0.0, 30.0)));
+}
+
+#[test]
+fn ending_a_lone_first_node_reports_the_step_it_took_back() {
+    let mut s = session();
+    let (id, _) = draw(
+        &mut s,
+        &[Ev::Click(0.0, 0.0), Ev::Click(10.0, 0.0), Ev::Finish],
+    );
+    let mut pen = PenTool::default();
+    run(&mut s, &mut pen, &[Ev::Click(200.0, 200.0)]);
+    assert!(pen.finish(&mut s), "⌘Z ending it has done its undo");
+    assert!(
+        s.doc.nodes.contains_key(&id),
+        "the earlier path is untouched"
+    );
+    assert_eq!(s.edit_menu().undo, Some(LABEL), "its step is still there");
+
+    run(
+        &mut s,
+        &mut pen,
+        &[Ev::Click(200.0, 200.0), Ev::Click(250.0, 200.0)],
+    );
+    assert!(!pen.finish(&mut s), "a real path is kept");
+}
+
+#[test]
+fn dragging_out_a_node_previews_from_the_press_time_document() {
+    let mut s = session();
+    let mut pen = PenTool::default();
+    pen.press(&mut s, Point::new(0.0, 0.0), NONE, 1.0)
+        .expect("press");
+    assert!(pen.preview().is_none(), "nothing until it moves");
+    pen.drag_to(&mut s, Point::new(30.0, 0.0), NONE, 1.0)
+        .expect("drag");
+    let (before, id) = pen.preview().expect("dragging");
+    assert!(
+        before.nodes.contains_key(&id),
+        "the node placed by the press"
+    );
+    pen.release(&mut s).expect("release");
+    assert!(pen.preview().is_none());
 }

@@ -140,7 +140,10 @@ fn join_two_ends_of_one_path_and_two_paths() {
         (10.0, 10.0),
     ])]]);
     select_nodes(&mut s, ids[0], vec![at(ids[0], 0, 0), at(ids[0], 0, 2)]);
-    assert!(matches!(join_target(&s), Some(Join::Endpoints(..))));
+    assert!(matches!(
+        join_target(&s),
+        Some(structure::Join::Endpoints(..))
+    ));
     one_undoable_step(&mut s, "Join", join);
     assert!(path(&s, ids[0]).subpaths[0].closed);
 
@@ -149,7 +152,10 @@ fn join_two_ends_of_one_path_and_two_paths() {
         vec![open_path(&[(50.0, 50.0), (12.0, 0.0)])],
     ]);
     s.select(ids.clone());
-    assert_eq!(join_target(&s), Some(Join::Paths(ids[0], ids[1])));
+    assert_eq!(
+        join_target(&s),
+        Some(structure::Join::Paths(ids[0], ids[1]))
+    );
     one_undoable_step(&mut s, JOIN, join);
     assert!(!s.doc.nodes.contains_key(&ids[1]));
     let anchors: Vec<_> = path(&s, ids[0]).subpaths[0]

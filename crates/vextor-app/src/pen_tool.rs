@@ -15,29 +15,19 @@
 //! tools do. If anything else changed the document in between, the path
 //! under way simply ends.
 
-use kurbo::{Affine, Point, Vec2};
-use vextor_core::{
-    Command, Geometry, Node, NodeId, NodeKind, NodeType, Path, PathNode, PathNodeRef, Shape, Style,
-    SubPath, Transform,
-};
+use kurbo::{Point, Vec2};
+use vextor_core::{NodeId, NodeType, PathNode, PathNodeRef};
 use vextor_geom::{
-    SegmentHit, constrain_angle, constrain_vector, from_point, handle_or_none, hit_segment,
-    join_open, open_endpoints, selectable, to_kurbo, transform_subpath,
+    SegmentHit, constrain_angle, constrain_vector, handle_or_none, hit_segment, open_endpoints,
+    selectable, to_kurbo,
 };
 
+use crate::path_ops;
 use crate::session::Session;
-use crate::{edit_ops, path_ops};
 
-/// The style a new pen path gets: the session's default style, with its
-/// stroke (1 px black when there is none) so open segments show.
-#[must_use]
-pub fn new_style(s: &Session) -> Style {
-    let style = s.editor.default_style.clone();
-    Style {
-        stroke: Some(style.stroke.clone().unwrap_or_default()),
-        ..style
-    }
-}
+mod draft;
+
+use draft::Draft;
 
 /// Undo label of drawing a path.
 pub const LABEL: &str = "Draw path";
@@ -64,57 +54,6 @@ pub enum Hover {
     Free,
 }
 
-/// The path being drawn.
-#[derive(Debug)]
-struct Draft {
-    shape: NodeId,
-    subpath: usize,
-    /// The whole path, in the shape's local space.
-    path: Path,
-    /// Document space → the shape's local space.
-    to_local: Affine,
-    /// Nodes the subpath had before drawing (continuing a path): `⌫`
-    /// never removes those.
-    kept: usize,
-    /// The path as it was before drawing on it (continuing a path).
-    original: Option<Path>,
-    /// Where a new shape goes (parent, index); `None` when continuing.
-    insert_at: Option<(NodeId, usize)>,
-    style: Style,
-    /// The session revision after the tool's last change.
-    revision: u64,
-    /// The top undo step is this path's own.
-    recorded: bool,
-}
-
-impl Draft {
-    fn nodes(&self) -> &[PathNode] {
-        &self.path.subpaths[self.subpath].nodes
-    }
-
-    fn nodes_mut(&mut self) -> &mut Vec<PathNode> {
-        &mut self.path.subpaths[self.subpath].nodes
-    }
-
-    fn to_doc(&self) -> Affine {
-        self.to_local.inverse()
-    }
-
-    fn local(&self, p: Point) -> vextor_core::Point {
-        from_point(self.to_local * p)
-    }
-
-    fn local_vec(&self, v: Vec2) -> Vec2 {
-        self.to_local * (Point::ZERO + v) - self.to_local * Point::ZERO
-    }
-
-    fn last_doc(&self) -> Option<Point> {
-        self.nodes()
-            .last()
-            .map(|n| self.to_doc() * to_kurbo(n.anchor))
-    }
-}
-
 /// What the press under way will do on release.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Pending {
@@ -131,6 +70,8 @@ struct Press {
     start: Point,
     pending: Pending,
     moved: bool,
+    /// The document once the press had placed its node (fast drag).
+    before: Box<vextor_core::Document>,
 }
 
 /// What the canvas draws for the path being drawn (document space).
@@ -302,6 +243,7 @@ impl PenTool {
             start: p,
             pending,
             moved: false,
+            before: Box::new(s.doc.clone()),
         });
         Ok(())
     }
@@ -405,31 +347,31 @@ impl PenTool {
 
     /// Ends the path, left open (`Enter`, `Esc`, another tool…). A new
     /// path of a single node is taken back. The path stays selected.
-    pub fn finish(&mut self, s: &mut Session) {
+    /// Returns true when that took a step back (so a `⌘Z` that ended the
+    /// path has already done its work).
+    pub fn finish(&mut self, s: &mut Session) -> bool {
         self.press = None;
         self.sync(s);
         let Some(d) = &self.draft else {
-            return;
+            return false;
         };
         if d.insert_at.is_some() && d.path.subpaths[d.subpath].nodes.len() < 2 {
-            self.take_back(s);
-            return;
+            return self.take_back(s);
         }
         let shape = d.shape;
         self.draft = None;
         if s.doc.nodes.contains_key(&shape) {
             s.select(vec![shape]);
         }
+        false
     }
 
-    /// Drops the draft, taking back its step when it is still the top one.
-    fn take_back(&mut self, s: &mut Session) {
-        if let Some(d) = self.draft.take()
-            && d.recorded
-            && s.revision() == d.revision
-        {
-            s.undo();
-        }
+    /// While a node is dragged out: the document when the press began and
+    /// the path, for the canvas's fast path.
+    #[must_use]
+    pub fn preview(&self) -> Option<(&vextor_core::Document, NodeId)> {
+        let press = self.press.as_ref().filter(|p| p.moved)?;
+        Some((&press.before, self.draft.as_ref()?.shape))
     }
 
     /// Ends the draft when something else changed the document since the
@@ -443,172 +385,6 @@ impl PenTool {
             self.draft = None;
             self.press = None;
         }
-    }
-
-    /// Starts a new path with one node at `p`.
-    fn start(&mut self, s: &mut Session, p: Point) -> Result<(), String> {
-        let insert_at = edit_ops::paste_target(s)
-            .ok_or_else(|| "Draw failed: every layer is hidden or locked".to_owned())?;
-        let node = PathNode::corner(p.x, p.y);
-        self.draft = Some(Draft {
-            shape: s.doc.alloc_node_id(),
-            subpath: 0,
-            path: Path {
-                subpaths: vec![SubPath {
-                    nodes: vec![node],
-                    closed: false,
-                }],
-                fill_rule: vextor_core::FillRule::NonZero,
-            },
-            // The new shape's transform undoes its parent's: local space is
-            // document space.
-            to_local: Affine::IDENTITY,
-            kept: 0,
-            original: None,
-            insert_at: Some(insert_at),
-            style: new_style(s),
-            revision: s.revision(),
-            recorded: false,
-        });
-        self.record(s, Vec::new())
-    }
-
-    /// Continues the open subpath ending at `r`, drawing on from that end.
-    fn continue_from(&mut self, s: &mut Session, r: PathNodeRef) {
-        let Some(mut path) = s.path_of(r.shape).cloned() else {
-            return;
-        };
-        let sp = &mut path.subpaths[r.subpath];
-        if r.index == 0 && sp.nodes.len() > 1 {
-            sp.reverse(); // draw on from the end that was clicked
-        }
-        let kept = sp.nodes.len();
-        let original = s.path_of(r.shape).cloned();
-        let style = match &s.doc.nodes[&r.shape].kind {
-            NodeKind::Shape(shape) => shape.style.clone(),
-            _ => Style::default(),
-        };
-        self.draft = Some(Draft {
-            shape: r.shape,
-            subpath: r.subpath,
-            path,
-            to_local: path_ops::world(s, r.shape).inverse(),
-            kept,
-            original,
-            insert_at: None,
-            style,
-            revision: s.revision(),
-            recorded: false,
-        });
-        s.select(vec![r.shape]);
-    }
-
-    /// Adds a corner node at `p` (document space).
-    fn add_node(&mut self, s: &mut Session, p: Point) -> Result<(), String> {
-        if let Some(d) = &mut self.draft {
-            let at = d.local(p);
-            d.nodes_mut().push(PathNode::corner(at.x, at.y));
-        }
-        self.record(s, Vec::new())
-    }
-
-    /// Joins the subpath ending at `r` onto the one drawn, whose last node
-    /// was placed on `r`. Another path's subpath moves into this path.
-    fn join(&mut self, s: &mut Session, r: PathNodeRef) -> Result<(), String> {
-        let Some(d) = &mut self.draft else {
-            return Ok(());
-        };
-        let mut extra = Vec::new();
-        let mut other = if r.shape == d.shape {
-            d.path.subpaths[r.subpath].clone()
-        } else {
-            let Some(path) = s.path_of(r.shape) else {
-                return Ok(());
-            };
-            let into = d.to_local * path_ops::world(s, r.shape);
-            if path.subpaths.len() == 1 {
-                extra.push(Command::Delete { ids: vec![r.shape] });
-            } else {
-                let mut rest = path.clone();
-                rest.subpaths.remove(r.subpath);
-                extra.push(Command::SetGeometry {
-                    items: vec![(r.shape, Geometry::Path(rest))],
-                });
-            }
-            transform_subpath(&path.subpaths[r.subpath], into)
-        };
-        if r.index != 0 {
-            other.reverse(); // the joined end comes first
-        }
-        let mut ours = d.path.subpaths[d.subpath].clone();
-        if let Some(tail) = ours.nodes.last_mut() {
-            tail.kind = NodeType::Corner; // keep the handle the drag gave it
-        }
-        d.path.subpaths[d.subpath] = join_open(ours, other);
-        if r.shape == d.shape {
-            d.path.subpaths.remove(r.subpath);
-            if r.subpath < d.subpath {
-                d.subpath -= 1;
-            }
-        }
-        self.record(s, extra)
-    }
-
-    /// Records the draft as the path's one undo step (with `extra`
-    /// commands), replacing the tool's previous step.
-    fn record(&mut self, s: &mut Session, extra: Vec<Command>) -> Result<(), String> {
-        let Some(d) = &mut self.draft else {
-            return Ok(());
-        };
-        if d.recorded && s.revision() == d.revision {
-            s.undo();
-        }
-        if extra.is_empty() && d.original.as_ref() == Some(&d.path) {
-            // Back to the path as it was: no step at all.
-            d.recorded = false;
-            d.revision = s.revision();
-            return Ok(());
-        }
-        let geometry = Geometry::Path(d.path.clone());
-        let main = match d.insert_at {
-            Some((parent, index)) if !s.doc.nodes.contains_key(&d.shape) => {
-                let mut node = Node::new(
-                    d.shape,
-                    NodeKind::Shape(Shape {
-                        geometry,
-                        style: d.style.clone(),
-                    }),
-                );
-                node.transform = s
-                    .doc
-                    .world_transform(parent)
-                    .invert()
-                    .unwrap_or(Transform::IDENTITY);
-                Command::Insert {
-                    parent: Some(parent),
-                    index,
-                    nodes: vec![node],
-                }
-            }
-            _ => Command::SetGeometry {
-                items: vec![(d.shape, geometry)],
-            },
-        };
-        let mut commands = vec![main];
-        commands.extend(extra);
-        let result = s.apply(Command::Batch {
-            label: LABEL,
-            commands,
-        });
-        if let Err(e) = result {
-            self.draft = None;
-            self.press = None;
-            return Err(format!("Draw failed: {e}"));
-        }
-        d.recorded = true;
-        d.revision = s.revision();
-        s.select(vec![d.shape]);
-        Ok(())
     }
 }
 

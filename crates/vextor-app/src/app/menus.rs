@@ -5,11 +5,12 @@ use vextor_core::Arrange;
 use vextor_geom::Align;
 
 use super::keys::{
-    ACTUAL_SIZE, BACK, BACKWARD, CLOSE, CONVERT_TO_PATH, COPY, CUT, DELETE, DUPLICATE, FIT,
-    FORWARD, FRONT, GROUP, NEW, NEXT_DOC, OPEN, OUTLINE_TEXT, PASTE, PASTE_IN_PLACE, PREV_DOC,
-    REDO, SAVE, SAVE_AS, SELECT_ALL, UNDO, UNGROUP,
+    ACTUAL_SIZE, ADD_NODE, BACK, BACKWARD, CLOSE, CONVERT_TO_PATH, COPY, CUT, DELETE, DUPLICATE,
+    FIT, FORWARD, FRONT, GROUP, JOIN, NEW, NEXT_DOC, OPEN, OUTLINE_TEXT, PASTE, PASTE_IN_PLACE,
+    PREV_DOC, REDO, SAVE, SAVE_AS, SELECT_ALL, TOGGLE_SEGMENT, UNDO, UNGROUP,
 };
 use super::{Action, VextorApp};
+use crate::path_ops::PathAction;
 use crate::session::Session;
 use crate::{debug, edit_ops, files};
 
@@ -135,6 +136,8 @@ impl VextorApp {
         ) {
             actions.push(Action::ConvertToPath);
         }
+        let session = self.docs.session().filter(|_| self.picker.is_none());
+        ui.menu_button("Path", |ui| path_menu(ui, session, actions));
         ui.separator();
         ui.add_enabled_ui(can.edit, |ui| {
             ui.menu_button("Arrange", |ui| arrange_menu(ui, actions));
@@ -283,6 +286,36 @@ fn align_menu(ui: &mut egui::Ui, to_artboard: &mut bool, actions: &mut Vec<Actio
     ui.separator();
     ui.checkbox(to_artboard, "Align to Artboard")
         .on_hover_text("One selected object always aligns to the artboard");
+}
+
+/// Object ▸ Path (spec 07): close, open, join, split, reverse, and the
+/// segment and node commands.
+fn path_menu(ui: &mut egui::Ui, session: Option<&Session>, actions: &mut Vec<Action>) {
+    let shortcut = |a: PathAction| match a {
+        PathAction::Join => Some(JOIN),
+        PathAction::ToggleSegment => Some(TOGGLE_SEGMENT),
+        PathAction::AddNode => Some(ADD_NODE),
+        PathAction::DeleteNodes => Some(DELETE),
+        _ => None,
+    };
+    for group in [&PathAction::STRUCTURE[..], &PathAction::EDIT[..]] {
+        for &a in group {
+            let enabled = session.is_some_and(|s| a.can(s));
+            let clicked = match shortcut(a) {
+                Some(key) => why_item(ui, enabled, a.title(), key, a.why()),
+                None => ui
+                    .add_enabled(enabled, egui::Button::new(a.title()))
+                    .on_disabled_hover_text(a.why())
+                    .clicked(),
+            };
+            if clicked {
+                actions.push(Action::Path(a));
+            }
+        }
+        if group.len() == PathAction::STRUCTURE.len() {
+            ui.separator();
+        }
+    }
 }
 
 /// A menu item that says why it is disabled when it is.

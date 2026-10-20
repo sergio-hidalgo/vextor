@@ -6,9 +6,10 @@
 //! except while scaling, when the (small) selection layer is rendered again
 //! each frame so strokes keep their width. Release renders sharp again.
 //!
-//! Drawing a shape and rounding a rect's corners (spec 06) use the same
-//! layers: the press-time document as it was, with the shape being drawn
-//! or rounded rendered live each frame (cropped to its bounds).
+//! Drawing a shape and rounding a rect's corners (spec 06), and dragging
+//! a path's nodes, handles, segments or corner widgets (spec 07), use the
+//! same layers: the press-time document as it was, with the shape being
+//! drawn or edited rendered live each frame (cropped to its bounds).
 //!
 //! Only the bottom layer covers the whole canvas; the selection and above
 //! layers are cropped to what they draw (above is skipped when empty), so
@@ -24,6 +25,8 @@ use vextor_render::{RenderError, Viewport, render};
 
 use super::Canvas;
 use super::shapes::ShapeInput;
+use crate::node_tool::NodeTool;
+use crate::pen_tool::PenTool;
 use crate::select::SelectTool;
 use crate::session::Session;
 
@@ -61,7 +64,13 @@ struct Source<'a> {
 /// The source of the gesture under way, if it has one: a move, scale or
 /// rotate (spec 05b), a shape being drawn, or a rect corner being rounded
 /// (spec 06). A drawn shape goes on top of everything until release.
-fn source<'a>(tool: &'a SelectTool, shapes: &'a ShapeInput) -> Option<Source<'a>> {
+fn source<'a>(
+    tool: &'a SelectTool,
+    shapes: &'a ShapeInput,
+    paths: (&'a NodeTool, &'a PenTool),
+    session: &Session,
+) -> Option<Source<'a>> {
+    let (nodes, pen) = paths;
     if let Some(p) = tool.preview() {
         let ids = p.ids.to_vec();
         // A scale changes the shapes, not just where they are: rendered
@@ -80,6 +89,16 @@ fn source<'a>(tool: &'a SelectTool, shapes: &'a ShapeInput) -> Option<Source<'a>
                 live: Vec::new(),
                 change: Some(p.change),
             }
+        });
+    }
+    // A path whose nodes are dragged, or whose new node the pen drags out
+    // (spec 07), renders live, like a rounded rect.
+    if let Some((before, id)) = nodes.preview(session).or_else(|| pen.preview()) {
+        return Some(Source {
+            before,
+            lifted: vec![id],
+            live: vec![id],
+            change: None,
         });
     }
     let (before, lifted, live) = shapes.preview()?;
@@ -104,7 +123,7 @@ impl Canvas {
         session: &Session,
     ) -> bool {
         let (current, fonts) = (&session.doc, &*session.fonts);
-        let Some(src) = source(&self.tool, &self.shapes) else {
+        let Some(src) = source(&self.tool, &self.shapes, (&self.nodes, &self.pen), session) else {
             self.drag_layers = None;
             return false;
         };

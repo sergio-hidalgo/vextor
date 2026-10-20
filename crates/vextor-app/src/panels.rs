@@ -28,6 +28,7 @@ const LAYERS_HEIGHT: f32 = 160.0;
 mod arrange;
 mod artboard;
 mod fonts;
+mod path;
 mod restyle;
 mod shape;
 mod text;
@@ -42,6 +43,13 @@ pub fn tools(ui: &mut egui::Ui, active: Option<ToolId>) -> Option<ToolId> {
     ui.vertical_centered(|ui| {
         for (tool, key, hint) in [
             (ToolId::Select, "V", "Select (V)"),
+            (
+                ToolId::Node,
+                "A",
+                "Nodes (A, or double-click a path): drag nodes, handles and segments. \
+                 Double-click a node: corner / smooth / symmetric. C straight ↔ curve, \
+                 + adds a node, ⌫ deletes nodes, Esc leaves",
+            ),
             (
                 ToolId::Pen,
                 "P",
@@ -157,11 +165,16 @@ fn inspector_sections(
     panel_title(ui, "Inspector");
     let mut actions = Vec::new();
     let message = if let Some(s) = session {
+        // Path nodes or a segment selected (spec 07): only what edits them.
+        if crate::path_ops::editing_nodes(s) {
+            return (path::sections(ui, s), actions);
+        }
         if s.selected().is_empty() {
             artboard::section(ui, s);
             return (None, actions);
         }
         let message = inspector(ui, s);
+        let message = path::sections(ui, s).or(message);
         let can = edit_ops::can(s);
         arrange::align_section(ui, can, to_artboard, &mut actions);
         arrange::group_section(ui, can, &mut actions);

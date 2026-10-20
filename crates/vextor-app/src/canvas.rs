@@ -17,6 +17,7 @@ use vextor_core::{Point, Rect, Vec2, View};
 use vextor_render::{RenderCache, Viewport};
 
 use crate::documents::DocId;
+use crate::node_tool::NodeTool;
 use crate::pen_tool::PenTool;
 use crate::select::SelectTool;
 use crate::session::Session;
@@ -25,6 +26,9 @@ use crate::view;
 
 mod artboard_label;
 mod drag_layers;
+#[cfg(test)]
+mod harness;
+mod nodes;
 mod path_marks;
 mod pen;
 mod selection;
@@ -71,6 +75,8 @@ pub struct Canvas {
     shapes: shapes::ShapeInput,
     /// The pen (spec 07).
     pen: PenTool,
+    /// Node editing (spec 07).
+    nodes: NodeTool,
 }
 
 impl Canvas {
@@ -145,6 +151,8 @@ impl Canvas {
             self.draw_text_overlay(&painter, rect.min, session);
         } else if session.editor.tool == vextor_core::ToolId::Pen {
             self.draw_pen(ui, &painter, rect.min, session, hover);
+        } else if session.editor.tool == vextor_core::ToolId::Node {
+            self.draw_nodes(&painter, rect.min, session, hover);
         } else {
             self.draw_selection(ui, &painter, &response, rect, session);
         }
@@ -152,7 +160,12 @@ impl Canvas {
         self.rename_ui(ui, rect, session);
         self.last_view = Some(current);
         let dialog_message = self.size_dialog_ui(ui.ctx(), rect, session);
-        message.or(dialog_message)
+        let menu_message = if self.is_editing_text() {
+            None
+        } else {
+            nodes::path_context_menu(&response, session)
+        };
+        message.or(dialog_message).or(menu_message)
     }
 
     fn draw_document(

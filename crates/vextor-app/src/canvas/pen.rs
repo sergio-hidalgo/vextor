@@ -19,9 +19,10 @@ impl Canvas {
         self.pen.is_drawing()
     }
 
-    /// Ends the path the pen is drawing, left open.
-    pub fn finish_pen(&mut self, session: &mut Session) {
-        self.pen.finish(session);
+    /// Ends the path the pen is drawing, left open. Returns true when
+    /// that took a step back (a lone first node).
+    pub fn finish_pen(&mut self, session: &mut Session) -> bool {
+        self.pen.finish(session)
     }
 
     /// `⌫` while the pen draws: removes the last node.
@@ -145,77 +146,24 @@ impl Canvas {
 
 #[cfg(test)]
 mod tests {
-    use eframe::egui::{Event, Modifiers, PointerButton, RawInput, Rect, Vec2};
     use vextor_core::Point;
 
+    use super::super::harness::{Harness, click, key};
     use super::*;
-    use crate::documents::Documents;
     use crate::new_doc::new_document;
-
-    fn button(pos: Pos2, pressed: bool) -> Event {
-        Event::PointerButton {
-            pos,
-            button: PointerButton::Primary,
-            pressed,
-            modifiers: Modifiers::NONE,
-        }
-    }
-
-    fn key(key: Key) -> Event {
-        Event::Key {
-            key,
-            physical_key: None,
-            pressed: true,
-            repeat: false,
-            modifiers: Modifiers::NONE,
-        }
-    }
-
-    /// Feeds `frames` (one event list each) to a canvas showing `s` at
-    /// 100 % with no pan.
-    fn run(canvas: &mut Canvas, s: &mut Session, frames: Vec<Vec<Event>>) {
-        let mut docs = Documents::default();
-        let doc = docs.add(Session::new(new_document("x", 10.0, 10.0)), None);
-        let ctx = egui::Context::default();
-        for events in frames {
-            let input = RawInput {
-                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(600.0, 400.0))),
-                events,
-                ..Default::default()
-            };
-            s.needs_fit = false;
-            s.editor.view = vextor_core::View::default();
-            ctx.run_ui(input, |ui| {
-                egui::CentralPanel::no_frame().show(ui, |ui| {
-                    let _ = canvas.ui(ui, doc, s);
-                });
-            })
-            .textures_delta
-            .clear();
-        }
-    }
-
-    fn click(at: Pos2) -> Vec<Vec<Event>> {
-        vec![
-            vec![Event::PointerMoved(at)],
-            vec![button(at, true)],
-            vec![button(at, false)],
-            vec![],
-        ]
-    }
 
     #[test]
     fn clicks_on_the_canvas_draw_a_path_and_enter_ends_it() {
         let mut s = Session::new(new_document("a", 400.0, 300.0));
         s.editor.tool = ToolId::Pen;
-        let mut canvas = Canvas::default();
+        let mut h = Harness::new();
         let mut frames = click(Pos2::new(50.0, 60.0));
         frames.extend(click(Pos2::new(150.0, 60.0)));
         frames.extend(click(Pos2::new(150.0, 160.0)));
-        run(&mut canvas, &mut s, frames);
-        assert!(canvas.pen_drawing());
-        run(&mut canvas, &mut s, vec![vec![key(Key::Enter)], vec![]]);
-        assert!(!canvas.pen_drawing(), "Enter ended the path");
+        h.run(&mut s, frames);
+        assert!(h.canvas.pen_drawing());
+        h.run(&mut s, vec![vec![key(Key::Enter)], vec![]]);
+        assert!(!h.canvas.pen_drawing(), "Enter ended the path");
         let [id] = s.selected()[..] else {
             panic!("the path is selected");
         };
