@@ -60,6 +60,11 @@ impl Canvas {
                 message = message.or(shape_message);
                 used
             };
+            let used = used || {
+                let (used, pen_message) = self.pen_press(session, to_doc(p), mods);
+                message = message.or(pen_message);
+                used
+            };
             if !used {
                 self.tool.press(session, to_doc(p), mods, view.zoom);
             }
@@ -68,6 +73,9 @@ impl Canvas {
             self.text_drag(session, at.filter(|_| down).map(to_doc), down);
         }
         if let Some(e) = self.shape_drag(session, at.map(to_doc), down && !released, mods) {
+            message = Some(e);
+        }
+        if let Some(e) = self.pen_drag(session, at.map(to_doc), down && !released, mods) {
             message = Some(e);
         }
         if self.tool.is_dragging() {
@@ -99,7 +107,7 @@ impl Canvas {
         let tool = session.editor.tool;
         let cursor = if self.is_editing_text() || tool == vextor_core::ToolId::Text {
             Some(egui::CursorIcon::Text)
-        } else if tool.is_shape() {
+        } else if tool.is_shape() || tool == vextor_core::ToolId::Pen {
             Some(egui::CursorIcon::Crosshair)
         } else if at.is_some_and(|p| self.over_corner_widget(session, p)) {
             Some(egui::CursorIcon::PointingHand)

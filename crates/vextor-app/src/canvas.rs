@@ -17,6 +17,7 @@ use vextor_core::{Point, Rect, Vec2, View};
 use vextor_render::{RenderCache, Viewport};
 
 use crate::documents::DocId;
+use crate::pen_tool::PenTool;
 use crate::select::SelectTool;
 use crate::session::Session;
 use crate::text_tool::TextTool;
@@ -24,6 +25,8 @@ use crate::view;
 
 mod artboard_label;
 mod drag_layers;
+mod path_marks;
+mod pen;
 mod selection;
 mod shapes;
 mod text;
@@ -66,6 +69,8 @@ pub struct Canvas {
     document: Option<DocId>,
     /// Shape tools, corner widgets and the size dialog (spec 06).
     shapes: shapes::ShapeInput,
+    /// The pen (spec 07).
+    pen: PenTool,
 }
 
 impl Canvas {
@@ -112,6 +117,7 @@ impl Canvas {
         }
         let typing = self.is_editing_text() || self.rename.is_some();
         handle_input(ui, &response, rect, &mut session.editor.view, typing);
+        self.pen_keys(ui, session);
         let key_message = self
             .text_keys(ui, session)
             .or_else(|| self.shape_keys(ui, session));
@@ -128,8 +134,17 @@ impl Canvas {
         self.draw_checkerboards(ui.ctx(), &painter, rect.min, session);
         self.draw_document(ui, &painter, rect, session);
         draw_artboard_outlines(ui, &painter, rect.min, session, self.renaming());
+        let hover = ui
+            .input(|i| i.pointer.hover_pos())
+            .filter(|_| response.hovered())
+            .map(|p| {
+                let d = view::screen_to_doc(session.editor.view, to_point(p - rect.min));
+                kurbo::Point::new(d.x, d.y)
+            });
         if self.is_editing_text() {
             self.draw_text_overlay(&painter, rect.min, session);
+        } else if session.editor.tool == vextor_core::ToolId::Pen {
+            self.draw_pen(ui, &painter, rect.min, session, hover);
         } else {
             self.draw_selection(ui, &painter, &response, rect, session);
         }

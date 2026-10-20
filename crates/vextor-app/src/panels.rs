@@ -43,6 +43,12 @@ pub fn tools(ui: &mut egui::Ui, active: Option<ToolId>) -> Option<ToolId> {
         for (tool, key, hint) in [
             (ToolId::Select, "V", "Select (V)"),
             (
+                ToolId::Pen,
+                "P",
+                "Pen (P): click for straight, drag for curves, click the first node to close. \
+                 ⇧ angle steps, ⌥ breaks a handle, Enter / Esc ends, ⌫ removes the last node",
+            ),
+            (
                 ToolId::Text,
                 "T",
                 "Text (T): click to add a label, then type",

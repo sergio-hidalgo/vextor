@@ -15,6 +15,9 @@ mod icons;
 mod new_doc;
 mod outline_text;
 mod panels;
+#[allow(dead_code)] // the node tool (next commit) uses the rest
+mod path_ops;
+mod pen_tool;
 mod prompts;
 mod recovery;
 mod select;

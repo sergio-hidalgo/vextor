@@ -1,10 +1,11 @@
 //! One open document with its history and editor state.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use vextor_core::{
-    Command, CoreError, Document, EditorState, History, NodeId, NodeKind, Selection, Style,
+    Command, CoreError, Document, EditorState, Geometry, History, NodeId, NodeKind, Path, PathNode,
+    PathNodeRef, Selection, Shape, Style,
 };
 use vextor_geom::Fonts;
 
@@ -77,7 +78,7 @@ impl Session {
 
     /// The file this document is saved to, if any.
     #[must_use]
-    pub fn path(&self) -> Option<&Path> {
+    pub fn path(&self) -> Option<&std::path::Path> {
         self.path.as_deref()
     }
 
@@ -182,12 +183,15 @@ impl Session {
         self.history.end_gesture();
     }
 
-    /// The selected objects, bottom → top.
+    /// The selected objects, bottom → top. Selected path nodes or a
+    /// segment stand for their shape (spec 07).
     #[must_use]
     pub fn selected(&self) -> Vec<NodeId> {
         match &self.editor.selection {
             Selection::Objects(ids) => self.doc.sorted_by_paint_order(ids),
-            _ => Vec::new(),
+            Selection::PathNodes(refs) => refs.first().map(|r| vec![r.shape]).unwrap_or_default(),
+            Selection::Segment { shape, .. } => vec![*shape],
+            Selection::None => Vec::new(),
         }
     }
 
@@ -200,16 +204,74 @@ impl Session {
         };
     }
 
-    /// Drops selected objects that no longer exist (after redo, say).
+    /// Drops selected objects, path nodes and segments that no longer
+    /// exist (after redo, say). Path nodes all gone leave their shape
+    /// selected, if it is still there.
     fn prune_selection(&mut self) {
-        if let Selection::Objects(ids) = &self.editor.selection {
-            let kept: Vec<NodeId> = ids
-                .iter()
-                .copied()
-                .filter(|id| self.doc.nodes.contains_key(id))
-                .collect();
-            self.select(kept);
+        match &self.editor.selection {
+            Selection::Objects(ids) => {
+                let kept: Vec<NodeId> = ids
+                    .iter()
+                    .copied()
+                    .filter(|id| self.doc.nodes.contains_key(id))
+                    .collect();
+                self.select(kept);
+            }
+            Selection::PathNodes(refs) => {
+                let shape = refs.first().map(|r| r.shape);
+                let kept: Vec<PathNodeRef> = refs
+                    .iter()
+                    .copied()
+                    .filter(|r| self.path_node(*r).is_some())
+                    .collect();
+                if kept.is_empty() {
+                    self.select(
+                        shape
+                            .filter(|id| self.path_of(*id).is_some())
+                            .into_iter()
+                            .collect(),
+                    );
+                } else {
+                    self.editor.selection = Selection::PathNodes(kept);
+                }
+            }
+            &Selection::Segment {
+                shape,
+                subpath,
+                index,
+            } => {
+                let exists = self
+                    .path_of(shape)
+                    .and_then(|p| p.subpaths.get(subpath))
+                    .is_some_and(|sp| index < sp.segment_count());
+                if !exists {
+                    self.select(self.path_of(shape).map(|_| shape).into_iter().collect());
+                }
+            }
+            Selection::None => {}
         }
+    }
+
+    /// The path of shape `id`, when it is a path.
+    #[must_use]
+    pub fn path_of(&self, id: NodeId) -> Option<&Path> {
+        match &self.doc.nodes.get(&id)?.kind {
+            NodeKind::Shape(Shape {
+                geometry: Geometry::Path(p),
+                ..
+            }) => Some(p),
+            _ => None,
+        }
+    }
+
+    /// The path node `r` points at, if it exists.
+    #[must_use]
+    pub fn path_node(&self, r: PathNodeRef) -> Option<&PathNode> {
+        self.path_of(r.shape)?
+            .subpaths
+            .get(r.subpath)?
+            .nodes
+            .get(r.index)
     }
 
     /// The state of the Undo and Redo menu items.
@@ -403,7 +465,7 @@ mod tests {
         s.mark_saved(PathBuf::from("/tmp/button.vextor"));
         assert!(!s.is_dirty());
         assert_eq!(s.title(), "button.vextor — Vextor");
-        assert_eq!(s.path(), Some(Path::new("/tmp/button.vextor")));
+        assert_eq!(s.path(), Some(std::path::Path::new("/tmp/button.vextor")));
     }
 
     #[test]

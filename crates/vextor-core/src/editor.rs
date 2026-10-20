@@ -46,6 +46,10 @@ pub enum Selection {
 pub enum ToolId {
     #[default]
     Select,
+    /// Selects and edits the nodes of one path (spec 07).
+    Node,
+    /// Draws paths node by node (spec 07).
+    Pen,
     /// Places and edits text (spec 05c).
     Text,
     /// Draws a rectangle (spec 06).

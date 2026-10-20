@@ -57,6 +57,7 @@ pub(super) const CONVERT_TO_PATH: KeyboardShortcut = KeyboardShortcut::new(CMD_S
 // Tools: plain letters (every layout has them).
 pub(super) const SELECT_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::V);
 pub(super) const TEXT_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::T);
+pub(super) const PEN_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::P);
 /// The shape tools' keys, in `ToolId::SHAPES` order.
 pub(super) const SHAPE_TOOLS: [(KeyboardShortcut, ToolId); 5] = [
     (KeyboardShortcut::new(Modifiers::NONE, Key::R), ToolId::Rect),
@@ -113,6 +114,7 @@ impl VextorApp {
                 (DESELECT, Action::Deselect),
                 (SELECT_TOOL, Action::Tool(ToolId::Select)),
                 (TEXT_TOOL, Action::Tool(ToolId::Text)),
+                (PEN_TOOL, Action::Tool(ToolId::Pen)),
             ];
             let tools = SHAPE_TOOLS.map(|(key, tool)| (key, Action::Tool(tool)));
             for (shortcut, action) in keys.into_iter().chain(tools) {
@@ -221,6 +223,10 @@ mod tests {
         assert_eq!(
             actions(Key::V, Modifiers::NONE),
             vec![Action::Tool(ToolId::Select)]
+        );
+        assert_eq!(
+            actions(Key::P, Modifiers::NONE),
+            vec![Action::Tool(ToolId::Pen)]
         );
     }
 
