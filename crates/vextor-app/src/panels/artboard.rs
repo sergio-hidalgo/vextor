@@ -1,5 +1,6 @@
 //! Inspector ▸ Artboard (spec 05e): the artboard's name, size and
-//! background, shown while nothing is selected.
+//! background, shown while nothing is selected. W and H resize the
+//! artboard about its centre; the objects on it stay where they are.
 
 use eframe::egui;
 use vextor_core::Artboard;
@@ -8,6 +9,7 @@ use super::text::{color_field, section_toggle};
 use super::{FIELD_SIZE, GRID_SPACING, LABEL_WIDTH, Label};
 use crate::artboard::{self, DEFAULT_BACKGROUND, MAX_NAME_CHARS};
 use crate::icons::Icon;
+use crate::new_doc::MAX_SIDE;
 use crate::session::Session;
 
 /// Width of the name field: two number fields and the gap between them.
@@ -29,16 +31,31 @@ pub(super) fn section(ui: &mut egui::Ui, s: &mut Session) {
                 ui.label("Name");
                 name_field(ui, s, &board);
                 ui.end_row();
-                let w = Label("W", Icon::Width, "Width (W)");
-                let h = Label("H", Icon::Height, "Height (H)");
-                for (label, value) in [(w, board.rect.width), (h, board.rect.height)] {
+                let width = Label("W", Icon::Width, "Width (W)");
+                let height = Label("H", Icon::Height, "Height (H)");
+                let (bw, bh) = (board.rect.width, board.rect.height);
+                for (label, value, wide) in [(width, bw, true), (height, bh, false)] {
                     label.show(ui);
                     let mut v = value;
-                    ui.add_enabled_ui(false, |ui| {
-                        ui.add_sized(FIELD_SIZE, egui::DragValue::new(&mut v).max_decimals(2))
-                    })
-                    .inner
-                    .on_disabled_hover_text("Set when the document is created");
+                    let r = ui
+                        .add_sized(
+                            FIELD_SIZE,
+                            egui::DragValue::new(&mut v)
+                                .range(artboard::MIN_SIDE..=MAX_SIDE)
+                                .clamp_existing_to_range(false)
+                                .max_decimals(2),
+                        )
+                        .on_hover_text("Resizes from the centre; objects stay where they are");
+                    if r.drag_started() {
+                        s.begin_gesture();
+                    }
+                    if r.changed() && (v - value).abs() > vextor_core::EPS {
+                        let (nw, nh) = if wide { (v, bh) } else { (bw, v) };
+                        artboard::resize(s, board.id, nw, nh);
+                    }
+                    if r.drag_stopped() {
+                        s.end_gesture();
+                    }
                     ui.end_row();
                 }
             });

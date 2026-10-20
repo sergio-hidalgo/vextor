@@ -193,7 +193,7 @@ fn hint(s: &Session) -> String {
     )
 }
 
-/// The text a rename starts from: the file name without `.vextor`, or
+/// The text a rename starts from: the file name without its extension, or
 /// the name of a document not saved yet.
 fn editable_name(s: &Session) -> String {
     s.path()

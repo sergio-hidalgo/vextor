@@ -55,12 +55,20 @@ impl Canvas {
             }
             let (used, text_message) = self.text_press(ui.ctx(), session, to_doc(p), mods.shift);
             message = text_message;
+            let used = used || {
+                let (used, shape_message) = self.shape_press(session, to_doc(p), mods);
+                message = message.or(shape_message);
+                used
+            };
             if !used {
                 self.tool.press(session, to_doc(p), mods, view.zoom);
             }
         }
         if self.is_editing_text() {
             self.text_drag(session, at.filter(|_| down).map(to_doc), down);
+        }
+        if let Some(e) = self.shape_drag(session, at.map(to_doc), down && !released, mods) {
+            message = Some(e);
         }
         if self.tool.is_dragging() {
             if down && let Some(p) = at {
@@ -88,8 +96,13 @@ impl Canvas {
     /// Resize arrows over (or dragging) a handle, the move cursor while
     /// moving, and no system cursor where the drawn rotate cursor shows.
     fn set_cursor(&self, ui: &egui::Ui, session: &Session, at: Option<kurbo::Point>) {
-        let cursor = if self.is_editing_text() || session.editor.tool == vextor_core::ToolId::Text {
+        let tool = session.editor.tool;
+        let cursor = if self.is_editing_text() || tool == vextor_core::ToolId::Text {
             Some(egui::CursorIcon::Text)
+        } else if tool.is_shape() {
+            Some(egui::CursorIcon::Crosshair)
+        } else if at.is_some_and(|p| self.over_corner_widget(session, p)) {
+            Some(egui::CursorIcon::PointingHand)
         } else if self.tool.is_moving() {
             Some(egui::CursorIcon::Move)
         } else if let Some(h) = self.tool.scaling() {
@@ -168,7 +181,11 @@ impl Canvas {
         if let Some(b) = vextor_geom::union_bounds(&session.doc, &session.fonts, selected) {
             let r = screen(b);
             painter.rect_stroke(r, 0.0, Stroke::new(1.0, theme::YELLOW), StrokeKind::Middle);
-            if !self.tool.is_moving() && session.editor.tool == vextor_core::ToolId::Select {
+            let selecting = session.editor.tool == vextor_core::ToolId::Select;
+            if selecting && !self.tool.is_moving() {
+                super::shapes::draw_corner_widgets(painter, origin, session);
+            }
+            if !self.tool.is_moving() && selecting {
                 for (_, p) in crate::select::handles(b) {
                     let s = view::doc_to_screen(view, Point::new(p.x, p.y));
                     let handle = egui::Rect::from_center_size(

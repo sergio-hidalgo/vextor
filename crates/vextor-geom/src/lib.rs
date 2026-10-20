@@ -2,12 +2,18 @@
 //! outline stroke and text layout over the `vextor-core` model.
 
 mod convert;
+mod draw;
 mod hit;
 mod resize;
 mod text;
 mod transform;
 
-pub use convert::{bezpath_to_path, geometry_to_path, path_to_bezpath, to_bezpath, to_kurbo};
+pub use convert::{
+    bezpath_to_path, fitted_radii, geometry_to_path, path_to_bezpath, to_bezpath, to_kurbo,
+};
+pub use draw::{
+    Corner, DrawMods, ShapeKind, ShapeSize, corner_radius_at, corner_widget, drawn, sized,
+};
 pub use hit::{bounds, from_affine, pick, selectable, to_affine, touching, union_bounds};
 pub use resize::{Resized, polar, resize, stretched};
 pub use text::{

@@ -101,12 +101,131 @@ pub fn outline_missing_font(
     modal.inner
 }
 
+/// Width of the shape size dialog's content, in points: one row of
+/// label and field, as wide as its two buttons.
+const SHAPE_DIALOG_WIDTH: f32 = BUTTON_SIZE.x * 2.0 + 8.0;
+/// Width of the label column of the shape size dialog, in points: the
+/// same as one button, so labels line up with Create and fields with
+/// Cancel.
+const SHAPE_LABEL_WIDTH: f32 = BUTTON_SIZE.x;
+/// Size of every field in every shape size dialog, in points.
+const SHAPE_FIELD_SIZE: Vec2 = Vec2::new(BUTTON_SIZE.x, 24.0);
+/// Largest size the shape dialog accepts, in px (the largest artboard).
+const MAX_SHAPE_SIZE: f64 = 10_000.0;
+
+/// Asks for the size of a shape placed with a click (spec 06), editing
+/// `size` in place. `Some(true)` (Create, or `Enter`) places it,
+/// `Some(false)` (Cancel, `Esc`, a click outside) does not, `None` while
+/// the user has not answered.
+pub fn shape_size(
+    ctx: &egui::Context,
+    canvas: Rect,
+    title: &str,
+    size: &mut vextor_geom::ShapeSize,
+) -> Option<bool> {
+    use vextor_geom::ShapeSize as S;
+    let modal = dialog_of_width(ctx, "shape_size", canvas, SHAPE_DIALOG_WIDTH, |ui| {
+        ui.add_space(4.0);
+        ui.heading(title);
+        ui.add_space(10.0);
+        match size {
+            S::Rect { width, height } | S::Ellipse { width, height } => {
+                length_row(ui, "Width", width);
+                length_row(ui, "Height", height);
+            }
+            S::Polygon { radius, sides } => {
+                length_row(ui, "Radius", radius);
+                count_row(ui, "Sides", sides, vextor_core::MAX_POLYGON_SIDES);
+            }
+            S::Star {
+                outer,
+                inner,
+                points,
+            } => {
+                length_row(ui, "Outer radius", outer);
+                length_row(ui, "Inner radius", inner);
+                count_row(ui, "Points", points, vextor_core::MAX_STAR_POINTS);
+            }
+            S::Line { length, angle } => {
+                length_row(ui, "Length", length);
+                field_row(ui, "Angle", |ui| {
+                    ui.add_sized(
+                        SHAPE_FIELD_SIZE,
+                        egui::DragValue::new(angle)
+                            .range(-360.0..=360.0)
+                            .suffix("°")
+                            .max_decimals(2),
+                    );
+                });
+            }
+        }
+        ui.add_space(12.0);
+        buttons(ui, &[("Create", true), ("Cancel", false)])
+    });
+    // After the fields, so a value typed and confirmed with Enter counts.
+    if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+        return Some(true);
+    }
+    if modal.should_close() && modal.inner.is_none() {
+        return Some(false);
+    }
+    modal.inner
+}
+
+/// One centred row of the shape size dialog: `label` in its column, then
+/// the field `add` draws.
+fn field_row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
+    let gap = ui.spacing().item_spacing.x;
+    let row = SHAPE_LABEL_WIDTH + gap + SHAPE_FIELD_SIZE.x;
+    ui.horizontal(|ui| {
+        ui.add_space(((ui.available_width() - row) / 2.0).max(0.0));
+        ui.allocate_ui_with_layout(
+            Vec2::new(SHAPE_LABEL_WIDTH, SHAPE_FIELD_SIZE.y),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.set_min_width(SHAPE_LABEL_WIDTH);
+                ui.label(label);
+            },
+        );
+        add(ui);
+    });
+}
+
+fn length_row(ui: &mut egui::Ui, label: &str, value: &mut f64) {
+    field_row(ui, label, |ui| {
+        ui.add_sized(
+            SHAPE_FIELD_SIZE,
+            egui::DragValue::new(value)
+                .range(0.0..=MAX_SHAPE_SIZE)
+                .suffix(" px")
+                .max_decimals(2),
+        );
+    });
+}
+
+fn count_row(ui: &mut egui::Ui, label: &str, value: &mut u32, max: u32) {
+    field_row(ui, label, |ui| {
+        ui.add_sized(SHAPE_FIELD_SIZE, egui::DragValue::new(value).range(3..=max));
+    });
+}
+
 /// A modal of fixed width whose centre is the centre of `canvas`, with its
 /// content centred.
 fn dialog<T>(
     ctx: &egui::Context,
     id: &str,
     canvas: Rect,
+    content: impl FnOnce(&mut egui::Ui) -> T,
+) -> egui::ModalResponse<T> {
+    dialog_of_width(ctx, id, canvas, DIALOG_WIDTH, content)
+}
+
+/// [`dialog`] with content `width` points wide.
+fn dialog_of_width<T>(
+    ctx: &egui::Context,
+    id: &str,
+    canvas: Rect,
+    width: f32,
     content: impl FnOnce(&mut egui::Ui) -> T,
 ) -> egui::ModalResponse<T> {
     let screen = ctx.content_rect();
@@ -118,7 +237,7 @@ fn dialog<T>(
         .area(egui::Modal::default_area(id).anchor(Align2::CENTER_CENTER, offset))
         .frame(egui::Frame::popup(&ctx.global_style()).inner_margin(DIALOG_MARGIN))
         .show(ctx, |ui| {
-            ui.set_width(DIALOG_WIDTH);
+            ui.set_width(width);
             ui.vertical_centered(content).inner
         })
 }
@@ -220,6 +339,63 @@ mod tests {
             output.textures_delta.clear();
         }
         rect
+    }
+
+    /// The frame of the shape size dialog for `size`.
+    fn shape_dialog_rect(mut size: vextor_geom::ShapeSize) -> Rect {
+        let ctx = egui::Context::default();
+        let mut rect = Rect::NOTHING;
+        for _ in 0..3 {
+            let input = RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+                ..Default::default()
+            };
+            let mut output = ctx.run_ui(input, |ui| {
+                let canvas = ui.ctx().content_rect();
+                let _ = shape_size(ui.ctx(), canvas, "Shape", &mut size);
+                rect = ui.ctx().memory(|m| {
+                    m.area_rect(egui::Id::unique("shape_size"))
+                        .unwrap_or(Rect::NOTHING)
+                });
+            });
+            output.textures_delta.clear();
+        }
+        rect
+    }
+
+    #[test]
+    fn every_shape_dialog_is_the_same_narrow_width() {
+        use vextor_geom::ShapeSize as S;
+        let sizes = [
+            S::Rect {
+                width: 1.0,
+                height: 1.0,
+            },
+            S::Polygon {
+                radius: 1.0,
+                sides: 7,
+            },
+            S::Star {
+                outer: 50.0,
+                inner: 40.0,
+                points: 20,
+            },
+            S::Line {
+                length: 1.0,
+                angle: 0.0,
+            },
+        ];
+        let widths: Vec<f32> = sizes
+            .into_iter()
+            .map(|s| shape_dialog_rect(s).width())
+            .collect();
+        assert!(widths[0] > 0.0, "{widths:?}");
+        assert!(
+            widths.iter().all(|w| (w - widths[0]).abs() < 0.5),
+            "{widths:?}"
+        );
+        let other = dialog_rect(Rect::NOTHING).width();
+        assert!(widths[0] < other - 80.0, "{} vs {other}", widths[0]);
     }
 
     #[test]

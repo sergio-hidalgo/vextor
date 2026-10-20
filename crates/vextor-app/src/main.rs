@@ -3,6 +3,8 @@
 mod app;
 mod artboard;
 mod canvas;
+mod convert_path;
+mod corners;
 mod debug;
 mod documents;
 mod edit_ops;
@@ -17,10 +19,12 @@ mod prompts;
 mod recovery;
 mod select;
 mod session;
+mod shape_tool;
 mod tabs;
 mod text_edit;
 mod text_tool;
 mod theme;
+mod thumbnails;
 mod view;
 mod wordmark;
 

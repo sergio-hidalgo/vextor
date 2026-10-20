@@ -6,6 +6,10 @@
 //! except while scaling, when the (small) selection layer is rendered again
 //! each frame so strokes keep their width. Release renders sharp again.
 //!
+//! Drawing a shape and rounding a rect's corners (spec 06) use the same
+//! layers: the press-time document as it was, with the shape being drawn
+//! or rounded rendered live each frame (cropped to its bounds).
+//!
 //! Only the bottom layer covers the whole canvas; the selection and above
 //! layers are cropped to what they draw (above is skipped when empty), so
 //! the start of a drag renders and uploads little more than one frame.
@@ -19,6 +23,8 @@ use vextor_geom::Fonts;
 use vextor_render::{RenderError, Viewport, render};
 
 use super::Canvas;
+use super::shapes::ShapeInput;
+use crate::select::SelectTool;
 use crate::session::Session;
 
 /// Extra room around a cropped layer, in points (anti-aliasing).
@@ -39,10 +45,56 @@ pub(super) struct DragLayers {
     viewport: Viewport,
 }
 
+/// What one gesture's layers show.
+struct Source<'a> {
+    /// The document when the press began.
+    before: &'a Document,
+    /// Objects taken out of `before` into the middle layer.
+    lifted: Vec<NodeId>,
+    /// Objects of the live document rendered again each frame as the
+    /// middle layer (cropped, so small); empty with `change`.
+    live: Vec<NodeId>,
+    /// The affine moving the lifted layer, when it is not rendered live.
+    change: Option<Affine>,
+}
+
+/// The source of the gesture under way, if it has one: a move, scale or
+/// rotate (spec 05b), a shape being drawn, or a rect corner being rounded
+/// (spec 06). A drawn shape goes on top of everything until release.
+fn source<'a>(tool: &'a SelectTool, shapes: &'a ShapeInput) -> Option<Source<'a>> {
+    if let Some(p) = tool.preview() {
+        let ids = p.ids.to_vec();
+        // A scale changes the shapes, not just where they are: rendered
+        // live so strokes keep their width while dragging.
+        return Some(if tool.scaling().is_some() {
+            Source {
+                before: p.before,
+                live: ids.clone(),
+                lifted: ids,
+                change: None,
+            }
+        } else {
+            Source {
+                before: p.before,
+                lifted: ids,
+                live: Vec::new(),
+                change: Some(p.change),
+            }
+        });
+    }
+    let (before, lifted, live) = shapes.preview()?;
+    Some(Source {
+        before,
+        lifted,
+        live,
+        change: None,
+    })
+}
+
 impl Canvas {
-    /// Draws the drag layers while the button is down on the selection
-    /// (building them on the press frame). Returns false when the document
-    /// must be drawn the normal way.
+    /// Draws the gesture's layers while the button is down (building them
+    /// on the press frame). Returns false when the document must be drawn
+    /// the normal way.
     pub(super) fn draw_drag_layers(
         &mut self,
         ctx: &egui::Context,
@@ -52,8 +104,7 @@ impl Canvas {
         session: &Session,
     ) -> bool {
         let (current, fonts) = (&session.doc, &*session.fonts);
-        let scaling = self.tool.scaling().is_some();
-        let Some(preview) = self.tool.preview() else {
+        let Some(src) = source(&self.tool, &self.shapes) else {
             self.drag_layers = None;
             return false;
         };
@@ -63,32 +114,31 @@ impl Canvas {
         if stale {
             // A failed render falls back to the normal path (`None`).
             self.drag_layers =
-                DragLayers::build(ctx, fonts, preview.before, preview.ids, viewport).ok();
+                DragLayers::build(ctx, fonts, src.before, &src.lifted, viewport).ok();
         }
         let Some(layers) = &mut self.drag_layers else {
             return false;
         };
-        if scaling {
-            // A scale changes the shapes, not just where they are: the
-            // selection is rendered again from the live document (its
-            // layer is small) so strokes keep their width while dragging.
+        if src.change.is_none() {
             let objects = top_level(current);
-            let selected: BTreeSet<NodeId> = preview.ids.iter().copied().collect();
-            let only = keep_only(current, &objects, |id| selected.contains(id), false);
-            layers.selection = layer(
-                ctx,
-                fonts,
-                "drag-selection",
-                &only,
-                viewport,
-                Some(&objects),
-            )
-            .ok()
-            .flatten();
-            layers.draw(painter, rect.min, viewport.view, None);
-        } else {
-            layers.draw(painter, rect.min, viewport.view, Some(preview.change));
+            let live: BTreeSet<NodeId> = src.live.iter().copied().collect();
+            layers.selection = if live.is_empty() {
+                None
+            } else {
+                let only = keep_only(current, &objects, |id| live.contains(id), false);
+                layer(
+                    ctx,
+                    fonts,
+                    "drag-selection",
+                    &only,
+                    viewport,
+                    Some(&objects),
+                )
+                .ok()
+                .flatten()
+            };
         }
+        layers.draw(painter, rect.min, viewport.view, src.change);
         true
     }
 }
@@ -434,6 +484,68 @@ mod tests {
                 Pos2::new(23.0, 11.0),
                 Pos2::new(15.0, 11.0)
             ]
+        );
+    }
+
+    /// Timing of one shape-drawing frame on the 500-node sample at fit on
+    /// a 2560×1600 canvas, before spec 06's fast path (the edit and a full
+    /// render) and with it (the edit and the live shape's cropped layer),
+    /// and of building the layers at press (`--release --ignored`).
+    #[test]
+    #[ignore = "timing, run by hand in release"]
+    fn time_draw_frame() {
+        use std::time::Instant;
+        let mut s = Session::new(vextor_render::fixtures::many_nodes(500));
+        let viewport = Viewport {
+            view: View {
+                zoom: 1.0,
+                pan: vextor_core::Vec2::new(140.0, 0.0),
+            },
+            width: 2560,
+            height: 1600,
+            pixels_per_point: 2.0,
+        };
+        let ctx = egui::Context::default();
+        // Headless egui allows 2048 px textures; a real GPU allows more.
+        ctx.begin_pass(egui::RawInput {
+            max_texture_side: Some(8192),
+            ..Default::default()
+        });
+        let fonts = Fonts::default();
+        let mut t = crate::shape_tool::ShapeTool::default();
+        let press = Instant::now();
+        t.press(
+            &mut s,
+            vextor_core::ToolId::Rect,
+            kurbo::Point::new(100.0, 100.0),
+        )
+        .expect("presses");
+        let (before, _) = t.preview().expect("drawing");
+        let layers = DragLayers::build(&ctx, &fonts, before, &[], &viewport).expect("renders");
+        let press_ms = press.elapsed().as_secs_f64() * 1000.0;
+        let frames = 60;
+        let mut time = |fast: bool| {
+            let started = Instant::now();
+            for i in 0..frames {
+                let p = kurbo::Point::new(150.0 + f64::from(i), 140.0 + f64::from(i));
+                t.drag_to(&mut s, p, vextor_geom::DrawMods::default())
+                    .expect("drags");
+                if fast {
+                    let id = t.preview().and_then(|(_, id)| id).expect("drawn");
+                    let objects = top_level(&s.doc);
+                    let only = keep_only(&s.doc, &objects, |o| *o == id, false);
+                    let _ = layer(&ctx, &fonts, "live", &only, &viewport, Some(&objects));
+                } else {
+                    let _ = render(&s.doc, &fonts, &viewport).expect("renders");
+                }
+            }
+            started.elapsed().as_secs_f64() * 1000.0 / f64::from(frames)
+        };
+        let (full, fast) = (time(false), time(true));
+        drop(layers);
+        ctx.end_pass().textures_delta.clear();
+        println!(
+            "draw frame: full render {full:.2} ms, fast path {fast:.2} ms; press {press_ms:.2} ms"
         );
     }
 }

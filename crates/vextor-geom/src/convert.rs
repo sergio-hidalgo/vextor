@@ -70,16 +70,28 @@ pub fn geometry_to_path(geometry: &Geometry) -> Path {
     bezpath_to_path(&to_bezpath(geometry), fill_rule)
 }
 
-fn rounded_rect(r: vextor_core::Rect, radius: CornerRadii) -> BezPath {
-    let (x0, y0, w, h) = (r.x, r.y, r.width, r.height);
-    let (x1, y1) = (x0 + w, y0 + h);
-    // CSS border-radius rule: scale all radii down until adjacent ones fit.
+/// The radii a rect is drawn with: all scaled down by the same factor
+/// until adjacent ones fit along each side (the CSS `border-radius` rule).
+#[must_use]
+pub fn fitted_radii(r: vextor_core::Rect, radius: CornerRadii) -> CornerRadii {
+    let (w, h) = (r.width, r.height);
     let fit = |len: f64, a: f64, b: f64| if a + b > len { len / (a + b) } else { 1.0 };
     let f = fit(w, radius.tl, radius.tr)
         .min(fit(w, radius.bl, radius.br))
         .min(fit(h, radius.tl, radius.bl))
         .min(fit(h, radius.tr, radius.br));
-    let [tl, tr, br, bl] = [radius.tl, radius.tr, radius.br, radius.bl].map(|v| v * f);
+    CornerRadii {
+        tl: radius.tl * f,
+        tr: radius.tr * f,
+        br: radius.br * f,
+        bl: radius.bl * f,
+    }
+}
+
+fn rounded_rect(r: vextor_core::Rect, radius: CornerRadii) -> BezPath {
+    let (x0, y0, w, h) = (r.x, r.y, r.width, r.height);
+    let (x1, y1) = (x0 + w, y0 + h);
+    let CornerRadii { tl, tr, br, bl } = fitted_radii(r, radius);
 
     let mut path = BezPath::new();
     path.move_to((x0 + tl, y0));
