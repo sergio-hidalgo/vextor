@@ -29,6 +29,7 @@ mod arrange;
 mod artboard;
 mod fonts;
 mod restyle;
+mod shape;
 mod text;
 
 pub use arrange::PanelAction;
@@ -45,6 +46,31 @@ pub fn tools(ui: &mut egui::Ui, active: Option<ToolId>) -> Option<ToolId> {
                 ToolId::Text,
                 "T",
                 "Text (T): click to add a label, then type",
+            ),
+            (
+                ToolId::Rect,
+                "R",
+                "Rectangle (R): drag to draw, click for a size. ⇧ square, ⌥ from centre",
+            ),
+            (
+                ToolId::Ellipse,
+                "E",
+                "Ellipse (E): drag to draw, click for a size. ⇧ circle, ⌥ from centre",
+            ),
+            (
+                ToolId::Polygon,
+                "G",
+                "Polygon (G): drag to draw, ↑↓ while dragging for sides. ⌥ from centre",
+            ),
+            (
+                ToolId::Star,
+                "S",
+                "Star (S): drag to draw, ↑↓ points, ←→ inner radius. ⌥ from centre",
+            ),
+            (
+                ToolId::Line,
+                "L",
+                "Line (L): drag to draw. ⇧ 45° steps, ⌥ from centre",
             ),
         ] {
             let button = egui::Button::selectable(active == Some(tool), key)
@@ -197,7 +223,8 @@ fn inspector(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
                 ui.end_row();
             });
     });
-    let text_message = text::section(ui, s);
+    let shape_message = shape::section(ui, s);
+    let text_message = text::section(ui, s).or(shape_message);
     let Some(change) = edit else {
         return text_message;
     };

@@ -59,6 +59,7 @@ pub(super) enum Action {
     },
     Tool(ToolId),
     OutlineText,
+    ConvertToPath,
 }
 
 impl From<panels::PanelAction> for Action {
@@ -130,6 +131,7 @@ impl VextorApp {
                 }
                 None => crate::outline_text::convert(s),
             },
+            Action::ConvertToPath => crate::convert_path::convert(s),
             _ => Ok(()),
         };
         if let Err(e) = result {

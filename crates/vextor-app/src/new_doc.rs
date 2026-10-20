@@ -1,13 +1,17 @@
 //! The new-document flow: pick an artboard preset or a custom size. It is
-//! also the start screen, so it offers Open… and the recent files.
+//! also the start screen, so it offers Open… and the last three files,
+//! with snapshots (`thumbnails`).
 
 use std::cell::OnceCell;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use eframe::egui;
 use vextor_core::{Artboard, Command, Document, Rect};
+use vextor_geom::FontDb;
 
-use crate::{files, theme, wordmark};
+use crate::thumbnails::Thumbnails;
+use crate::{theme, wordmark};
 
 /// Largest custom artboard side, in document px.
 pub const MAX_SIDE: f64 = 10_000.0;
@@ -20,8 +24,13 @@ const SIDE_MARGIN: f32 = 32.0;
 const WORDMARK_GAP: f32 = 12.0;
 /// Least space kept above the picker, in points.
 const TOP_MARGIN: f32 = 16.0;
-/// Recent files listed on the start screen (the File menu lists them all).
-const RECENT_SHOWN: usize = 5;
+/// Recent files shown on the start screen, newest first (the File menu
+/// lists more).
+pub const RECENT_SHOWN: usize = 3;
+/// Space between the "Recent" label and the snapshots under it, in points.
+const RECENT_LABEL_GAP: f32 = 12.0;
+/// Width of the custom size fields, in points.
+const CUSTOM_FIELD_WIDTH: f32 = 56.0;
 
 /// The artboard sizes offered when creating a document.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -151,6 +160,8 @@ pub struct Picker {
     content_height: f32,
     /// Loaded on the first frame; `None` after that if it failed to decode.
     wordmark: OnceCell<Option<egui::TextureHandle>>,
+    /// Snapshots of the recent files shown, rendered in the background.
+    thumbnails: Option<Thumbnails>,
 }
 
 impl Default for Picker {
@@ -162,15 +173,22 @@ impl Default for Picker {
             custom_row_width: 0.0,
             content_height: 0.0,
             wordmark: OnceCell::new(),
+            thumbnails: None,
         }
     }
 }
 
 impl Picker {
     /// Draws the picker centred in `ui`, with Open… and the first
-    /// `recent` files under it. `can_cancel` shows a Cancel button and lets
-    /// `Esc` close it.
-    pub fn ui(&mut self, ui: &mut egui::Ui, can_cancel: bool, recent: &[PathBuf]) -> Outcome {
+    /// [`RECENT_SHOWN`] `recent` files under it, drawn with the fonts in
+    /// `db`. `can_cancel` shows a Cancel button and lets `Esc` close it.
+    pub fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        can_cancel: bool,
+        recent: &[PathBuf],
+        db: &Arc<FontDb>,
+    ) -> Outcome {
         let mut outcome = Outcome::Open;
         if can_cancel && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             return Outcome::Cancel;
@@ -179,6 +197,7 @@ impl Picker {
             .wordmark
             .get_or_init(|| wordmark::texture(ui.ctx()))
             .clone();
+        let any_recent = self.sync_recent(ui.ctx(), recent, db);
         ui.vertical_centered(|ui| {
             // Its height depends on the window width (rows of presets), so
             // it is measured each frame and the padding uses the last one.
@@ -227,25 +246,9 @@ impl Picker {
             // on several rows): Create gets its own row, above Cancel.
             let wide = per_row == Preset::ALL.len();
             ui.add_space(16.0);
-            ui.horizontal(|ui| {
-                // Its width depends on the font, so it is measured each frame
-                // and the padding uses the last measurement.
-                ui.add_space(left_pad(ui.available_width(), self.custom_row_width));
-                let start = ui.cursor().min.x;
-                ui.label("Custom");
-                ui.add(egui::TextEdit::singleline(&mut self.width).desired_width(56.0));
-                ui.label("×");
-                ui.add(egui::TextEdit::singleline(&mut self.height).desired_width(56.0));
-                ui.label("px");
-                if wide && ui.button("Create").clicked() {
-                    outcome = self.create_custom();
-                }
-                let width = ui.min_rect().max.x - start;
-                if (width - self.custom_row_width).abs() > 0.5 {
-                    self.custom_row_width = width;
-                    ui.ctx().request_repaint();
-                }
-            });
+            if let Some(o) = self.custom_row(ui, wide) {
+                outcome = o;
+            }
             if let Some(e) = &self.error {
                 ui.colored_label(ui.visuals().error_fg_color, e);
             }
@@ -260,8 +263,15 @@ impl Picker {
             if ui.add(action_button("Open…")).clicked() {
                 outcome = Outcome::Browse;
             }
-            if let Some(path) = recent_list(ui, recent) {
-                outcome = Outcome::OpenRecent(path.to_path_buf());
+            if let Some(t) = &mut self.thumbnails
+                && any_recent
+            {
+                ui.add_space(12.0);
+                ui.weak("Recent");
+                ui.add_space(RECENT_LABEL_GAP);
+                if let (Some(path), _) = t.ui(ui) {
+                    outcome = Outcome::OpenRecent(path);
+                }
             }
             let height = ui.min_rect().max.y - start;
             if (height - self.content_height).abs() > 0.5 {
@@ -272,6 +282,67 @@ impl Picker {
         if matches!(outcome, Outcome::Create(_)) {
             self.error = None;
         }
+        outcome
+    }
+
+    /// Keeps the snapshots in step with the first [`RECENT_SHOWN`]
+    /// `recent` files that still exist (deleted or moved ones are left
+    /// out: opening them would fail), drawn with `db`. Returns whether
+    /// there is any to show.
+    fn sync_recent(&mut self, ctx: &egui::Context, recent: &[PathBuf], db: &Arc<FontDb>) -> bool {
+        let shown: Vec<PathBuf> = recent
+            .iter()
+            .filter(|p| p.is_file())
+            .take(RECENT_SHOWN)
+            .cloned()
+            .collect();
+        let any = !shown.is_empty();
+        if self
+            .thumbnails
+            .as_ref()
+            .is_none_or(|t| !t.shows(&shown, db))
+        {
+            let ppp = ctx.pixels_per_point();
+            self.thumbnails = Some(Thumbnails::start(ctx, shown, Arc::clone(db), ppp));
+        }
+        any
+    }
+
+    /// "Custom [w] × [h] px", with Create at its end when `wide`. Both
+    /// fields always show their border and centre their text. Returns
+    /// what Create did.
+    fn custom_row(&mut self, ui: &mut egui::Ui, wide: bool) -> Option<Outcome> {
+        let mut outcome = None;
+        ui.horizontal(|ui| {
+            // Its width depends on the font, so it is measured each frame
+            // and the padding uses the last measurement.
+            ui.add_space(left_pad(ui.available_width(), self.custom_row_width));
+            let start = ui.cursor().min.x;
+            ui.label("Custom");
+            // Both fields always show their border, text centred.
+            let border = egui::Stroke::new(1.0, theme::GREY_500);
+            ui.visuals_mut().widgets.inactive.bg_stroke = border;
+            ui.visuals_mut().widgets.hovered.bg_stroke = egui::Stroke::new(1.0, theme::GREY_300);
+            for (i, text) in [&mut self.width, &mut self.height].into_iter().enumerate() {
+                if i == 1 {
+                    ui.label("×");
+                }
+                ui.add(
+                    egui::TextEdit::singleline(text)
+                        .desired_width(CUSTOM_FIELD_WIDTH)
+                        .align(egui::Align2::CENTER_CENTER),
+                );
+            }
+            ui.label("px");
+            if wide && ui.add(action_button("Create")).clicked() {
+                outcome = Some(self.create_custom());
+            }
+            let width = ui.min_rect().max.x - start;
+            if (width - self.custom_row_width).abs() > 0.5 {
+                self.custom_row_width = width;
+                ui.ctx().request_repaint();
+            }
+        });
         outcome
     }
 
@@ -287,27 +358,7 @@ impl Picker {
     }
 }
 
-/// The first recent files as links (full path on hover). Returns the one
-/// clicked.
-fn recent_list<'a>(ui: &mut egui::Ui, recent: &'a [PathBuf]) -> Option<&'a Path> {
-    if recent.is_empty() {
-        return None;
-    }
-    ui.add_space(12.0);
-    ui.weak("Recent");
-    let mut clicked = None;
-    for path in recent.iter().take(RECENT_SHOWN) {
-        let link = ui
-            .link(files::display_name(path))
-            .on_hover_text(path.display().to_string());
-        if link.clicked() {
-            clicked = Some(path.as_path());
-        }
-    }
-    clicked
-}
-
-/// Create / Cancel under the picker: one width so stacked buttons line up.
+/// Create, Cancel and Open… under the picker: one width so they line up.
 fn action_button(text: &str) -> egui::Button<'_> {
     egui::Button::new(text).min_size(egui::vec2(PRESET_BUTTON.x, 0.0))
 }
@@ -366,6 +417,34 @@ mod tests {
         assert!(
             left_pad(300.0, width).abs() < f32::EPSILON,
             "no negative pad"
+        );
+    }
+
+    #[test]
+    fn the_start_screen_shows_the_three_newest_files_that_still_exist() {
+        let dir = std::env::temp_dir().join(format!("vextor-recent-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let recent: Vec<PathBuf> = (1..=5).map(|i| dir.join(format!("f{i}.vxtr"))).collect();
+        for (i, p) in recent.iter().enumerate() {
+            // f2 was deleted since.
+            if i != 1 {
+                std::fs::write(p, b"{}").expect("writes");
+            }
+        }
+        let db: Arc<FontDb> = Arc::default();
+        let mut picker = Picker::default();
+        let ctx = egui::Context::default();
+        ctx.run_ui(egui::RawInput::default(), |ui| {
+            let _ = picker.ui(ui, false, &recent, &db);
+        })
+        .textures_delta
+        .clear();
+        let _ = std::fs::remove_dir_all(&dir);
+        let shown = picker.thumbnails.as_ref().expect("started");
+        let want = [recent[0].clone(), recent[2].clone(), recent[3].clone()];
+        assert!(
+            shown.shows(&want, &db),
+            "newest first, three at most, the deleted one left out"
         );
     }
 

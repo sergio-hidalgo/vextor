@@ -1,4 +1,4 @@
-//! Reading and writing `.vextor` files, the app-data folder and the
+//! Reading and writing `.vxtr` files (older `.vextor` ones still open), the app-data folder and the
 //! recent-files list. The bytes themselves are defined by
 //! [`vextor_core::to_bytes`] / [`vextor_core::from_bytes`].
 
@@ -11,7 +11,21 @@ use thiserror::Error;
 use vextor_core::{Document, FormatError, MAX_FILE_BYTES, from_bytes, to_bytes};
 
 /// File extension of documents, without the dot.
-pub const EXTENSION: &str = "vextor";
+pub const EXTENSION: &str = "vxtr";
+
+/// The extension documents had before; such files still open, and keep it
+/// when saved or renamed.
+pub const LEGACY_EXTENSION: &str = "vextor";
+
+/// Every extension File ▸ Open offers.
+pub const OPEN_EXTENSIONS: [&str; 2] = [EXTENSION, LEGACY_EXTENSION];
+
+/// True when `path` ends in a document extension (any letter case).
+pub fn has_document_extension(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| OPEN_EXTENSIONS.iter().any(|x| e.eq_ignore_ascii_case(x)))
+}
 
 /// Most entries in File ▸ Open Recent.
 pub const MAX_RECENT: usize = 10;
@@ -109,9 +123,10 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     result
 }
 
-/// `path` with the `.vextor` extension added when it has none or another.
+/// `path` with the `.vxtr` extension added when it has none or another
+/// (a typed `.vextor` is kept).
 pub fn with_extension(path: PathBuf) -> PathBuf {
-    if path.extension().is_some_and(|e| e == EXTENSION) {
+    if has_document_extension(&path) {
         path
     } else {
         let mut s = path.into_os_string();
@@ -135,7 +150,7 @@ pub const MAX_NAME_CHARS: usize = 64;
 
 /// `input` (typed on a tab) as a document name, which is also a file name
 /// without its extension: control characters removed, trimmed, a typed
-/// `.vextor` dropped, cut to [`MAX_NAME_CHARS`].
+/// `.vxtr` or `.vextor` dropped, cut to [`MAX_NAME_CHARS`].
 ///
 /// # Errors
 /// Why the name can't be used: empty, hidden (leading dot), or holding a
@@ -143,9 +158,12 @@ pub const MAX_NAME_CHARS: usize = 64;
 pub fn clean_name(input: &str) -> Result<String, &'static str> {
     let cleaned: String = input.chars().filter(|c| !c.is_control()).collect();
     let mut name = cleaned.trim();
-    let suffix = format!(".{EXTENSION}");
-    if name.len() > suffix.len() && name.to_lowercase().ends_with(&suffix) {
-        name = name[..name.len() - suffix.len()].trim_end();
+    for ext in OPEN_EXTENSIONS {
+        let suffix = format!(".{ext}");
+        if name.len() > suffix.len() && name.to_lowercase().ends_with(&suffix) {
+            name = name[..name.len() - suffix.len()].trim_end();
+            break;
+        }
     }
     if name.is_empty() {
         return Err("A name can't be empty.");
@@ -160,14 +178,22 @@ pub fn clean_name(input: &str) -> Result<String, &'static str> {
     Ok(cut.trim_end().to_owned())
 }
 
-/// Renames the document file `from` to `<name>.vextor` in the same folder
-/// and returns the new path. Never replaces another file: a name already
+/// Renames the document file `from` to `<name>` plus its own extension
+/// (`.vxtr`, or `.vextor` for an older file) in the same folder and
+/// returns the new path. Never replaces another file: a name already
 /// taken is refused. Changing only the letter case is allowed.
 ///
 /// # Errors
 /// The name is taken, or the OS refused the rename (the file is unchanged).
 pub fn rename_document(from: &Path, name: &str) -> io::Result<PathBuf> {
-    let to = from.with_file_name(format!("{name}.{EXTENSION}"));
+    let ext = from
+        .extension()
+        .filter(|_| has_document_extension(from))
+        .map_or_else(
+            || EXTENSION.to_owned(),
+            |e| e.to_string_lossy().into_owned(),
+        );
+    let to = from.with_file_name(format!("{name}.{ext}"));
     if to == from {
         return Ok(to);
     }
@@ -341,6 +367,28 @@ mod tests {
     }
 
     #[test]
+    fn renaming_a_new_file_keeps_vxtr_and_an_old_one_keeps_vextor() {
+        let dir = TestDir::new();
+        let new = dir.path().join("card.vxtr");
+        fs::write(&new, b"x").expect("writes");
+        let to = rename_document(&new, "pricing").expect("renames");
+        assert_eq!(to, dir.path().join("pricing.vxtr"));
+        let old = dir.path().join("icon.vextor");
+        fs::write(&old, b"x").expect("writes");
+        let to = rename_document(&old, "logo").expect("renames");
+        assert_eq!(to, dir.path().join("logo.vextor"));
+    }
+
+    #[test]
+    fn both_extensions_count_as_documents_and_typed_ones_are_dropped() {
+        assert!(has_document_extension(Path::new("/a/b.vxtr")));
+        assert!(has_document_extension(Path::new("/a/b.VEXTOR")));
+        assert!(!has_document_extension(Path::new("/a/b.svg")));
+        assert_eq!(clean_name("card.vxtr").as_deref(), Ok("card"));
+        assert_eq!(clean_name("card.vextor").as_deref(), Ok("card"));
+    }
+
+    #[test]
     fn renaming_never_replaces_another_file() {
         let dir = TestDir::new();
         let from = dir.path().join("card.vextor");
@@ -466,7 +514,11 @@ mod tests {
     fn extension_is_added_when_missing() {
         assert_eq!(
             with_extension(PathBuf::from("/x/icon")),
-            PathBuf::from("/x/icon.vextor")
+            PathBuf::from("/x/icon.vxtr")
+        );
+        assert_eq!(
+            with_extension(PathBuf::from("/x/icon.vxtr")),
+            PathBuf::from("/x/icon.vxtr")
         );
         assert_eq!(
             with_extension(PathBuf::from("/x/icon.vextor")),
@@ -474,7 +526,7 @@ mod tests {
         );
         assert_eq!(
             with_extension(PathBuf::from("/x/icon.svg")),
-            PathBuf::from("/x/icon.svg.vextor")
+            PathBuf::from("/x/icon.svg.vxtr")
         );
     }
 

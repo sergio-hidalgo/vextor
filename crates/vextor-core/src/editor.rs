@@ -8,6 +8,7 @@ use crate::math::Vec2;
 use crate::node::Node;
 use crate::path::PathNodeRef;
 use crate::resource::Resource;
+use crate::style::Style;
 
 /// What the user is working with right now.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -16,6 +17,9 @@ pub struct EditorState {
     pub tool: ToolId,
     pub view: View,
     pub clipboard: Option<ClipboardPayload>,
+    /// The fill and stroke new shapes get: the last style given to a shape
+    /// (spec 06).
+    pub default_style: Style,
 }
 
 /// The current selection.
@@ -44,6 +48,33 @@ pub enum ToolId {
     Select,
     /// Places and edits text (spec 05c).
     Text,
+    /// Draws a rectangle (spec 06).
+    Rect,
+    /// Draws an ellipse (spec 06).
+    Ellipse,
+    /// Draws a regular polygon (spec 06).
+    Polygon,
+    /// Draws a star (spec 06).
+    Star,
+    /// Draws a straight line (spec 06).
+    Line,
+}
+
+impl ToolId {
+    /// The shape tools, in tool-strip order.
+    pub const SHAPES: [Self; 5] = [
+        Self::Rect,
+        Self::Ellipse,
+        Self::Polygon,
+        Self::Star,
+        Self::Line,
+    ];
+
+    /// True for the tools that draw a shape.
+    #[must_use]
+    pub fn is_shape(self) -> bool {
+        Self::SHAPES.contains(&self)
+    }
 }
 
 /// Canvas zoom and pan.

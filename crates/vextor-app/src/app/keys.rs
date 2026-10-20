@@ -52,10 +52,25 @@ pub(super) const FRONT: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key:
 pub(super) const BACK: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::ArrowDown);
 
 pub(super) const OUTLINE_TEXT: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::O);
+pub(super) const CONVERT_TO_PATH: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::P);
 
 // Tools: plain letters (every layout has them).
 pub(super) const SELECT_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::V);
 pub(super) const TEXT_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::T);
+/// The shape tools' keys, in `ToolId::SHAPES` order.
+pub(super) const SHAPE_TOOLS: [(KeyboardShortcut, ToolId); 5] = [
+    (KeyboardShortcut::new(Modifiers::NONE, Key::R), ToolId::Rect),
+    (
+        KeyboardShortcut::new(Modifiers::NONE, Key::E),
+        ToolId::Ellipse,
+    ),
+    (
+        KeyboardShortcut::new(Modifiers::NONE, Key::G),
+        ToolId::Polygon,
+    ),
+    (KeyboardShortcut::new(Modifiers::NONE, Key::S), ToolId::Star),
+    (KeyboardShortcut::new(Modifiers::NONE, Key::L), ToolId::Line),
+];
 
 /// Nudge distance, and with Shift, in document px.
 pub(super) const NUDGE: i32 = 1;
@@ -83,6 +98,7 @@ impl VextorApp {
             }
             let keys = [
                 (OUTLINE_TEXT, Action::OutlineText),
+                (CONVERT_TO_PATH, Action::ConvertToPath),
                 (PASTE_IN_PLACE, Action::PasteInPlace),
                 (DUPLICATE, Action::Duplicate),
                 (SELECT_ALL, Action::SelectAll),
@@ -98,7 +114,8 @@ impl VextorApp {
                 (SELECT_TOOL, Action::Tool(ToolId::Select)),
                 (TEXT_TOOL, Action::Tool(ToolId::Text)),
             ];
-            for (shortcut, action) in keys {
+            let tools = SHAPE_TOOLS.map(|(key, tool)| (key, Action::Tool(tool)));
+            for (shortcut, action) in keys.into_iter().chain(tools) {
                 if i.consume_shortcut(&shortcut) {
                     actions.push(action);
                 }
@@ -205,6 +222,21 @@ mod tests {
             actions(Key::V, Modifiers::NONE),
             vec![Action::Tool(ToolId::Select)]
         );
+    }
+
+    #[test]
+    fn letters_pick_shape_tools_and_command_shift_p_converts() {
+        let picked: Vec<Vec<Action>> = [Key::R, Key::E, Key::G, Key::S, Key::L]
+            .into_iter()
+            .map(|k| actions(k, Modifiers::NONE))
+            .collect();
+        let want: Vec<Vec<Action>> = ToolId::SHAPES
+            .into_iter()
+            .map(|t| vec![Action::Tool(t)])
+            .collect();
+        assert_eq!(picked, want);
+        assert_eq!(actions(Key::P, CMD_SHIFT), vec![Action::ConvertToPath]);
+        assert_eq!(actions(Key::S, Modifiers::COMMAND), vec![Action::Save]);
     }
 
     #[test]

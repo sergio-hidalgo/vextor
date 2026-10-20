@@ -21,7 +21,7 @@ impl VextorApp {
     pub(super) fn open_dialog(&mut self) {
         let dialog = rfd::FileDialog::new()
             .set_title("Open")
-            .add_filter("Vextor document", &[files::EXTENSION]);
+            .add_filter("Vextor document", &files::OPEN_EXTENSIONS);
         if let Some(path) = self.in_current_folder(dialog).pick_file() {
             self.open_path(path);
         }

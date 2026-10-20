@@ -4,10 +4,10 @@ A very simple desktop vector editor, written in Rust, for drawing the shapes
 of web app components — icons, buttons, badges, cards — and copying clean
 SVG, HTML or JSX out of them.
 
-**Status:** the editor window, canvas, document model and `.vextor`
-files are in place. You can create, open and save documents, select and
-transform objects, and add text labels; the shape and pen tools arrive in
-later milestones.
+**Status:** the editor window, canvas, document model and `.vxtr`
+files are in place. You can create, open and save documents, draw
+rectangles, ellipses, polygons, stars and lines, select and transform
+objects, and add text labels; the pen tool arrives in a later milestone.
 
 ## Requirements
 
@@ -43,8 +43,12 @@ there), never the machine's fonts.
 ## Using the editor
 
 On launch, pick an artboard size: Icon 16 / 24 / 32 / 48, Button 160×48,
-Card 320×200, or a custom size — or open a file (Open… and the recent files
-are under the sizes). The canvas shows a checkerboard inside transparent
+Card 320×200, or a custom size — or open a file: Open…, and under it the
+last three files you worked on that still exist, each with a snapshot
+(click one to open it; a deleted or moved file is left out, a damaged one
+shows "No preview"). The snapshots
+are drawn in the background each time this screen opens, with the same
+checks as opening the file. The canvas shows a checkerboard inside transparent
 artboards and grey around them.
 
 Several documents can be open at once, one tab each above the canvas (`•`
@@ -65,12 +69,13 @@ turn, and after a crash every unsaved document is offered back.
 | Pan                         | two-finger scroll, space-drag, middle-drag |
 | Fit artboard / actual size  | `⌘0` / `⌘1` (View menu)                    |
 | Rename the artboard         | double-click its name above it; `Enter` or click elsewhere keeps it, `Esc` cancels (up to 64 characters) |
-| Artboard name, background   | Inspector ▸ Artboard, with nothing selected: Name, and Background on (starts white) with a colour; off is transparent |
+| Artboard name, size, background | Inspector ▸ Artboard, with nothing selected: Name; W and H resize the artboard about its centre (1–10 000 px; the objects on it stay where they are); Background on (starts white) with a colour, off is transparent |
 | Undo / redo                 | `⌘Z` / `⇧⌘Z` (Edit menu shows what)        |
 
 ### Selecting and transforming
 
-Tools (left panel): Select (`V`) and Text (`T`).
+Tools (left panel): Select (`V`), Text (`T`), and the shape tools
+Rectangle (`R`), Ellipse (`E`), Polygon (`G`), Star (`S`) and Line (`L`).
 
 | Action                              | How                                                    |
 | :---------------------------------- | :----------------------------------------------------- |
@@ -89,6 +94,27 @@ Tools (left panel): Select (`V`) and Text (`T`).
 | Align, distribute                   | Inspector ▸ Align icon buttons, or the Object menu (the board icon toggles Align to Artboard) |
 | Group / ungroup (buttons)           | Inspector ▸ Group, or `⌘G` / `⇧⌘G`                     |
 | Flip                                | Object menu                                            |
+
+### Shapes
+
+| Action                       | How                                                        |
+| :--------------------------- | :--------------------------------------------------------- |
+| Draw a shape                 | pick a shape tool, drag on the canvas; the shape is selected and the Select tool comes back |
+| Square, circle, 45° line     | hold `⇧` while dragging                                    |
+| Draw from the centre         | hold `⌥` while dragging                                    |
+| Exact size                   | click without dragging: a dialog asks for the size (`Enter` creates, `Esc` cancels; `⌥`-click centres it on the click) |
+| Polygon sides, star points   | `↑` / `↓` while dragging (3–20), or Inspector ▸ Shape      |
+| Star inner radius            | `←` / `→` while dragging, or Inspector ▸ Shape (% of the outer radius) |
+| Cancel a drag                | `Esc` while dragging                                       |
+| Round a rectangle's corners  | with one rectangle selected, drag a dot inside a corner: all corners round together, `⌥` rounds only that one; or Inspector ▸ Shape (each corner, or all) |
+| Round polygon / star corners | Inspector ▸ Shape ▸ Rounding                               |
+| Convert to path              | Object ▸ Convert to Path (`⇧⌘P`): an editable path that looks exactly the same |
+
+New shapes take the last fill and stroke given to a shape in the document
+(black fill, no stroke to begin with); a line gets that stroke, or 1 px
+black, and no fill. The corner dots show only when the rectangle is at
+least 40 points on screen; zoom in for small ones. Each drag, dialog or
+inspector change is one undo step.
 
 ### Text
 
@@ -139,7 +165,7 @@ colours from the palette in `crates/vextor-app/src/theme.rs`.
 
 ## Files, autosave and recovery
 
-Documents are saved as `.vextor` files (JSON, `format_version: 2`, which
+Documents are saved as `.vxtr` files (files from earlier versions, `.vextor`, still open and keep their name when saved or renamed; JSON, `format_version: 2`, which
 added text; version-1 files still open and are saved as version 2;
 embedded images as base64; fonts are never embedded, only their names). Saving writes a temporary file next to the
 document and renames it into place, so a crash never leaves a half-written
@@ -171,7 +197,7 @@ VEXTOR_DEBUG_MENU=1 cargo run -p vextor-app --release
 
 | Crate           | Holds                                                      |
 | :-------------- | :--------------------------------------------------------- |
-| `vextor-core`   | document model, commands, undo history, `.vextor` bytes (no UI, no file I/O) |
+| `vextor-core`   | document model, commands, undo history, `.vxtr` bytes (no UI, no file I/O) |
 | `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`); later snapping, booleans |
 | `vextor-svg`    | SVG export and import                                      |
 | `vextor-render` | rasterising documents for the canvas (`tiny-skia`), sample documents |
@@ -189,7 +215,7 @@ edit is undoable; a command either applies completely or not at all, and
 the document is validated after each one. Colours are sRGB + alpha, typed and saved as
 hex (`#1e90ff80`); a document can choose to save them as
 `{"r":30,"g":144,"b":255,"a":128}` instead.
-`vextor_core::to_bytes` / `from_bytes` turn a document into `.vextor` bytes
+`vextor_core::to_bytes` / `from_bytes` turn a document into `.vxtr` bytes
 and back; loading checks size, format version, object count and every
 document invariant. `vextor_geom` turns any shape into a `kurbo::BezPath`
 or an editable path.

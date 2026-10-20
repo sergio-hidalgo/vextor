@@ -167,6 +167,7 @@ mod tests {
         ungroup: true,
         distribute: true,
         outline: false,
+        convert: false,
     };
 
     #[test]

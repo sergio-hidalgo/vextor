@@ -258,7 +258,8 @@ impl VextorApp {
             self.picker = Some(Picker::default());
         }
         if let Some(picker) = &mut self.picker {
-            match picker.ui(ui, !self.docs.is_empty(), self.recent.paths()) {
+            let fonts = self.fonts.current();
+            match picker.ui(ui, !self.docs.is_empty(), self.recent.paths(), fonts.db()) {
                 Outcome::Open => {}
                 Outcome::Cancel => self.picker = None,
                 Outcome::Create(doc) => {
@@ -287,7 +288,8 @@ impl eframe::App for VextorApp {
         self.handle_close(&ctx);
         let prompt_open =
             self.confirm.is_some() || !self.orphans.is_empty() || self.outline_prompt.is_some();
-        if !prompt_open {
+        // While a shape is drawn, keys belong to it (arrows, Esc).
+        if !prompt_open && !self.canvas.is_drawing() {
             // While text is typed, letters and Edit keys belong to it.
             let editing =
                 !self.docs.is_empty() && self.picker.is_none() && !self.canvas.is_editing_text();

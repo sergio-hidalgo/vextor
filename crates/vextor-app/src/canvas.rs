@@ -25,6 +25,7 @@ use crate::view;
 mod artboard_label;
 mod drag_layers;
 mod selection;
+mod shapes;
 mod text;
 
 /// Side of one checkerboard square, in points.
@@ -63,6 +64,8 @@ pub struct Canvas {
     rename: Option<artboard_label::Rename>,
     /// The document drawn last frame (spec 05f).
     document: Option<DocId>,
+    /// Shape tools, corner widgets and the size dialog (spec 06).
+    shapes: shapes::ShapeInput,
 }
 
 impl Canvas {
@@ -91,6 +94,8 @@ impl Canvas {
             size: self.size,
             show_stats: self.show_stats,
             document: Some(doc),
+            // Polygon sides and star points carry over to the next shape.
+            shapes: self.shapes.carry_over(),
             ..Self::default()
         };
     }
@@ -107,7 +112,9 @@ impl Canvas {
         }
         let typing = self.is_editing_text() || self.rename.is_some();
         handle_input(ui, &response, rect, &mut session.editor.view, typing);
-        let key_message = self.text_keys(ui, session);
+        let key_message = self
+            .text_keys(ui, session)
+            .or_else(|| self.shape_keys(ui, session));
         let message = if self.label_input(ui, &response, rect, session) {
             key_message
         } else {
@@ -129,7 +136,8 @@ impl Canvas {
         self.draw_status(ui, &painter, rect, current);
         self.rename_ui(ui, rect, session);
         self.last_view = Some(current);
-        message
+        let dialog_message = self.size_dialog_ui(ui.ctx(), rect, session);
+        message.or(dialog_message)
     }
 
     fn draw_document(

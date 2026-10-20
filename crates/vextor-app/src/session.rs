@@ -3,7 +3,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use vextor_core::{Command, CoreError, Document, EditorState, History, NodeId, Selection};
+use vextor_core::{
+    Command, CoreError, Document, EditorState, History, NodeId, NodeKind, Selection, Style,
+};
 use vextor_geom::Fonts;
 
 use crate::files;
@@ -135,10 +137,15 @@ impl Session {
     ///
     /// # Errors
     /// The command's [`CoreError`]; nothing changes.
+    /// A style given to a shape becomes the default style of new shapes.
     pub fn apply(&mut self, cmd: Command) -> Result<(), CoreError> {
+        let style = shape_style(&self.doc, &cmd).cloned();
         self.history
             .apply(&mut self.doc, cmd, &self.editor.selection)?;
         self.revision += 1;
+        if let Some(style) = style {
+            self.editor.default_style = style;
+        }
         Ok(())
     }
 
@@ -215,6 +222,19 @@ impl Session {
     }
 }
 
+/// The style `cmd` gives to at least one shape, if it does (`SetStyle`,
+/// also inside a batch; the last one wins).
+fn shape_style<'a>(doc: &Document, cmd: &'a Command) -> Option<&'a Style> {
+    match cmd {
+        Command::SetStyle { ids, style } => ids
+            .iter()
+            .any(|id| matches!(doc.nodes.get(id).map(|n| &n.kind), Some(NodeKind::Shape(_))))
+            .then_some(style),
+        Command::Batch { commands, .. } => commands.iter().rev().find_map(|c| shape_style(doc, c)),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use vextor_core::{Command, Transform};
@@ -226,6 +246,59 @@ mod tests {
             ids: vec![s.doc.layers[0]],
             transform: Transform::translate(x, 0.0),
         }
+    }
+
+    #[test]
+    fn styling_a_shape_sets_the_default_style_but_styling_text_does_not() {
+        use vextor_core::{CornerRadii, Geometry, Node, Paint, Rect, Rgba, Shape, Text};
+        let mut doc = Document::new("t");
+        let layer = doc.layers[0];
+        let (shape, text) = (doc.alloc_node_id(), doc.alloc_node_id());
+        let rect = Shape {
+            geometry: Geometry::Rect {
+                rect: Rect::new(0.0, 0.0, 10.0, 10.0),
+                radius: CornerRadii::default(),
+            },
+            style: Style::default(),
+        };
+        doc.apply(Command::Insert {
+            parent: Some(layer),
+            index: 0,
+            nodes: vec![
+                Node::new(shape, NodeKind::Shape(rect)),
+                Node::new(text, NodeKind::Text(Text::new("a", "Inter"))),
+            ],
+        })
+        .expect("inserts");
+        let mut s = Session::new(doc);
+        let blue = Style {
+            fill: Paint::Solid(Rgba::rgb(0, 0, 255)),
+            stroke: None,
+        };
+        let red = Style {
+            fill: Paint::Solid(Rgba::rgb(255, 0, 0)),
+            stroke: None,
+        };
+        s.apply(Command::SetStyle {
+            ids: vec![text],
+            style: red,
+        })
+        .expect("styles");
+        assert_eq!(s.editor.default_style, Style::default(), "text only");
+        s.apply(Command::Batch {
+            label: "Restyle",
+            commands: vec![Command::SetStyle {
+                ids: vec![shape],
+                style: blue.clone(),
+            }],
+        })
+        .expect("styles");
+        assert_eq!(s.editor.default_style, blue);
+        s.undo();
+        assert_eq!(
+            s.editor.default_style, blue,
+            "undo keeps the last used style"
+        );
     }
 
     #[test]

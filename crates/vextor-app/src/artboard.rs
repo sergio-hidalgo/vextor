@@ -1,5 +1,6 @@
-//! Renaming an artboard and setting its background (spec 05e): the rules
-//! shared by the canvas label and Inspector ▸ Artboard.
+//! Renaming an artboard and setting its background (spec 05e), and
+//! resizing it from Inspector ▸ Artboard (spec 06 review): the rules
+//! shared by the canvas label and the inspector.
 
 use vextor_core::{Artboard, ArtboardId, Command, Rgba};
 
@@ -48,6 +49,26 @@ pub fn rename(s: &mut Session, id: ArtboardId, input: &str) -> bool {
 /// false when nothing changed.
 pub fn set_background(s: &mut Session, id: ArtboardId, background: Option<Rgba>) -> bool {
     edit(s, id, "Artboard background", |a| a.background = background)
+}
+
+/// Smallest artboard side, in px.
+pub const MIN_SIDE: f64 = 1.0;
+
+/// Resizes artboard `id` to `width` × `height` (each clamped to
+/// [`MIN_SIDE`]..=[`crate::new_doc::MAX_SIDE`]) about its centre, as one
+/// undo step; inside a gesture, consecutive changes merge into one. The
+/// objects on it stay where they are. Returns false when nothing changed.
+pub fn resize(s: &mut Session, id: ArtboardId, width: f64, height: f64) -> bool {
+    if !(width.is_finite() && height.is_finite()) {
+        return false;
+    }
+    let side = |v: f64| v.clamp(MIN_SIDE, crate::new_doc::MAX_SIDE);
+    let (w, h) = (side(width), side(height));
+    edit(s, id, "Resize artboard", |a| {
+        let r = a.rect;
+        let (cx, cy) = (r.x + r.width / 2.0, r.y + r.height / 2.0);
+        a.rect = vextor_core::Rect::new(cx - w / 2.0, cy - h / 2.0, w, h);
+    })
 }
 
 fn edit(
@@ -186,5 +207,42 @@ mod tests {
         let bytes = vextor_core::to_bytes(&s.doc).expect("saves");
         let back = vextor_core::from_bytes(&bytes).expect("opens");
         assert_eq!(back.artboards, s.doc.artboards);
+    }
+
+    #[test]
+    fn resizing_keeps_the_centre_and_the_objects() {
+        let (mut s, id) = session();
+        let before = s.doc.artboards[0].rect;
+        let nodes = s.doc.nodes.clone();
+        assert!(resize(
+            &mut s,
+            id,
+            before.width + 40.0,
+            before.height - 20.0
+        ));
+        let r = s.doc.artboards[0].rect;
+        assert_eq!(
+            (r.width, r.height),
+            (before.width + 40.0, before.height - 20.0)
+        );
+        assert_eq!(
+            (r.x, r.y),
+            (before.x - 20.0, before.y + 10.0),
+            "grows from the centre"
+        );
+        assert_eq!(s.doc.nodes, nodes, "objects stay where they are");
+        assert_eq!(s.edit_menu().undo, Some("Resize artboard"));
+        s.undo();
+        assert_eq!(s.doc.artboards[0].rect, before);
+    }
+
+    #[test]
+    fn resizing_clamps_and_refuses_nonsense() {
+        let (mut s, id) = session();
+        assert!(resize(&mut s, id, 0.0, 99_999.0));
+        let r = s.doc.artboards[0].rect;
+        assert_eq!((r.width, r.height), (MIN_SIDE, crate::new_doc::MAX_SIDE));
+        assert!(!resize(&mut s, id, f64::NAN, 10.0));
+        assert!(!resize(&mut s, id, r.width, r.height), "no change, no step");
     }
 }

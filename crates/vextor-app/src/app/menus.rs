@@ -5,9 +5,9 @@ use vextor_core::Arrange;
 use vextor_geom::Align;
 
 use super::keys::{
-    ACTUAL_SIZE, BACK, BACKWARD, CLOSE, COPY, CUT, DELETE, DUPLICATE, FIT, FORWARD, FRONT, GROUP,
-    NEW, NEXT_DOC, OPEN, OUTLINE_TEXT, PASTE, PASTE_IN_PLACE, PREV_DOC, REDO, SAVE, SAVE_AS,
-    SELECT_ALL, UNDO, UNGROUP,
+    ACTUAL_SIZE, BACK, BACKWARD, CLOSE, CONVERT_TO_PATH, COPY, CUT, DELETE, DUPLICATE, FIT,
+    FORWARD, FRONT, GROUP, NEW, NEXT_DOC, OPEN, OUTLINE_TEXT, PASTE, PASTE_IN_PLACE, PREV_DOC,
+    REDO, SAVE, SAVE_AS, SELECT_ALL, UNDO, UNGROUP,
 };
 use super::{Action, VextorApp};
 use crate::session::Session;
@@ -125,6 +125,15 @@ impl VextorApp {
             "Select a text",
         ) {
             actions.push(Action::OutlineText);
+        }
+        if why_item(
+            ui,
+            can.convert,
+            "Convert to Path",
+            CONVERT_TO_PATH,
+            "Select a rectangle, ellipse, polygon, star or line",
+        ) {
+            actions.push(Action::ConvertToPath);
         }
         ui.separator();
         ui.add_enabled_ui(can.edit, |ui| {
