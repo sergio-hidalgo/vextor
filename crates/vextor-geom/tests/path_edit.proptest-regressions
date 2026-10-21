@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 3c12b266da2b0d8f486f41207439f88f6e56d1373af4c6d0d5b740d8b7caae7a # shrinks to sp = SubPath { nodes: [PathNode { anchor: Point { x: 0.0, y: 0.0 }, handle_in: None, handle_out: None, kind: Corner, corner_radius: 0.0 }, PathNode { anchor: Point { x: 0.0, y: 0.0 }, handle_in: None, handle_out: Some(Vec2 { x: 0.0, y: 44.25207536455659 }), kind: Corner, corner_radius: 0.0 }], closed: true }, pick = 0, t = 0.05
+cc d757c85f8271b66e2cb3e0a76c0e1a4424c77b7efb36a33550ab347bd458ea72 # shrinks to sp = SubPath { nodes: [PathNode { anchor: Point { x: -51.336065570263884, y: 60.95324197685971 }, handle_in: Some(Vec2 { x: -24.696438693888474, y: 79.00833610153238 }), handle_out: None, kind: Corner, corner_radius: 0.0 }, PathNode { anchor: Point { x: 33.32578724173313, y: 24.848298059929725 }, handle_in: None, handle_out: Some(Vec2 { x: -61.81824752197454, y: -75.10137147422036 }), kind: Corner, corner_radius: 0.0 }], closed: true }, pick = 1, t = 0.8932914395316256

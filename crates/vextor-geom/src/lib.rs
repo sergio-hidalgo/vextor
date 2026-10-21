@@ -4,6 +4,7 @@
 mod convert;
 mod draw;
 mod hit;
+mod path_edit;
 mod resize;
 mod text;
 mod transform;
@@ -15,6 +16,11 @@ pub use draw::{
     Corner, DrawMods, ShapeKind, ShapeSize, corner_radius_at, corner_widget, drawn, sized,
 };
 pub use hit::{bounds, from_affine, pick, selectable, to_affine, touching, union_bounds};
+pub use path_edit::{
+    NodeCorner, SegmentHit, bend, constrain_angle, constrain_vector, from_point, from_vec,
+    handle_or_none, hit_node, hit_segment, is_straight, join_open, node_corner, open_endpoints,
+    segment, smooth_handles, split_segment, transform_subpath,
+};
 pub use resize::{Resized, polar, resize, stretched};
 pub use text::{
     FaceStyle, FontDb, Fonts, GlyphSpan, LineBox, MissingFont, ResolvedFace, TextLayout, layout,

@@ -161,6 +161,9 @@ impl VextorApp {
         if !matches!(action, Action::Fit | Action::ActualSize) {
             self.finish_text();
         }
+        if self.pen_action(&action) {
+            return;
+        }
         match action {
             Action::New => self.picker = Some(Picker::default()),
             Action::Open => self.open_dialog(),

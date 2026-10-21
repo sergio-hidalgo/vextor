@@ -27,19 +27,38 @@ const ALIGN: [(Align, Icon, &str); 6] = [
     (Align::Bottom, Icon::AlignBottom, "Align bottom edges"),
 ];
 
+/// What the Align buttons line up: objects, or path nodes (spec 07).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Targets {
+    Objects,
+    Nodes,
+}
+
 /// Align: six align buttons, two distribute buttons and the Align to
 /// Artboard toggle.
 pub fn align_section(
     ui: &mut egui::Ui,
     can: Can,
+    targets: Targets,
     to_artboard: &mut bool,
     out: &mut Vec<PanelAction>,
 ) {
-    super::section(ui, "Align", |ui| align_buttons(ui, can, to_artboard, out));
+    super::section(ui, "Align", |ui| {
+        align_buttons(ui, can, targets, to_artboard, out);
+    });
 }
 
-fn align_buttons(ui: &mut egui::Ui, can: Can, to_artboard: &mut bool, out: &mut Vec<PanelAction>) {
-    let select_first = "Select an object first";
+fn align_buttons(
+    ui: &mut egui::Ui,
+    can: Can,
+    targets: Targets,
+    to_artboard: &mut bool,
+    out: &mut Vec<PanelAction>,
+) {
+    let (select_first, three) = match targets {
+        Targets::Objects => ("Select an object first", "Select three or more objects"),
+        Targets::Nodes => ("Select nodes first", "Select three or more nodes"),
+    };
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         for (i, (how, icon, tip)) in ALIGN.into_iter().enumerate() {
@@ -53,7 +72,6 @@ fn align_buttons(ui: &mut egui::Ui, can: Can, to_artboard: &mut bool, out: &mut 
     });
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
-        let three = "Select three or more objects";
         for (horizontal, icon, tip) in [
             (
                 true,
@@ -151,7 +169,7 @@ mod tests {
                 ..Default::default()
             };
             ctx.run_ui(input, |ui| {
-                align_section(ui, can, &mut to_artboard, &mut out);
+                align_section(ui, can, Targets::Objects, &mut to_artboard, &mut out);
                 group_section(ui, can, &mut out);
             })
             .textures_delta

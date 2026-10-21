@@ -60,6 +60,12 @@ impl Canvas {
                 message = message.or(shape_message);
                 used
             };
+            let used = used || {
+                let (used, pen_message) = self.pen_press(session, to_doc(p), mods);
+                message = message.or(pen_message);
+                used
+            };
+            let used = used || self.node_press(session, to_doc(p), mods);
             if !used {
                 self.tool.press(session, to_doc(p), mods, view.zoom);
             }
@@ -70,6 +76,12 @@ impl Canvas {
         if let Some(e) = self.shape_drag(session, at.map(to_doc), down && !released, mods) {
             message = Some(e);
         }
+        if let Some(e) = self.pen_drag(session, at.map(to_doc), down && !released, mods) {
+            message = Some(e);
+        }
+        if let Some(e) = self.node_drag(session, at.map(to_doc), down && !released, mods) {
+            message = Some(e);
+        }
         if self.tool.is_dragging() {
             if down && let Some(p) = at {
                 message = self.tool.drag_to(session, to_doc(p), mods, view.zoom).err();
@@ -78,14 +90,20 @@ impl Canvas {
                 self.tool.release(session);
             }
         }
-        // After the selection tool's release, which closes its own gesture.
+        // After the tools' release, which closes their own gesture.
         if response.double_clicked()
             && !space
-            && session.editor.tool == vextor_core::ToolId::Select
             && !self.is_editing_text()
             && let Some(p) = at
         {
-            self.text_double_click(session, to_doc(p));
+            if session.editor.tool == vextor_core::ToolId::Select {
+                self.text_double_click(session, to_doc(p));
+            }
+            if !self.is_editing_text()
+                && let Some(e) = super::nodes::node_double_click(session, to_doc(p))
+            {
+                message = Some(e);
+            }
         }
         if response.hovered() && !space {
             self.set_cursor(ui, session, ui.input(|i| i.pointer.hover_pos()).map(to_doc));
@@ -99,8 +117,10 @@ impl Canvas {
         let tool = session.editor.tool;
         let cursor = if self.is_editing_text() || tool == vextor_core::ToolId::Text {
             Some(egui::CursorIcon::Text)
-        } else if tool.is_shape() {
+        } else if tool.is_shape() || tool == vextor_core::ToolId::Pen {
             Some(egui::CursorIcon::Crosshair)
+        } else if tool == vextor_core::ToolId::Node {
+            at.and_then(|p| self.node_cursor(session, p))
         } else if at.is_some_and(|p| self.over_corner_widget(session, p)) {
             Some(egui::CursorIcon::PointingHand)
         } else if self.tool.is_moving() {
