@@ -74,7 +74,8 @@ turn, and after a crash every unsaved document is offered back.
 
 ### Selecting and transforming
 
-Tools (left panel): Select (`V`), Nodes (`A`), Pen (`P`), Text (`T`), and
+Tools (left panel, one icon each; hover for its name and key): Select
+(`V`, solid arrow), Nodes (`A`, hollow arrow), Pen (`P`), Text (`T`), and
 the shape tools Rectangle (`R`), Ellipse (`E`), Polygon (`G`), Star (`S`)
 and Line (`L`).
 

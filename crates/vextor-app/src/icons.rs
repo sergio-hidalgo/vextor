@@ -7,6 +7,7 @@ use eframe::egui::{self, Color32, Painter, Pos2, Rect, Response, Sense, Stroke, 
 use crate::theme;
 
 mod path;
+mod tools;
 
 /// Side of the square an icon button's icon is drawn in, in points.
 pub const SIZE: f32 = 16.0;
@@ -59,6 +60,17 @@ pub enum Icon {
     PathJoin,
     PathSplit,
     PathReverse,
+    /// The tools strip (spec 07): Select (a solid arrow), Nodes (a hollow
+    /// arrow with a node), Pen (a nib), Text, and the shapes.
+    ToolSelect,
+    ToolNode,
+    ToolPen,
+    ToolText,
+    ToolRect,
+    ToolEllipse,
+    ToolPolygon,
+    ToolStar,
+    ToolLine,
 }
 
 /// A button showing `icon`, highlighted when `selected`, explained by
@@ -88,6 +100,39 @@ pub fn button(
         theme::GREY_100
     };
     let square = Rect::from_center_size(r.rect.center(), Vec2::splat(SIZE));
+    paint(ui.painter(), square, icon, color);
+    r
+}
+
+/// Size of a tool button in the tools strip, and of its icon, in points.
+const TOOL_BUTTON: Vec2 = Vec2::new(34.0, 32.0);
+const TOOL_ICON: f32 = 20.0;
+
+/// A tools strip button: `icon` large, highlighted while `selected`
+/// (the active tool), explained by `tooltip`.
+pub fn tool_button(
+    ui: &mut egui::Ui,
+    icon: Icon,
+    selected: bool,
+    enabled: bool,
+    tooltip: &str,
+) -> Response {
+    let r = ui
+        .add_enabled(
+            enabled,
+            egui::Button::selectable(selected, "").min_size(TOOL_BUTTON),
+        )
+        .on_hover_text(tooltip);
+    let color = if !enabled {
+        theme::GREY_500
+    } else if selected {
+        theme::YELLOW
+    } else if r.hovered() {
+        theme::WHITE
+    } else {
+        theme::GREY_100
+    };
+    let square = Rect::from_center_size(r.rect.center(), Vec2::splat(TOOL_ICON));
     paint(ui.painter(), square, icon, color);
     r
 }
@@ -160,6 +205,15 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.outline((1.5, 1.5), (7.5, 7.5));
             pen.outline((8.5, 8.5), (14.5, 14.5));
         }
+        Icon::ToolSelect
+        | Icon::ToolNode
+        | Icon::ToolPen
+        | Icon::ToolText
+        | Icon::ToolRect
+        | Icon::ToolEllipse
+        | Icon::ToolPolygon
+        | Icon::ToolStar
+        | Icon::ToolLine => pen.tool_icon(icon),
         _ => pen.path_icon(icon),
     }
 }

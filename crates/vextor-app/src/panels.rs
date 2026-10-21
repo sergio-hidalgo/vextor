@@ -36,65 +36,38 @@ mod text;
 pub use arrange::PanelAction;
 pub use fonts::recent_families;
 
-/// Tools (left): the active one is highlighted. Returns the tool clicked.
+/// The tools strip, in groups: tool, icon, tooltip (name and key).
+const TOOLS: [&[(ToolId, Icon, &str)]; 4] = [
+    &[
+        (ToolId::Select, Icon::ToolSelect, "Select (V)"),
+        (ToolId::Node, Icon::ToolNode, "Nodes (A)"),
+    ],
+    &[(ToolId::Pen, Icon::ToolPen, "Pen (P)")],
+    &[(ToolId::Text, Icon::ToolText, "Text (T)")],
+    &[
+        (ToolId::Rect, Icon::ToolRect, "Rectangle (R)"),
+        (ToolId::Ellipse, Icon::ToolEllipse, "Ellipse (E)"),
+        (ToolId::Polygon, Icon::ToolPolygon, "Polygon (G)"),
+        (ToolId::Star, Icon::ToolStar, "Star (S)"),
+        (ToolId::Line, Icon::ToolLine, "Line (L)"),
+    ],
+];
+
+/// Tools (left): one icon per tool, in groups (selecting, drawing, text,
+/// shapes); the active one is highlighted. Returns the tool clicked.
 pub fn tools(ui: &mut egui::Ui, active: Option<ToolId>) -> Option<ToolId> {
     ui.add_space(6.0);
     let mut picked = None;
     ui.vertical_centered(|ui| {
-        for (tool, key, hint) in [
-            (ToolId::Select, "V", "Select (V)"),
-            (
-                ToolId::Node,
-                "A",
-                "Nodes (A, or double-click a path): drag nodes, handles and segments. \
-                 Double-click a node: corner / smooth / symmetric. C straight ↔ curve, \
-                 + adds a node, ⌫ deletes nodes, Esc leaves",
-            ),
-            (
-                ToolId::Pen,
-                "P",
-                "Pen (P): click for straight, drag for curves, click the first node to close. \
-                 ⇧ angle steps, ⌥ breaks a handle, Enter / Esc ends, ⌫ removes the last node",
-            ),
-            (
-                ToolId::Text,
-                "T",
-                "Text (T): click to add a label, then type",
-            ),
-            (
-                ToolId::Rect,
-                "R",
-                "Rectangle (R): drag to draw, click for a size. ⇧ square, ⌥ from centre",
-            ),
-            (
-                ToolId::Ellipse,
-                "E",
-                "Ellipse (E): drag to draw, click for a size. ⇧ circle, ⌥ from centre",
-            ),
-            (
-                ToolId::Polygon,
-                "G",
-                "Polygon (G): drag to draw, ↑↓ while dragging for sides. ⌥ from centre",
-            ),
-            (
-                ToolId::Star,
-                "S",
-                "Star (S): drag to draw, ↑↓ points, ←→ inner radius. ⌥ from centre",
-            ),
-            (
-                ToolId::Line,
-                "L",
-                "Line (L): drag to draw. ⇧ 45° steps, ⌥ from centre",
-            ),
-        ] {
-            let button = egui::Button::selectable(active == Some(tool), key)
-                .min_size(egui::vec2(32.0, 32.0));
-            if ui
-                .add_enabled(active.is_some(), button)
-                .on_hover_text(hint)
-                .clicked()
-            {
-                picked = Some(tool);
+        for (i, group) in TOOLS.iter().enumerate() {
+            if i > 0 {
+                ui.separator();
+            }
+            for &(tool, icon, tooltip) in *group {
+                let on = active == Some(tool);
+                if icons::tool_button(ui, icon, on, active.is_some(), tooltip).clicked() {
+                    picked = Some(tool);
+                }
             }
         }
     });
@@ -364,6 +337,22 @@ mod tests {
     use super::*;
 
     const B: Rect = Rect::new(10.0, 20.0, 50.0, 40.0);
+
+    #[test]
+    fn every_tool_is_in_the_strip_once_with_its_name_and_key() {
+        let tools: Vec<_> = TOOLS.iter().flat_map(|g| g.iter()).collect();
+        let mut ids: Vec<String> = tools.iter().map(|t| format!("{:?}", t.0)).collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), tools.len(), "no tool twice");
+        assert_eq!(ids.len(), 9, "Select, Nodes, Pen, Text and five shapes");
+        for &(tool, _, tooltip) in tools {
+            assert!(
+                tooltip.ends_with(')') && tooltip.contains(" ("),
+                "{tool:?}: {tooltip}"
+            );
+        }
+    }
 
     #[test]
     fn size_fields_scale_from_the_top_left() {
