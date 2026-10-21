@@ -67,7 +67,7 @@ impl Canvas {
         ui: &egui::Ui,
         response: &egui::Response,
         rect: egui::Rect,
-        session: &Session,
+        session: &mut Session,
     ) -> bool {
         if self.is_editing_text() {
             return false;
@@ -85,9 +85,9 @@ impl Canvas {
             .and_then(|p| label_at(&painter, rect.min, session, p));
         if hovered.is_some() && self.rename.is_none() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
-            response
-                .clone()
-                .on_hover_text_at_pointer("Double-click to rename");
+            response.clone().on_hover_text_at_pointer(
+                "Click to show it in the inspector, double-click to rename",
+            );
         }
         if response.double_clicked()
             && let Some(id) = hovered
@@ -100,9 +100,16 @@ impl Canvas {
             });
             return true;
         }
-        pressed
-            && response.hovered()
-            && press_at.is_some_and(|p| label_at(&painter, rect.min, session, p).is_some())
+        // A press on a label makes its artboard current and shows it in
+        // Inspector ▸ Artboard (spec 08).
+        let pressed_on = press_at
+            .filter(|_| pressed && response.hovered())
+            .and_then(|p| label_at(&painter, rect.min, session, p));
+        if let Some(id) = pressed_on {
+            crate::artboard::pick(session, id);
+            session.select(Vec::new());
+        }
+        pressed_on.is_some()
     }
 
     /// The label being renamed, if any: the canvas draws no label for it.

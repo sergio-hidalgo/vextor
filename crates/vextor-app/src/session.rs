@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use vextor_core::{
-    Command, CoreError, Document, EditorState, Geometry, History, NodeId, NodeKind, Path, PathNode,
-    PathNodeRef, Selection, Shape, Style,
+    Command, CoreError, Document, EditorState, Geometry, GridSettings, History, NodeId, NodeKind,
+    Path, PathNode, PathNodeRef, Selection, Shape, Style,
 };
 use vextor_geom::Fonts;
 
@@ -24,6 +24,9 @@ pub struct Session {
     revision: u64,
     /// The canvas should fit the artboards on its next frame.
     pub needs_fit: bool,
+    /// The artboard last picked, shown by Inspector ▸ Artboard (spec 08;
+    /// see `artboard::current`).
+    pub artboard: Option<vextor_core::ArtboardId>,
     /// The file the document was opened from or last saved to.
     path: Option<PathBuf>,
     /// `revision` when the document last matched its file (or was
@@ -51,6 +54,7 @@ impl Session {
             fonts: Arc::default(),
             revision: 0,
             needs_fit: true,
+            artboard: None,
             path: None,
             saved_revision: Some(0),
         }
@@ -148,6 +152,17 @@ impl Session {
             self.editor.default_style = style;
         }
         Ok(())
+    }
+
+    /// Sets the grid and snap settings. A view setting (`ui-editor`): not
+    /// an undo step, but saved with the document, so it counts as a
+    /// change. Returns false when `grid` is invalid or the same.
+    pub fn set_grid(&mut self, grid: GridSettings) -> bool {
+        if grid == self.doc.grid || self.doc.apply(Command::SetGrid(grid)).is_err() {
+            return false;
+        }
+        self.revision += 1;
+        true
     }
 
     /// Reverts the last step and restores the selection it had. Returns

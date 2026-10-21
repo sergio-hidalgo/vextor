@@ -13,6 +13,8 @@ pub(super) struct Harness {
     ctx: egui::Context,
     doc: DocId,
     pub(super) canvas: Canvas,
+    /// Modifier keys held during the frames.
+    pub(super) modifiers: Modifiers,
 }
 
 impl Harness {
@@ -23,12 +25,16 @@ impl Harness {
             ctx: egui::Context::default(),
             doc,
             canvas: Canvas::default(),
+            modifiers: Modifiers::NONE,
         }
     }
 
     /// One frame per event list.
     pub(super) fn run(&mut self, s: &mut Session, frames: Vec<Vec<Event>>) {
-        for events in frames {
+        for mut events in frames {
+            if self.modifiers != Modifiers::NONE {
+                events.insert(0, Event::ModifiersChanged(self.modifiers));
+            }
             let input = RawInput {
                 screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(600.0, 400.0))),
                 events,

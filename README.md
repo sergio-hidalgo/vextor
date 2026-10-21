@@ -68,9 +68,32 @@ turn, and after a crash every unsaved document is offered back.
 | Zoom at the pointer         | pinch, or `⌘`-scroll                       |
 | Pan                         | two-finger scroll, space-drag, middle-drag |
 | Fit artboard / actual size  | `⌘0` / `⌘1` (View menu)                    |
-| Rename the artboard         | double-click its name above it; `Enter` or click elsewhere keeps it, `Esc` cancels (up to 64 characters) |
+| Rename an artboard          | double-click its name above it; `Enter` or click elsewhere keeps it, `Esc` cancels (up to 64 characters) |
+| Pick an artboard            | click its name above it, or its row in Inspector ▸ Artboards (with nothing selected); Inspector ▸ Artboard then shows it |
+| Add an artboard             | Object ▸ Add Artboard…, or `+` in Inspector ▸ Artboards: pick a size (the same presets as a new document); it goes to the right of the others |
+| Reorder / delete an artboard | the arrow and bin buttons on the picked artboard's row in Inspector ▸ Artboards (the order is the export order; a document keeps at least one artboard; deleting one leaves its objects where they are) |
 | Artboard name, size, background | Inspector ▸ Artboard, with nothing selected: Name; W and H resize the artboard about its centre (1–10 000 px; the objects on it stay where they are); Background on (starts white) with a colour, off is transparent |
 | Undo / redo                 | `⌘Z` / `⇧⌘Z` (Edit menu shows what)        |
+
+### Grid and snapping
+
+The grid, the snapping options and the grid size are saved with the
+document; changing them is not an undo step.
+
+| Action                      | How                                        |
+| :-------------------------- | :----------------------------------------- |
+| Show / hide the grid        | `⌘'` (View ▸ Show Grid); minor lines fade out when zoomed out |
+| Grid size                   | View ▸ Grid Size: size (default 8 px) and subdivisions (default 4, so a line every 2 px) |
+| Snapping options            | View ▸ Snap to Grid (off by default), Snap to Objects (other objects' nodes, edges and centres), Snap to Artboard (its edges and centre) |
+| Snap freely                 | hold `⌘` while dragging                    |
+| Crisp icons                 | View ▸ Pixel Snap: rectangles and lines you draw land on whole px |
+| Smart guides                | View ▸ Smart Guides (on): while moving, lines show what the selection lines up with |
+
+Snapping works while drawing shapes, clicking with the pen, dragging nodes
+and handles, moving and scaling. A small label names what the point
+snapped to (Node, Grid, Edge, Centre, Artboard). When several are within
+6 screen px, a node wins over the grid, then an edge, a centre, an
+artboard.
 
 ### Selecting and transforming
 
@@ -233,7 +256,7 @@ VEXTOR_DEBUG_MENU=1 cargo run -p vextor-app --release
 | Crate           | Holds                                                      |
 | :-------------- | :--------------------------------------------------------- |
 | `vextor-core`   | document model, commands, undo history, `.vxtr` bytes (no UI, no file I/O) |
-| `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, path editing (segment hit-tests, split, bend, joins), text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`); later snapping, booleans |
+| `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, path editing (segment hit-tests, split, bend, joins), text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`), snapping; later booleans |
 | `vextor-svg`    | SVG export and import                                      |
 | `vextor-render` | rasterising documents for the canvas (`tiny-skia`), sample documents |
 | `vextor-app`    | the desktop app (`eframe`/`egui`), file dialogs (`rfd`), autosave |

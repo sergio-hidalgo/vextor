@@ -29,6 +29,11 @@ pub(super) struct ShapeInput {
 }
 
 impl ShapeInput {
+    /// True while a shape tool draws.
+    pub(super) fn is_drawing(&self) -> bool {
+        self.tool.is_drawing()
+    }
+
     /// While a shape is drawn or a corner dragged: the press-time document,
     /// the objects lifted out of it and those rendered live each frame.
     pub(super) fn preview(&self) -> Option<(&vextor_core::Document, Vec<NodeId>, Vec<NodeId>)> {

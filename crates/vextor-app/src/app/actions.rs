@@ -12,6 +12,7 @@ use crate::edit_ops;
 use crate::panels;
 use crate::path_ops::{self, PathAction};
 use crate::session::Session;
+use crate::snap_settings::SnapOption;
 use crate::tabs::TabAction;
 
 /// A user request from a menu, a shortcut, a tab or the start screen.
@@ -37,6 +38,12 @@ pub(super) enum Action {
     Redo,
     Fit,
     ActualSize,
+    /// View ▸ Show Grid (spec 08).
+    ToggleGrid,
+    /// A View ▸ snapping toggle (spec 08).
+    Snap(SnapOption),
+    /// Object ▸ Add Artboard… (spec 08): the size picker, adding.
+    AddArtboard,
     Cut,
     Copy,
     Paste,
@@ -74,6 +81,7 @@ impl From<panels::PanelAction> for Action {
             panels::PanelAction::Distribute { horizontal } => Self::Distribute { horizontal },
             panels::PanelAction::Group => Self::Group,
             panels::PanelAction::Ungroup => Self::Ungroup,
+            panels::PanelAction::AddArtboard => Self::AddArtboard,
         }
     }
 }
@@ -109,7 +117,7 @@ impl VextorApp {
                 let _ = self.canvas.finish_pen(s);
                 true
             }
-            Action::Fit | Action::ActualSize => false,
+            Action::Fit | Action::ActualSize | Action::ToggleGrid | Action::Snap(_) => false,
             // ⌘Z that took back a lone first node has done its undo.
             Action::Undo => self.canvas.finish_pen(s),
             _ => {

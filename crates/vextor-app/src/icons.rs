@@ -71,6 +71,12 @@ pub enum Icon {
     ToolPolygon,
     ToolStar,
     ToolLine,
+    /// Artboards list (spec 08): add (a plus), move earlier / later in
+    /// the order (arrows), delete (a bin).
+    Add,
+    MoveUp,
+    MoveDown,
+    Delete,
 }
 
 /// A button showing `icon`, highlighted when `selected`, explained by
@@ -204,6 +210,23 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
         Icon::Ungroup => {
             pen.outline((1.5, 1.5), (7.5, 7.5));
             pen.outline((8.5, 8.5), (14.5, 14.5));
+        }
+        Icon::Add => {
+            pen.line((8.0, 2.5), (8.0, 13.5));
+            pen.line((2.5, 8.0), (13.5, 8.0));
+        }
+        Icon::MoveUp => pen.arrow((8.0, 14.0), (8.0, 2.5)),
+        Icon::MoveDown => pen.arrow((8.0, 2.0), (8.0, 13.5)),
+        Icon::Delete => {
+            pen.line((2.0, 4.0), (14.0, 4.0));
+            pen.line((6.0, 4.0), (6.5, 1.5));
+            pen.line((6.5, 1.5), (9.5, 1.5));
+            pen.line((9.5, 1.5), (10.0, 4.0));
+            pen.line((3.5, 4.0), (4.5, 14.5));
+            pen.line((4.5, 14.5), (11.5, 14.5));
+            pen.line((11.5, 14.5), (12.5, 4.0));
+            pen.line((6.5, 7.0), (6.5, 12.0));
+            pen.line((9.5, 7.0), (9.5, 12.0));
         }
         Icon::ToolSelect
         | Icon::ToolNode

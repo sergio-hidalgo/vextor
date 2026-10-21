@@ -26,6 +26,10 @@ pub struct SnapSettings {
     pub angle_step_deg: f64,
     /// Screen px, ≥ 0. Default 6.
     pub tolerance_px: f64,
+    /// Rectangles and straight lines land on whole px (spec 08). Absent
+    /// in files saved before it: off.
+    #[serde(default)]
+    pub pixel: bool,
 }
 
 /// Options for the emitted SVG (spec 12).
@@ -86,6 +90,7 @@ impl Default for SnapSettings {
             to_artboard: true,
             angle_step_deg: 45.0,
             tolerance_px: 6.0,
+            pixel: false,
         }
     }
 }

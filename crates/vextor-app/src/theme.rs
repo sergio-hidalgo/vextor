@@ -18,8 +18,7 @@ pub const YELLOW_PALE: Color32 = Color32::from_rgb(0xFD, 0xF5, 0xD9);
 
 // The app icon's yellows (`assets/icon.svg`).
 
-/// The logo's yellow.
-#[allow(dead_code)] // part of the palette; no UI uses it yet
+/// The logo's yellow; also the snap mark (spec 08).
 pub const LOGO_YELLOW: Color32 = Color32::from_rgb(0xFF, 0xD5, 0x00);
 /// The icon's amber tile; also the text-selection background.
 pub const LOGO_AMBER: Color32 = Color32::from_rgb(0xDC, 0xA5, 0x00);
@@ -38,8 +37,7 @@ pub const GREY_300: Color32 = Color32::from_gray(0xC2);
 /// Muted text.
 #[allow(dead_code)] // part of the palette; no UI uses it yet
 pub const GREY_400: Color32 = Color32::from_gray(0xA4);
-/// Faint text and lines.
-#[allow(dead_code)] // part of the palette; no UI uses it yet
+/// Faint text and lines; also the canvas grid (spec 08).
 pub const GREY_500: Color32 = Color32::from_gray(0x82);
 
 /// Uses the dark theme with the palette's foreground colours.

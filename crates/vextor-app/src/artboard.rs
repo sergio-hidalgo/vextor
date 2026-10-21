@@ -1,6 +1,7 @@
 //! Renaming an artboard and setting its background (spec 05e), and
 //! resizing it from Inspector ▸ Artboard (spec 06 review): the rules
-//! shared by the canvas label and the inspector.
+//! shared by the canvas label and the inspector. Several artboards
+//! (spec 08): adding, deleting, reordering, and which one is current.
 
 use vextor_core::{Artboard, ArtboardId, Command, Rgba};
 
@@ -11,11 +12,112 @@ pub const MAX_NAME_CHARS: usize = 64;
 /// The colour a background starts at when it is turned on.
 pub const DEFAULT_BACKGROUND: Rgba = Rgba::rgb(0xFF, 0xFF, 0xFF);
 
-/// The artboard Inspector ▸ Artboard shows. A document has one artboard
-/// until spec 08 adds more.
+/// The artboard Inspector ▸ Artboard shows: the one last picked (its
+/// label clicked, or chosen in the inspector's list), else the first.
 #[must_use]
 pub fn current(s: &Session) -> Option<&Artboard> {
-    s.doc.artboards.first()
+    s.artboard
+        .and_then(|id| s.doc.artboards.iter().find(|a| a.id == id))
+        .or_else(|| s.doc.artboards.first())
+}
+
+/// Makes artboard `id` the current one.
+pub fn pick(s: &mut Session, id: ArtboardId) {
+    if s.doc.artboards.iter().any(|a| a.id == id) {
+        s.artboard = Some(id);
+    }
+}
+
+/// Space between a new artboard and the ones before it, in px.
+pub const ADD_GAP: f64 = 40.0;
+
+/// Adds a transparent `width` × `height` artboard named `name` to the
+/// right of the others, top-aligned with them, as one undo step; it
+/// becomes current and the view fits all artboards. Returns false when
+/// the size was refused.
+pub fn add(s: &mut Session, name: &str, width: f64, height: f64) -> bool {
+    let (x, y) = s
+        .doc
+        .artboards
+        .iter()
+        .map(|a| (a.rect.x + a.rect.width + ADD_GAP, a.rect.y))
+        .reduce(|(x, y), (ax, ay)| (x.max(ax), y.min(ay)))
+        .unwrap_or((0.0, 0.0));
+    let id = s.doc.alloc_artboard_id();
+    let mut artboards = s.doc.artboards.clone();
+    artboards.push(Artboard {
+        id,
+        name: clean_name(name).unwrap_or_else(|| "artboard".to_owned()),
+        rect: vextor_core::Rect::new(x, y, width, height),
+        background: None,
+    });
+    let done = s
+        .apply(Command::Batch {
+            label: "Add artboard",
+            commands: vec![Command::SetArtboards(artboards)],
+        })
+        .is_ok();
+    if done {
+        s.artboard = Some(id);
+        s.needs_fit = true;
+    }
+    done
+}
+
+/// Deletes artboard `id` as one undo step; the objects on it stay where
+/// they are. The last artboard cannot be deleted.
+///
+/// # Errors
+/// A message for the user when it was refused.
+pub fn delete(s: &mut Session, id: ArtboardId) -> Result<(), String> {
+    if s.doc.artboards.len() <= 1 {
+        return Err("A document keeps at least one artboard".to_owned());
+    }
+    let artboards: Vec<Artboard> = s
+        .doc
+        .artboards
+        .iter()
+        .filter(|a| a.id != id)
+        .cloned()
+        .collect();
+    if artboards.len() == s.doc.artboards.len() {
+        return Ok(());
+    }
+    s.apply(Command::Batch {
+        label: "Delete artboard",
+        commands: vec![Command::SetArtboards(artboards)],
+    })
+    .map_err(|e| format!("Delete artboard failed: {e}"))?;
+    if s.artboard == Some(id) {
+        s.artboard = None;
+    }
+    Ok(())
+}
+
+/// Moves artboard `id` one place earlier (`up`) or later in the order
+/// (the order of export, spec 12), as one undo step. Returns false at
+/// either end.
+pub fn reorder(s: &mut Session, id: ArtboardId, up: bool) -> bool {
+    let mut artboards = s.doc.artboards.clone();
+    let Some(i) = artboards.iter().position(|a| a.id == id) else {
+        return false;
+    };
+    let j = if up {
+        let Some(j) = i.checked_sub(1) else {
+            return false;
+        };
+        j
+    } else if i + 1 < artboards.len() {
+        i + 1
+    } else {
+        return false;
+    };
+    artboards.swap(i, j);
+    s.apply(Command::Batch {
+        label: "Reorder artboards",
+        commands: vec![Command::SetArtboards(artboards)],
+    })
+    .is_ok()
 }
 
 /// `input` as an artboard name: control characters (tabs, line breaks)
@@ -110,6 +212,51 @@ mod tests {
 
     fn background(s: &Session) -> Option<Rgba> {
         s.doc.artboards[0].background
+    }
+
+    fn names(s: &Session) -> Vec<&str> {
+        s.doc.artboards.iter().map(|a| a.name.as_str()).collect()
+    }
+
+    #[test]
+    fn add_puts_the_artboard_to_the_right_and_makes_it_current() {
+        let (mut s, first) = session();
+        assert!(add(&mut s, "icon-24", 24.0, 24.0));
+        assert_eq!(names(&s), ["card", "icon-24"]);
+        let r = s.doc.artboards[1].rect;
+        assert!((r.x - (320.0 + ADD_GAP)).abs() < 1e-9 && r.y.abs() < 1e-9);
+        assert_eq!(current(&s).map(|a| a.name.as_str()), Some("icon-24"));
+        assert_eq!(s.edit_menu().undo, Some("Add artboard"));
+        pick(&mut s, first);
+        assert_eq!(current(&s).map(|a| a.id), Some(first));
+    }
+
+    #[test]
+    fn add_delete_reorder_round_trip_through_undo() {
+        let (mut s, _) = session();
+        let start = s.doc.clone();
+        add(&mut s, "a", 10.0, 10.0);
+        add(&mut s, "b", 10.0, 10.0);
+        let b = s.doc.artboards[2].id;
+        assert!(reorder(&mut s, b, true));
+        assert_eq!(names(&s), ["card", "b", "a"]);
+        let first = s.doc.artboards[0].id;
+        assert!(!reorder(&mut s, first, true), "already first");
+        assert!(delete(&mut s, b).is_ok());
+        assert_eq!(names(&s), ["card", "a"]);
+        assert_eq!(current(&s).map(|a| a.name.as_str()), Some("card"));
+        let after = s.doc.clone();
+        while s.undo() {}
+        assert_eq!(s.doc, start);
+        while s.redo() {}
+        assert_eq!(s.doc, after);
+    }
+
+    #[test]
+    fn the_last_artboard_cannot_be_deleted() {
+        let (mut s, id) = session();
+        assert!(delete(&mut s, id).is_err());
+        assert_eq!(s.doc.artboards.len(), 1);
     }
 
     #[test]

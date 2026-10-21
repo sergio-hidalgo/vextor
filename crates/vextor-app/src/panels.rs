@@ -152,6 +152,7 @@ fn inspector_sections(
             return (message, actions);
         }
         if s.selected().is_empty() {
+            artboard::list_section(ui, s, &mut actions);
             artboard::section(ui, s);
             return (None, actions);
         }

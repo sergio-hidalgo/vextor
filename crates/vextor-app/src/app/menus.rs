@@ -90,6 +90,8 @@ impl VextorApp {
                     actions.push(Action::ActualSize);
                 }
                 ui.separator();
+                self.grid_items(ui, has_doc, &mut actions);
+                ui.separator();
                 ui.checkbox(&mut self.show_code, "Code Panel");
             });
             ui.menu_button("Window", |ui| self.window_menu(ui, &mut actions));
@@ -167,6 +169,16 @@ impl VextorApp {
             if button.clicked() {
                 actions.push(Action::Flip { horizontal });
             }
+        }
+        ui.separator();
+        let add = ui
+            .add_enabled(
+                self.docs.session().is_some(),
+                egui::Button::new("Add Artboard…"),
+            )
+            .on_hover_text("Another artboard, to the right of the others");
+        if add.clicked() {
+            actions.push(Action::AddArtboard);
         }
     }
 

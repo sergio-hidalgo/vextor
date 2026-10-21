@@ -83,6 +83,15 @@ pub struct Preview<'a> {
     pub change: Affine,
 }
 
+/// What a move or scale drag snaps (spec 08): the press point, the
+/// selection's box then, the handle when scaling, and the dragged objects.
+pub struct SnapDrag<'a> {
+    pub start: Point,
+    pub bounds: Rect,
+    pub handle: Option<Handle>,
+    pub ids: &'a [NodeId],
+}
+
 /// The selection tool's state between events.
 #[derive(Debug, Default)]
 pub struct SelectTool {
@@ -147,6 +156,33 @@ impl SelectTool {
                 ids,
                 change: change.unwrap_or(Affine::IDENTITY),
             }),
+            _ => None,
+        }
+    }
+
+    /// The move or scale drag in progress (a rotation does not snap).
+    #[must_use]
+    pub fn snap_drag(&self) -> Option<SnapDrag<'_>> {
+        match &self.drag {
+            Drag::Transform {
+                kind,
+                start,
+                bounds,
+                ids,
+                ..
+            } => {
+                let handle = match kind {
+                    Kind::Move => None,
+                    Kind::Scale(h) => Some(*h),
+                    Kind::Rotate => return None,
+                };
+                Some(SnapDrag {
+                    start: *start,
+                    bounds: *bounds,
+                    handle,
+                    ids,
+                })
+            }
             _ => None,
         }
     }

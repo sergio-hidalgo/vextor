@@ -5,6 +5,7 @@ mod closing;
 mod file_flow;
 mod keys;
 mod menus;
+mod view_menu;
 
 use std::path::PathBuf;
 use std::time::Instant;
@@ -158,7 +159,10 @@ impl VextorApp {
     }
 
     fn run(&mut self, action: Action) {
-        if !matches!(action, Action::Fit | Action::ActualSize) {
+        if !matches!(
+            action,
+            Action::Fit | Action::ActualSize | Action::ToggleGrid | Action::Snap(_)
+        ) {
             self.finish_text();
         }
         if self.pen_action(&action) {
@@ -209,6 +213,7 @@ impl VextorApp {
                     _ => self.canvas.actual_size(session),
                 }
             }
+            _ if self.view_action(&action) => {}
             _ => self.edit(&action),
         }
     }
@@ -265,6 +270,7 @@ impl VextorApp {
             match picker.ui(ui, !self.docs.is_empty(), self.recent.paths(), fonts.db()) {
                 Outcome::Open => {}
                 Outcome::Cancel => self.picker = None,
+                Outcome::Create(doc) if picker.adding => self.add_artboard(&doc),
                 Outcome::Create(doc) => {
                     self.open(Session::new(*doc));
                 }

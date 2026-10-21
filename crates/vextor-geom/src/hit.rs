@@ -191,6 +191,15 @@ fn subtree_bounds(
     }
 }
 
+/// The world outline of every hittable leaf with the object it belongs
+/// to, bottom → top.
+pub(crate) fn outlines(doc: &Document, fonts: &Fonts) -> Vec<(NodeId, BezPath)> {
+    leaves(doc, fonts)
+        .into_iter()
+        .map(|leaf| (leaf.object, leaf.outline))
+        .collect()
+}
+
 /// Deepest nesting followed, matching the renderer's guard.
 const MAX_DEPTH: usize = 64;
 
