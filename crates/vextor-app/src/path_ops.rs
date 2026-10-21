@@ -14,10 +14,12 @@ use vextor_geom::{from_vec, to_affine};
 use crate::session::Session;
 
 mod action;
+mod align;
 mod nodes;
 mod structure;
 
 pub use action::PathAction;
+pub use align::{align_nodes, distribute_nodes};
 
 pub use nodes::{
     anchor_in_doc, delete_nodes, insert_in_segment, insert_node, local_point, move_node_to,

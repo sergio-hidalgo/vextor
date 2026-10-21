@@ -167,7 +167,16 @@ fn inspector_sections(
     let message = if let Some(s) = session {
         // Path nodes or a segment selected (spec 07): only what edits them.
         if crate::path_ops::editing_nodes(s) {
-            return (path::sections(ui, s), actions);
+            let message = path::sections(ui, s);
+            // Align and distribute the selected nodes (spec 07).
+            let nodes = crate::path_ops::selected_nodes(s).len();
+            let can = edit_ops::Can {
+                edit: nodes >= 1,
+                distribute: nodes >= 3,
+                ..edit_ops::Can::default()
+            };
+            arrange::align_section(ui, can, arrange::Targets::Nodes, to_artboard, &mut actions);
+            return (message, actions);
         }
         if s.selected().is_empty() {
             artboard::section(ui, s);
@@ -176,7 +185,13 @@ fn inspector_sections(
         let message = inspector(ui, s);
         let message = path::sections(ui, s).or(message);
         let can = edit_ops::can(s);
-        arrange::align_section(ui, can, to_artboard, &mut actions);
+        arrange::align_section(
+            ui,
+            can,
+            arrange::Targets::Objects,
+            to_artboard,
+            &mut actions,
+        );
         arrange::group_section(ui, can, &mut actions);
         message
     } else {

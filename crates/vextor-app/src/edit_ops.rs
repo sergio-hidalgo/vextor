@@ -10,6 +10,7 @@ use crate::session::Session;
 
 mod placement;
 
+pub(crate) use placement::artboard_at;
 pub use placement::{align, distribute, flip, has_text, nudge, resize, resize_commands, transform};
 
 /// How far paste and duplicate move the copy, right and down, in px.
@@ -39,7 +40,12 @@ pub fn can(s: &Session) -> Can {
         paste: s.editor.clipboard.is_some(),
         group: !sel.is_empty() && common_parent(&s.doc, &sel).is_some(),
         ungroup: sel.iter().any(|&id| is_plain_group(&s.doc, id)),
-        distribute: sel.len() >= 3,
+        // In node editing (spec 07) Distribute spaces nodes.
+        distribute: if crate::path_ops::editing_nodes(s) {
+            crate::path_ops::selected_nodes(s).len() >= 3
+        } else {
+            sel.len() >= 3
+        },
         outline: !crate::outline_text::selected_texts(s).is_empty(),
         convert: !crate::convert_path::convertible(s).is_empty(),
     }

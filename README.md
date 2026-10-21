@@ -142,6 +142,7 @@ shapes are never converted behind your back: Object ▸ Convert to Path
 | Round a corner node           | select corner nodes between straight segments and drag the dot inside one: every selected corner rounds; or Inspector ▸ Node ▸ Corner radius |
 | Close, open, join, split, reverse | Object ▸ Path, right-click on the canvas, or Inspector ▸ Path |
 | Exact node position, handles  | Inspector ▸ Node: X, Y, type, each handle's length and angle |
+| Align / distribute nodes      | with nodes selected, Inspector ▸ Align or Object ▸ Align / Distribute: the same six alignments line the nodes up with each other (one node, or Align to Artboard: with the artboard); Distribute spaces three or more evenly. Handles move with their nodes |
 | Leave node editing            | `Esc` (nodes → path → Select tool), or double-click empty canvas |
 
 Each drawn path, drag, key press or inspector change is one undo step.

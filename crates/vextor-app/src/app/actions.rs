@@ -127,7 +127,7 @@ impl VextorApp {
         let Some(s) = self.docs.session_mut() else {
             return;
         };
-        if let Some(result) = node_edit(s, action) {
+        if let Some(result) = node_edit(s, action, self.align_to_artboard) {
             if let Err(e) = result {
                 self.message = Some(e);
             }
@@ -185,9 +185,10 @@ impl VextorApp {
 }
 
 /// In node editing (spec 07) — path nodes or a segment selected, or the
-/// node tool on — Delete, the arrows, Esc and Select All act on nodes:
-/// the result, or `None` when `action` is left to the objects.
-fn node_edit(s: &mut Session, action: &Action) -> Option<Result<(), String>> {
+/// node tool on — Delete, the arrows, Align, Distribute, Esc and Select
+/// All act on nodes (`to_artboard`: Align to Artboard): the result, or
+/// `None` when `action` is left to the objects.
+fn node_edit(s: &mut Session, action: &Action, to_artboard: bool) -> Option<Result<(), String>> {
     let nodes = path_ops::editing_nodes(s);
     if !nodes && s.editor.tool != ToolId::Node {
         return None;
@@ -197,6 +198,10 @@ fn node_edit(s: &mut Session, action: &Action) -> Option<Result<(), String>> {
         Action::Delete if nodes => Some(path_ops::delete_nodes(s)),
         Action::Nudge { dx, dy } if nodes => {
             Some(path_ops::nudge_nodes(s, f64::from(*dx), f64::from(*dy)))
+        }
+        Action::Align(how) if nodes => Some(path_ops::align_nodes(s, *how, to_artboard)),
+        Action::Distribute { horizontal } if nodes => {
+            Some(path_ops::distribute_nodes(s, *horizontal))
         }
         // Esc steps out: nodes → the path → the selection tool.
         Action::Deselect => {
@@ -261,7 +266,7 @@ mod tests {
             subpath: 0,
             index: 0,
         };
-        assert_eq!(node_edit(&mut s, &Action::Delete), Some(Ok(())));
+        assert_eq!(node_edit(&mut s, &Action::Delete, false), Some(Ok(())));
         assert!(s.doc.nodes.contains_key(&id));
         assert_eq!(s.edit_menu().undo, None);
     }
@@ -275,14 +280,14 @@ mod tests {
             index: 1,
         };
         path_ops::select_nodes(&mut s, id, vec![r]);
-        node_edit(&mut s, &Action::Nudge { dx: 0, dy: 10 })
+        node_edit(&mut s, &Action::Nudge { dx: 0, dy: 10 }, false)
             .expect("handled")
             .expect("moves");
         assert_eq!(
             s.path_node(r).expect("node").anchor,
             vextor_core::Point::new(50.0, 10.0)
         );
-        node_edit(&mut s, &Action::Delete)
+        node_edit(&mut s, &Action::Delete, false)
             .expect("handled")
             .expect("deletes");
         assert_eq!(s.path_of(id).expect("path").subpaths[0].nodes.len(), 3);
@@ -293,16 +298,39 @@ mod tests {
         let (mut s, id) = session();
         path_ops::select_all_nodes(&mut s);
         assert_eq!(path_ops::selected_nodes(&s).len(), 4, "⌘A took every node");
-        node_edit(&mut s, &Action::Deselect);
+        node_edit(&mut s, &Action::Deselect, false);
         assert_eq!(s.editor.selection, Selection::Objects(vec![id]));
         assert_eq!(s.editor.tool, ToolId::Node);
-        node_edit(&mut s, &Action::Deselect);
+        node_edit(&mut s, &Action::Deselect, false);
         assert_eq!(s.editor.tool, ToolId::Select);
         assert_eq!(s.selected(), vec![id], "the path stays selected");
         assert_eq!(
-            node_edit(&mut s, &Action::Deselect),
+            node_edit(&mut s, &Action::Deselect, false),
             None,
             "then Esc deselects as usual"
+        );
+    }
+
+    #[test]
+    fn align_and_distribute_act_on_selected_nodes_not_the_shape() {
+        let (mut s, id) = session();
+        let at = |index| vextor_core::PathNodeRef {
+            shape: id,
+            subpath: 0,
+            index,
+        };
+        path_ops::select_nodes(&mut s, id, vec![at(0), at(2)]);
+        let transform = s.doc.nodes[&id].transform;
+        node_edit(&mut s, &Action::Align(vextor_geom::Align::Left), false)
+            .expect("handled")
+            .expect("aligns");
+        assert_eq!(s.doc.nodes[&id].transform, transform, "the shape stays");
+        assert_eq!(s.path_node(at(2)).expect("node").anchor.x, 0.0);
+        assert_eq!(s.edit_menu().undo, Some("Align nodes"));
+        assert_eq!(
+            node_edit(&mut s, &Action::Distribute { horizontal: true }, false),
+            Some(Ok(())),
+            "two nodes: nothing to space, still not the shape"
         );
     }
 }

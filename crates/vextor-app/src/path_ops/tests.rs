@@ -284,3 +284,92 @@ fn undo_restoring_stale_nodes_keeps_the_path_selected() {
     assert!(s.path_node(at(ids[0], 0, 3)).is_none());
     assert_eq!(s.selected(), vec![ids[0]]);
 }
+
+fn anchor(s: &Session, r: PathNodeRef) -> (f64, f64) {
+    let a = s.path_node(r).expect("node").anchor;
+    (a.x, a.y)
+}
+
+#[test]
+fn aligning_nodes_lines_them_up_with_each_other_in_one_step() {
+    use vextor_geom::Align;
+    let (mut s, ids) = session(vec![vec![open_path(&[
+        (10.0, 10.0),
+        (40.0, 30.0),
+        (25.0, 80.0),
+    ])]]);
+    let id = ids[0];
+    let all = vec![at(id, 0, 0), at(id, 0, 1), at(id, 0, 2)];
+    select_nodes(&mut s, id, all.clone());
+    one_undoable_step(&mut s, align::ALIGN_NODES, |s| {
+        align_nodes(s, Align::Left, false)
+    });
+    let xs: Vec<f64> = all.iter().map(|&r| anchor(&s, r).0).collect();
+    assert_eq!(xs, vec![10.0, 10.0, 10.0], "left: the leftmost node");
+    assert_eq!(anchor(&s, all[1]).1, 30.0, "y untouched");
+
+    select_nodes(&mut s, id, all.clone());
+    align_nodes(&mut s, Align::Middle, false).expect("aligns");
+    let ys: Vec<f64> = all.iter().map(|&r| anchor(&s, r).1).collect();
+    assert_eq!(ys, vec![45.0, 45.0, 45.0], "middle of the nodes' span");
+}
+
+#[test]
+fn one_node_or_align_to_artboard_lines_up_with_the_artboard() {
+    use vextor_geom::Align;
+    // The document's artboard is 400 × 400 at the origin.
+    let (mut s, ids) = session(vec![vec![open_path(&[(10.0, 10.0), (40.0, 30.0)])]]);
+    let id = ids[0];
+    select_nodes(&mut s, id, vec![at(id, 0, 1)]);
+    align_nodes(&mut s, Align::Centre, false).expect("aligns");
+    assert_eq!(anchor(&s, at(id, 0, 1)), (200.0, 30.0));
+
+    select_nodes(&mut s, id, vec![at(id, 0, 0), at(id, 0, 1)]);
+    align_nodes(&mut s, Align::Bottom, true).expect("aligns");
+    assert_eq!(anchor(&s, at(id, 0, 0)).1, 400.0);
+    assert_eq!(anchor(&s, at(id, 0, 1)).1, 400.0);
+}
+
+#[test]
+fn distributing_nodes_spaces_them_evenly_in_one_step() {
+    let (mut s, ids) = session(vec![vec![open_path(&[
+        (0.0, 0.0),
+        (10.0, 50.0),
+        (100.0, 20.0),
+        (90.0, 70.0),
+    ])]]);
+    let id = ids[0];
+    let all: Vec<_> = (0..4).map(|i| at(id, 0, i)).collect();
+    select_nodes(&mut s, id, all.clone());
+    one_undoable_step(&mut s, align::DISTRIBUTE_NODES, |s| {
+        distribute_nodes(s, true)
+    });
+    let mut xs: Vec<f64> = all.iter().map(|&r| anchor(&s, r).0).collect();
+    xs.sort_by(f64::total_cmp);
+    let gaps: Vec<f64> = xs.windows(2).map(|w| w[1] - w[0]).collect();
+    assert!(
+        gaps.iter().all(|g| (g - 100.0 / 3.0).abs() < 1e-9),
+        "{xs:?}"
+    );
+}
+
+#[test]
+fn aligning_nodes_of_a_rotated_path_works_in_document_space() {
+    use vextor_geom::Align;
+    let (mut s, ids) = session(vec![vec![open_path(&[(0.0, 0.0), (30.0, 0.0)])]]);
+    let id = ids[0];
+    // Turned 90°: the nodes land at (0, 0) and (0, 30) on the page.
+    s.apply(Command::SetTransform {
+        ids: vec![id],
+        transform: vextor_core::Transform([0.0, 1.0, -1.0, 0.0, 0.0, 0.0]),
+    })
+    .expect("turns");
+    let both = vec![at(id, 0, 0), at(id, 0, 1)];
+    select_nodes(&mut s, id, both.clone());
+    align_nodes(&mut s, Align::Top, false).expect("aligns");
+    let on_page: Vec<_> = both
+        .iter()
+        .map(|&r| anchor_in_doc(&s, r).expect("node"))
+        .collect();
+    assert!(on_page.iter().all(|p| p.y.abs() < 1e-9), "{on_page:?}");
+}

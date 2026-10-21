@@ -151,7 +151,7 @@ fn union(boxes: &[(NodeId, KRect)]) -> Option<KRect> {
 }
 
 /// The artboard holding `p`, else the first one.
-fn artboard_at(doc: &Document, p: kurbo::Point) -> Option<KRect> {
+pub(crate) fn artboard_at(doc: &Document, p: kurbo::Point) -> Option<KRect> {
     let rect = |r: Rect| KRect::new(r.x, r.y, r.x + r.width, r.y + r.height);
     doc.artboards
         .iter()
