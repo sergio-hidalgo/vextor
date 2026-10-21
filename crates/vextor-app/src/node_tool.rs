@@ -132,10 +132,16 @@ impl NodeTool {
         {
             let w = world(s, shape);
             let near = |q: Point| (q - p).hypot();
+            // Where handles overlap, a selected node's own handle wins
+            // over a neighbour's; then the nearest.
             let handle = handles(s)
                 .into_iter()
                 .filter(|h| near(h.tip) <= reach)
-                .min_by(|a, b| near(a.tip).total_cmp(&near(b.tip)));
+                .min_by(|a, b| {
+                    b.own
+                        .cmp(&a.own)
+                        .then_with(|| near(a.tip).total_cmp(&near(b.tip)))
+                });
             if let Some(h) = handle {
                 return NodeTarget::Handle(h.node, h.side);
             }

@@ -135,7 +135,7 @@ shapes are never converted behind your back: Object ▸ Convert to Path
 | Join two paths                | while drawing, click another open path's end; or select two open paths, or two end nodes of one path, and Join (`⌘J`) |
 | Add a node                    | pen click on the selected path's segment (a `+` shows), or `+` on a selected segment: the shape does not change |
 | Edit nodes                    | Nodes (`A`), or double-click a path: click / `⇧`-click / drag a box to select nodes; drag or arrows to move them (`⇧` 45° steps) |
-| Handles                       | drag a handle: a smooth node's other handle follows; `⌥`-drag moves it alone (the node becomes a corner) |
+| Handles                       | drag a handle: a smooth node's other handle follows; `⌥`-drag moves it alone (the node becomes a corner). The selected node's handles are yellow; the grey ones belong to its neighbours, and where they overlap the yellow one is grabbed |
 | Node type                     | double-click a node: corner → smooth → symmetric → corner (sharp, no handles); or Inspector ▸ Node |
 | Segments                      | click one to select it; `C` toggles straight ↔ curve; drag a segment to bend it through the pointer |
 | Delete nodes                  | `⌫`: the path stays joined around them; deleting the last ones deletes the path |

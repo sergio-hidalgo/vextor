@@ -9,7 +9,10 @@ use crate::theme;
 /// Side of a drawn node, in points.
 const NODE_SIZE: f32 = 7.0;
 /// Radius of a drawn handle tip, in points.
-const TIP_RADIUS: f32 = 3.0;
+const TIP_RADIUS: f32 = 3.5;
+/// Radius of a neighbour's handle tip, in points: smaller, so the selected
+/// node's own handles stand out.
+const NEIGHBOUR_TIP_RADIUS: f32 = 2.5;
 /// Radius of the ring around a node a click would close or join.
 const RING_RADIUS: f32 = 7.0;
 
@@ -32,11 +35,20 @@ pub(super) fn node(painter: &Painter, at: Pos2, selected: bool, round: bool) {
     }
 }
 
-/// A handle: a thin line from its anchor to a small round tip.
+/// A selected node's handle (or one being dragged out): a yellow line to
+/// a yellow tip, like the selected node itself.
 pub(super) fn handle(painter: &Painter, anchor: Pos2, tip: Pos2) {
-    painter.line_segment([anchor, tip], Stroke::new(1.0, theme::LOGO_AMBER));
-    painter.circle_filled(tip, TIP_RADIUS, theme::WHITE);
+    painter.line_segment([anchor, tip], Stroke::new(1.5, theme::YELLOW));
+    painter.circle_filled(tip, TIP_RADIUS, theme::YELLOW);
     painter.circle_stroke(tip, TIP_RADIUS, Stroke::new(1.0, theme::LOGO_AMBER));
+}
+
+/// A neighbour's handle facing a selected node: a thin grey line to a
+/// smaller grey tip, so it is never taken for the selected node's own.
+pub(super) fn neighbour_handle(painter: &Painter, anchor: Pos2, tip: Pos2) {
+    painter.line_segment([anchor, tip], Stroke::new(1.0, theme::GREY_400));
+    painter.circle_filled(tip, NEIGHBOUR_TIP_RADIUS, theme::GREY_300);
+    painter.circle_stroke(tip, NEIGHBOUR_TIP_RADIUS, Stroke::new(1.0, theme::GREY_500));
 }
 
 /// A ring around a node a click would close the path on, or join.

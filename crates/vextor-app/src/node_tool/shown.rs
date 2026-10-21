@@ -16,6 +16,10 @@ pub struct ShownHandle {
     pub side: Side,
     pub anchor: Point,
     pub tip: Point,
+    /// A selected node's own handle (or the selected segment's), as
+    /// opposed to a neighbour's handle facing it: drawn brighter, on top,
+    /// and grabbed first where they overlap.
+    pub own: bool,
 }
 
 /// The smaller scale of `a` (document px per local px).
@@ -45,8 +49,9 @@ pub(super) fn nodes_in(s: &Session, shape: NodeId, r: Rect) -> Vec<PathNodeRef> 
     out
 }
 
-/// The handles shown on the edited path: those of the selected nodes and
-/// of their neighbours facing them, or the two of the selected segment.
+/// The handles shown on the edited path: those of the selected nodes
+/// (`own`) and of their neighbours facing them, or the two of the selected
+/// segment (`own`). Neighbours come first, so own handles draw on top.
 #[must_use]
 pub fn handles(s: &Session) -> Vec<ShownHandle> {
     let Some(shape) = edited(s) else {
@@ -60,30 +65,42 @@ pub fn handles(s: &Session) -> Vec<ShownHandle> {
         subpath,
         index,
     };
-    let mut wanted: Vec<(PathNodeRef, Side)> = Vec::new();
+    let mut wanted: Vec<(PathNodeRef, Side, bool)> = Vec::new();
     if let Some((_, subpath, index)) = path_ops::segment_target(s)
         && let Some(sp) = path.subpaths.get(subpath)
     {
-        wanted.push((at(subpath, index), Side::Out));
-        wanted.push((at(subpath, (index + 1) % sp.nodes.len()), Side::In));
+        wanted.push((at(subpath, index), Side::Out, true));
+        wanted.push((at(subpath, (index + 1) % sp.nodes.len()), Side::In, true));
     }
     for r in selected_nodes(s) {
         let Some(sp) = path.subpaths.get(r.subpath) else {
             continue;
         };
         let n = sp.nodes.len();
-        wanted.push((r, Side::In));
-        wanted.push((r, Side::Out));
+        wanted.push((r, Side::In, true));
+        wanted.push((r, Side::Out, true));
         if sp.closed || r.index > 0 {
-            wanted.push((at(r.subpath, (r.index + n - 1) % n), Side::Out));
+            wanted.push((at(r.subpath, (r.index + n - 1) % n), Side::Out, false));
         }
         if sp.closed || r.index + 1 < n {
-            wanted.push((at(r.subpath, (r.index + 1) % n), Side::In));
+            wanted.push((at(r.subpath, (r.index + 1) % n), Side::In, false));
         }
     }
+    // A handle both own and a neighbour's (two adjacent selected nodes)
+    // counts as own.
+    let own = |node, side| {
+        wanted
+            .iter()
+            .any(|&(n, sd, o)| o && n == node && sd == side)
+    };
+    let mut wanted: Vec<(PathNodeRef, Side, bool)> = wanted
+        .iter()
+        .map(|&(node, side, _)| (node, side, own(node, side)))
+        .collect();
+    wanted.sort_by_key(|&(_, _, own)| own);
     let w = world(s, shape);
     let mut out: Vec<ShownHandle> = Vec::new();
-    for (node, side) in wanted {
+    for (node, side, own) in wanted {
         let Some(n) = s.path_node(node) else {
             continue;
         };
@@ -100,6 +117,7 @@ pub fn handles(s: &Session) -> Vec<ShownHandle> {
             side,
             anchor: w * anchor,
             tip: w * (anchor + Vec2::new(h.x, h.y)),
+            own,
         };
         if !out.contains(&shown) {
             out.push(shown);

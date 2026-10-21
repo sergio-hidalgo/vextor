@@ -303,3 +303,65 @@ fn a_drag_keeps_the_press_time_document_for_the_fast_path() {
     t.release(&mut s);
     assert!(t.preview(&s).is_none());
 }
+
+/// A closed path whose node 1's outgoing handle tip lands right on node
+/// 2's incoming handle tip, at (150, 50).
+fn overlapping_handles() -> SubPath {
+    let curved = |x, y, h_in: (f64, f64), h_out: (f64, f64)| PathNode {
+        handle_in: Some(Vec2::new(h_in.0, h_in.1)),
+        handle_out: Some(Vec2::new(h_out.0, h_out.1)),
+        kind: NodeType::Corner,
+        ..PathNode::corner(x, y)
+    };
+    SubPath {
+        nodes: vec![
+            curved(100.0, 0.0, (-20.0, 0.0), (20.0, 0.0)),
+            curved(200.0, 0.0, (-20.0, 0.0), (-50.0, 50.0)),
+            curved(100.0, 100.0, (50.0, -50.0), (-20.0, 0.0)),
+        ],
+        closed: true,
+    }
+}
+
+#[test]
+fn a_selected_nodes_own_handles_are_told_apart_from_its_neighbours() {
+    let (mut s, id) = session_with(overlapping_handles());
+    select_nodes(&mut s, id, vec![at(id, 1)]);
+    let shown = handles(&s);
+    let own: Vec<_> = shown
+        .iter()
+        .filter(|h| h.own)
+        .map(|h| (h.node, h.side))
+        .collect();
+    assert_eq!(own, vec![(at(id, 1), Side::In), (at(id, 1), Side::Out)]);
+    assert!(
+        shown.iter().filter(|h| !h.own).all(|h| h.node != at(id, 1)),
+        "the neighbours' handles are not own"
+    );
+    assert!(
+        !shown[0].own,
+        "neighbours come first, own handles draw on top"
+    );
+}
+
+#[test]
+fn where_handles_overlap_the_selected_nodes_own_handle_is_grabbed() {
+    let (mut s, id) = session_with(overlapping_handles());
+    let tip = Point::new(150.0, 50.0);
+    select_nodes(&mut s, id, vec![at(id, 1)]);
+    assert_eq!(
+        NodeTool::target(&s, tip, 1.0),
+        NodeTarget::Handle(at(id, 1), Side::Out)
+    );
+    select_nodes(&mut s, id, vec![at(id, 2)]);
+    assert_eq!(
+        NodeTool::target(&s, tip, 1.0),
+        NodeTarget::Handle(at(id, 2), Side::In),
+        "and the other way round"
+    );
+    let before = node(&s, at(id, 1));
+    let mut t = NodeTool::default();
+    drag(&mut t, &mut s, (150.0, 50.0), (130.0, 70.0), NONE);
+    assert_eq!(node(&s, at(id, 1)), before, "the neighbour stays put");
+    assert_eq!(node(&s, at(id, 2)).handle_in, Some(Vec2::new(30.0, -30.0)));
+}

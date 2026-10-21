@@ -195,8 +195,13 @@ fn draw_edited(
     if let Some((_, subpath, index)) = path_ops::segment_target(session) {
         seg(subpath, index, theme::YELLOW, 2.0);
     }
+    // Neighbours' handles first (grey), the selected node's on top.
     for h in node_tool::handles(session) {
-        path_marks::handle(painter, screen(h.anchor), screen(h.tip));
+        if h.own {
+            path_marks::handle(painter, screen(h.anchor), screen(h.tip));
+        } else {
+            path_marks::neighbour_handle(painter, screen(h.anchor), screen(h.tip));
+        }
     }
     let selected = path_ops::selected_nodes(session);
     for (subpath, sp) in path.subpaths.iter().enumerate() {
