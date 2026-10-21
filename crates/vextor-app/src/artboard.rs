@@ -2,10 +2,15 @@
 //! resizing it from Inspector ▸ Artboard (spec 06 review): the rules
 //! shared by the canvas label and the inspector. Several artboards
 //! (spec 08): adding, deleting, reordering, and which one is current.
+//! Moving one, with the objects on it (spec 08b): `moving`.
 
 use vextor_core::{Artboard, ArtboardId, Command, Rgba};
 
 use crate::session::Session;
+
+mod moving;
+
+pub use moving::{ArtboardDrag, move_to};
 
 /// Longest artboard name, in characters (it becomes a file name, spec 12).
 pub const MAX_NAME_CHARS: usize = 64;

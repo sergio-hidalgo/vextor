@@ -62,6 +62,9 @@ pub enum ToolId {
     Star,
     /// Draws a straight line (spec 06).
     Line,
+    /// Zooms in on a click, out on an `⌥`-click, to a dragged rectangle
+    /// (spec 08b).
+    Zoom,
 }
 
 impl ToolId {

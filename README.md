@@ -68,11 +68,15 @@ turn, and after a crash every unsaved document is offered back.
 | Zoom at the pointer         | pinch, or `⌘`-scroll                       |
 | Pan                         | two-finger scroll, space-drag, middle-drag |
 | Fit artboard / actual size  | `⌘0` / `⌘1` (View menu)                    |
+| Zoom in / out one step      | `⌘+` / `⌘-` (View menu), about the selection's centre, or the canvas centre with nothing selected. Steps: 10, 25, 50, 66.67, 100, 150, 200, 300, 400, 800, 1 600, 3 200, 6 400 % |
+| Zoom tool                   | `Z` (magnifier in the Tools strip): click zooms in one step, `⌥`-click zooms out, drag a rectangle to zoom to it; `Esc` goes back to Select |
+| Zoom bar                    | bottom-right of the canvas: `−` / `+` step out / in; click the percentage for the steps, Fit Artboard and Actual Size, or type a zoom and press `Enter` (10–6 400 %) |
 | Rename an artboard          | double-click its name above it; `Enter` or click elsewhere keeps it, `Esc` cancels (up to 64 characters) |
+| Move an artboard            | drag its name above it: the objects lying wholly on it move with it (`⌥`-drag moves the artboard alone); it snaps like a moved object (`⌘` frees it). One undo step. Or type X and Y in Inspector ▸ Artboard |
 | Pick an artboard            | click its name above it, or its row in Inspector ▸ Artboards (with nothing selected); Inspector ▸ Artboard then shows it |
 | Add an artboard             | Object ▸ Add Artboard…, or `+` in Inspector ▸ Artboards: pick a size (the same presets as a new document); it goes to the right of the others |
 | Reorder / delete an artboard | the arrow and bin buttons on the picked artboard's row in Inspector ▸ Artboards (the order is the export order; a document keeps at least one artboard; deleting one leaves its objects where they are) |
-| Artboard name, size, background | Inspector ▸ Artboard, with nothing selected: Name; W and H resize the artboard about its centre (1–10 000 px; the objects on it stay where they are); Background on (starts white) with a colour, off is transparent |
+| Artboard name, position, size, background | Inspector ▸ Artboard, with nothing selected: Name; X and Y move the artboard with the objects on it; W and H resize the artboard about its centre (1–10 000 px; the objects on it stay where they are); Background on (starts white) with a colour, off is transparent |
 | Undo / redo                 | `⌘Z` / `⇧⌘Z` (Edit menu shows what)        |
 
 ### Grid and snapping
@@ -100,7 +104,7 @@ artboard.
 Tools (left panel, one icon each; hover for its name and key): Select
 (`V`, solid arrow), Nodes (`A`, hollow arrow), Pen (`P`), Text (`T`), and
 the shape tools Rectangle (`R`), Ellipse (`E`), Polygon (`G`), Star (`S`)
-and Line (`L`).
+and Line (`L`), then Zoom (`Z`).
 
 | Action                              | How                                                    |
 | :---------------------------------- | :----------------------------------------------------- |

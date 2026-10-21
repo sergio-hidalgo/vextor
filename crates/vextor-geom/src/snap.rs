@@ -147,6 +147,13 @@ impl SnapTargets {
         t
     }
 
+    /// Leaves out the artboard with bounds `r` (the one being moved).
+    pub fn without_artboard(&mut self, r: Rect) {
+        if let Some(i) = self.artboards.iter().position(|a| *a == r) {
+            self.artboards.remove(i);
+        }
+    }
+
     /// Adds points that count as nodes (the edited path's other nodes).
     pub fn add_nodes(&mut self, points: impl IntoIterator<Item = Point>) {
         self.nodes.extend(points);

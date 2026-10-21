@@ -196,7 +196,13 @@ impl Canvas {
 
     /// Per-object outlines (several selected), the box and its handles, and
     /// the marquee.
-    fn draw_box(&self, painter: &Painter, origin: Pos2, session: &Session, selected: &[NodeId]) {
+    pub(super) fn draw_box(
+        &self,
+        painter: &Painter,
+        origin: Pos2,
+        session: &Session,
+        selected: &[NodeId],
+    ) {
         let view = session.editor.view;
         let screen = |r: kurbo::Rect| {
             screen_rect(view, origin, Rect::new(r.x0, r.y0, r.width(), r.height()))

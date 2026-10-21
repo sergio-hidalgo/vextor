@@ -1,6 +1,6 @@
 //! The tools strip icons (spec 07), on the same 16 × 16 grid: our own
-//! line drawings of a pointer arrow, a node arrow, a pen nib, a T and the
-//! shapes.
+//! line drawings of a pointer arrow, a node arrow, a pen nib, a T, the
+//! shapes and a magnifier (spec 08b).
 
 use std::f32::consts::{FRAC_PI_2, TAU};
 
@@ -74,6 +74,14 @@ impl Pen<'_> {
                 self.line((2.5, 13.5), (13.5, 2.5));
                 self.fill((1.0, 12.0), (4.0, 15.0));
                 self.fill((12.0, 1.0), (15.0, 4.0));
+            }
+            Icon::ToolZoom => {
+                // A round lens, upper left, and its handle down to the
+                // lower right corner, drawn thicker.
+                self.closed(&around((6.5, 6.5), (5.0, 5.0), 32, 0.0, |_| 1.0));
+                let handle = Stroke::new(self.stroke.width * 1.8, self.color);
+                self.painter
+                    .line_segment([self.at((10.2, 10.2)), self.at((14.5, 14.5))], handle);
             }
             _ => {}
         }
