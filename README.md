@@ -136,12 +136,12 @@ shapes are never converted behind your back: Object ▸ Convert to Path
 | Add a node                    | pen click on the selected path's segment (a `+` shows), or `+` on a selected segment: the shape does not change |
 | Edit nodes                    | Nodes (`A`), or double-click a path: click / `⇧`-click / drag a box to select nodes; drag or arrows to move them (`⇧` 45° steps) |
 | Handles                       | drag a handle: a smooth node's other handle follows; `⌥`-drag moves it alone (the node becomes a corner). The selected node's handles are yellow; the grey ones belong to its neighbours, and where they overlap the yellow one is grabbed |
-| Node type                     | double-click a node: corner → smooth → symmetric → corner (sharp, no handles); or Inspector ▸ Node |
+| Node type                     | double-click a node: corner → smooth → symmetric → corner (sharp, no handles); or the Corner / Smooth / Symmetric icons in Inspector ▸ Node |
 | Segments                      | click one to select it; `C` toggles straight ↔ curve; drag a segment to bend it through the pointer |
 | Delete nodes                  | `⌫`: the path stays joined around them; deleting the last ones deletes the path |
 | Round a corner node           | select corner nodes between straight segments and drag the dot inside one: every selected corner rounds; or Inspector ▸ Node ▸ Corner radius |
-| Close, open, join, split, reverse | Object ▸ Path, right-click on the canvas, or Inspector ▸ Path |
-| Exact node position, handles  | Inspector ▸ Node: X, Y, type, each handle's length and angle |
+| Close, open, join, split, reverse | Object ▸ Path, right-click on the canvas, or the icon buttons in Inspector ▸ Path (hover for the name) |
+| Exact node position, handles  | Inspector ▸ Node: X and Y side by side, then the In and Out handles side by side, each with its size and angle |
 | Align / distribute nodes      | with nodes selected, Inspector ▸ Align or Object ▸ Align / Distribute: the same six alignments line the nodes up with each other (one node, or Align to Artboard: with the artboard); Distribute spaces three or more evenly. Handles move with their nodes |
 | Leave node editing            | `Esc` (nodes → path → Select tool), or double-click empty canvas |
 

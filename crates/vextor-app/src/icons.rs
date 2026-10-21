@@ -6,6 +6,8 @@ use eframe::egui::{self, Color32, Painter, Pos2, Rect, Response, Sense, Stroke, 
 
 use crate::theme;
 
+mod path;
+
 /// Side of the square an icon button's icon is drawn in, in points.
 pub const SIZE: f32 = 16.0;
 /// Side of a field-label icon, in points.
@@ -42,6 +44,21 @@ pub enum Icon {
     Artboard,
     Group,
     Ungroup,
+    /// Node types (spec 07): a sharp corner; a smooth node (handles in
+    /// line, lengths free); a symmetric node (handles in line, equal).
+    NodeCorner,
+    NodeSmooth,
+    NodeSymmetric,
+    /// A node's incoming (●—) and outgoing (—●) handle, for labels.
+    HandleIn,
+    HandleOut,
+    /// Path commands: close, open at a node, join two ends, split at a
+    /// node (scissors), reverse direction.
+    PathClose,
+    PathOpen,
+    PathJoin,
+    PathSplit,
+    PathReverse,
 }
 
 /// A button showing `icon`, highlighted when `selected`, explained by
@@ -143,6 +160,7 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.outline((1.5, 1.5), (7.5, 7.5));
             pen.outline((8.5, 8.5), (14.5, 14.5));
         }
+        _ => pen.path_icon(icon),
     }
 }
 
