@@ -162,6 +162,10 @@ pub struct Picker {
     wordmark: OnceCell<Option<egui::TextureHandle>>,
     /// Snapshots of the recent files shown, rendered in the background.
     thumbnails: Option<Thumbnails>,
+    /// Picking the size of an artboard to add to the open document
+    /// (spec 08, Object ▸ Add Artboard…), not of a new document: no Open…
+    /// nor recent files, and [`Outcome::Create`] holds the artboard.
+    pub adding: bool,
 }
 
 impl Default for Picker {
@@ -174,6 +178,7 @@ impl Default for Picker {
             content_height: 0.0,
             wordmark: OnceCell::new(),
             thumbnails: None,
+            adding: false,
         }
     }
 }
@@ -208,12 +213,17 @@ impl Picker {
                 ui.add(egui::Image::new((texture.id(), wordmark::size(texture))));
                 ui.add_space(WORDMARK_GAP);
             }
+            let (title, hint) = if self.adding {
+                ("Add artboard", "Pick the size of the new artboard.")
+            } else {
+                ("New document", "Pick the size of what you are drawing.")
+            };
             ui.label(
-                egui::RichText::new("New document")
+                egui::RichText::new(title)
                     .heading()
                     .color(theme::YELLOW_SOFT),
             );
-            ui.label("Pick the size of what you are drawing.");
+            ui.label(hint);
             ui.add_space(12.0);
             // `vertical_centered` does not centre rows, so each row is
             // padded on the left by half the room it leaves.
@@ -260,11 +270,12 @@ impl Picker {
                 outcome = Outcome::Cancel;
             }
             ui.add_space(20.0);
-            if ui.add(action_button("Open…")).clicked() {
+            if !self.adding && ui.add(action_button("Open…")).clicked() {
                 outcome = Outcome::Browse;
             }
             if let Some(t) = &mut self.thumbnails
                 && any_recent
+                && !self.adding
             {
                 ui.add_space(12.0);
                 ui.weak("Recent");

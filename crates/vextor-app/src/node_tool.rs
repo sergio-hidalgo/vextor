@@ -56,6 +56,8 @@ enum Drag {
     },
     Nodes {
         start: Point,
+        /// The pressed node's anchor at press (what snaps, spec 08).
+        anchor: Point,
         /// The document-space move applied so far.
         applied: Vec2,
         moved: bool,
@@ -67,6 +69,8 @@ enum Drag {
         node: PathNodeRef,
         side: Side,
         start: Point,
+        /// The handle's tip at press (what snaps, spec 08).
+        anchor: Point,
         moved: bool,
     },
     Bend {
@@ -107,6 +111,19 @@ impl NodeTool {
     #[must_use]
     pub fn preview(&self, s: &Session) -> Option<(&Document, NodeId)> {
         Some((self.before.as_deref()?, edited(s)?))
+    }
+
+    /// While nodes or a handle are dragged: where the press was and the
+    /// grabbed point then, and the edited path (what snaps, spec 08).
+    #[must_use]
+    pub fn snap_drag(&self, s: &Session) -> Option<(Point, Point, NodeId)> {
+        let shape = edited(s)?;
+        match self.drag {
+            Drag::Nodes { start, anchor, .. } | Drag::Handle { start, anchor, .. } => {
+                Some((start, anchor, shape))
+            }
+            _ => None,
+        }
     }
 
     /// The marquee rectangle (document space) while one is drawn.
@@ -172,11 +189,16 @@ impl NodeTool {
         self.before = None;
         match Self::target(s, p, zoom) {
             NodeTarget::Handle(node, side) => {
+                let anchor = handles(s)
+                    .into_iter()
+                    .find(|h| h.node == node && h.side == side)
+                    .map_or(p, |h| h.tip);
                 self.begin(s);
                 self.drag = Drag::Handle {
                     node,
                     side,
                     start: p,
+                    anchor,
                     moved: false,
                 };
             }
@@ -227,9 +249,11 @@ impl NodeTool {
             select_nodes(s, r.shape, vec![r]);
             None
         };
+        let anchor = path_ops::anchor_in_doc(s, r).unwrap_or(p);
         self.begin(s);
         self.drag = Drag::Nodes {
             start: p,
+            anchor,
             applied: Vec2::ZERO,
             moved: false,
             clicked,

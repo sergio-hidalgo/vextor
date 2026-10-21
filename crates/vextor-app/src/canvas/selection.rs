@@ -28,7 +28,7 @@ impl Canvas {
             let p = view::screen_to_doc(view, to_point(pos - rect.min));
             kurbo::Point::new(p.x, p.y)
         };
-        let (pressed, down, released, press_at, at, mods, space) = ui.input(|i| {
+        let (pressed, down, released, press_at, at, mods, space, free) = ui.input(|i| {
             (
                 i.pointer.primary_pressed(),
                 i.pointer.primary_down(),
@@ -40,6 +40,8 @@ impl Canvas {
                     alt: i.modifiers.alt,
                 },
                 i.key_down(egui::Key::Space),
+                // ⌘ suspends snapping (spec 08).
+                i.modifiers.command,
             )
         });
         let mut message: Option<String> = None;
@@ -55,13 +57,14 @@ impl Canvas {
             }
             let (used, text_message) = self.text_press(ui.ctx(), session, to_doc(p), mods.shift);
             message = text_message;
+            let snapped = self.snap_press(session, to_doc(p), mods, free);
             let used = used || {
-                let (used, shape_message) = self.shape_press(session, to_doc(p), mods);
+                let (used, shape_message) = self.shape_press(session, snapped, mods);
                 message = message.or(shape_message);
                 used
             };
             let used = used || {
-                let (used, pen_message) = self.pen_press(session, to_doc(p), mods);
+                let (used, pen_message) = self.pen_press(session, snapped, mods);
                 message = message.or(pen_message);
                 used
             };
@@ -69,26 +72,35 @@ impl Canvas {
             if !used {
                 self.tool.press(session, to_doc(p), mods, view.zoom);
             }
+            self.snap_after_press(session);
         }
+        let at_doc = at.map(to_doc);
+        let snapped_at = match at_doc {
+            Some(q) if down && !released => Some(self.snap_drag(session, q, mods, free)),
+            other => other,
+        };
         if self.is_editing_text() {
             self.text_drag(session, at.filter(|_| down).map(to_doc), down);
         }
-        if let Some(e) = self.shape_drag(session, at.map(to_doc), down && !released, mods) {
+        if let Some(e) = self.shape_drag(session, snapped_at, down && !released, mods) {
             message = Some(e);
         }
-        if let Some(e) = self.pen_drag(session, at.map(to_doc), down && !released, mods) {
+        if let Some(e) = self.pen_drag(session, snapped_at, down && !released, mods) {
             message = Some(e);
         }
-        if let Some(e) = self.node_drag(session, at.map(to_doc), down && !released, mods) {
+        if let Some(e) = self.node_drag(session, snapped_at, down && !released, mods) {
             message = Some(e);
         }
         if self.tool.is_dragging() {
-            if down && let Some(p) = at {
-                message = self.tool.drag_to(session, to_doc(p), mods, view.zoom).err();
+            if down && let Some(p) = snapped_at {
+                message = self.tool.drag_to(session, p, mods, view.zoom).err();
             }
             if released || !down {
                 self.tool.release(session);
             }
+        }
+        if released || !down {
+            self.snap.end();
         }
         // After the tools' release, which closes their own gesture.
         if response.double_clicked()

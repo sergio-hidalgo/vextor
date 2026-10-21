@@ -6,6 +6,7 @@ mod draw;
 mod hit;
 mod path_edit;
 mod resize;
+mod snap;
 mod text;
 mod transform;
 
@@ -22,6 +23,7 @@ pub use path_edit::{
     segment, smooth_handles, split_segment, transform_subpath,
 };
 pub use resize::{Resized, polar, resize, stretched};
+pub use snap::{BoxSnap, Guide, Snap, SnapKind, SnapTargets, minor_spacing, pixel_snap, tolerance};
 pub use text::{
     FaceStyle, FontDb, Fonts, GlyphSpan, LineBox, MissingFont, ResolvedFace, TextLayout, layout,
     text_box, text_outlines,

@@ -1,19 +1,85 @@
-//! Inspector ▸ Artboard (spec 05e): the artboard's name, size and
-//! background, shown while nothing is selected. W and H resize the
+//! Inspector ▸ Artboards (spec 08): the document's artboards in export
+//! order, to pick the current one, add, reorder and delete; then
+//! Inspector ▸ Artboard (spec 05e): the current artboard's name, size and
+//! background. Both show while nothing is selected. W and H resize the
 //! artboard about its centre; the objects on it stay where they are.
 
 use eframe::egui;
 use vextor_core::Artboard;
 
+use super::PanelAction;
 use super::text::{color_field, section_toggle};
 use super::{FIELD_SIZE, GRID_SPACING, LABEL_WIDTH, Label};
 use crate::artboard::{self, DEFAULT_BACKGROUND, MAX_NAME_CHARS};
-use crate::icons::Icon;
+use crate::icons::{self, Icon};
 use crate::new_doc::MAX_SIDE;
 use crate::session::Session;
 
 /// Width of the name field: two number fields and the gap between them.
 const NAME_WIDTH: f32 = FIELD_SIZE[0] * 2.0 + GRID_SPACING[0];
+
+/// The Artboards list: one row per artboard (a click makes it current),
+/// the current one's move up / move down / delete buttons, and Add.
+pub(super) fn list_section(ui: &mut egui::Ui, s: &mut Session, actions: &mut Vec<PanelAction>) {
+    let current = artboard::current(s).map(|a| a.id);
+    let rows: Vec<(vextor_core::ArtboardId, String)> = s
+        .doc
+        .artboards
+        .iter()
+        .map(|a| (a.id, a.name.clone()))
+        .collect();
+    let count = rows.len();
+    super::section(ui, "Artboards", |ui| {
+        for (i, (id, name)) in rows.into_iter().enumerate() {
+            let chosen = current == Some(id);
+            ui.horizontal(|ui| {
+                if ui.selectable_label(chosen, &name).clicked() {
+                    artboard::pick(s, id);
+                }
+                if !chosen {
+                    return;
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let only = "A document keeps at least one artboard";
+                    if icons::button(ui, Icon::Delete, false, count > 1, "Delete artboard", only)
+                        .clicked()
+                    {
+                        let _ = artboard::delete(s, id);
+                    }
+                    let last = "Already the last";
+                    if icons::button(
+                        ui,
+                        Icon::MoveDown,
+                        false,
+                        i + 1 < count,
+                        "Move down (later in export order)",
+                        last,
+                    )
+                    .clicked()
+                    {
+                        artboard::reorder(s, id, false);
+                    }
+                    let first = "Already the first";
+                    if icons::button(
+                        ui,
+                        Icon::MoveUp,
+                        false,
+                        i > 0,
+                        "Move up (earlier in export order)",
+                        first,
+                    )
+                    .clicked()
+                    {
+                        artboard::reorder(s, id, true);
+                    }
+                });
+            });
+        }
+        if icons::button(ui, Icon::Add, false, true, "Add artboard…", "").clicked() {
+            actions.push(PanelAction::AddArtboard);
+        }
+    });
+}
 
 /// The Artboard section, or "Nothing selected." for a document without
 /// artboards.

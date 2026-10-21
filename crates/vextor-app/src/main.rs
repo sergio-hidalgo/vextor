@@ -23,6 +23,8 @@ mod recovery;
 mod select;
 mod session;
 mod shape_tool;
+mod snap_settings;
+mod snapping;
 mod tabs;
 mod text_edit;
 mod text_tool;

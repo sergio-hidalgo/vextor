@@ -12,9 +12,13 @@ use crate::icons::{self, Icon};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PanelAction {
     Align(Align),
-    Distribute { horizontal: bool },
+    Distribute {
+        horizontal: bool,
+    },
     Group,
     Ungroup,
+    /// Artboards ▸ Add (spec 08): opens the size picker.
+    AddArtboard,
 }
 
 /// The six align buttons: action, icon, tooltip.

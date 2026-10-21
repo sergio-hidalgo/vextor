@@ -27,6 +27,9 @@ pub(super) const PREV_DOC_TAB: KeyboardShortcut =
 pub(super) const FIT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Num0);
 pub(super) const ACTUAL_SIZE: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND, Key::Num1);
+/// View ▸ Show Grid (spec 08).
+pub(super) const SHOW_GRID: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND, Key::Quote);
 
 // Edit and Object. ⌘X / ⌘C / ⌘V arrive as clipboard events, not keys; their
 // constants only label the menu items.
@@ -171,6 +174,7 @@ impl VextorApp {
                 (NEXT_DOC, next),
                 (FIT, Action::Fit),
                 (ACTUAL_SIZE, Action::ActualSize),
+                (SHOW_GRID, Action::ToggleGrid),
             ]
             .into_iter()
             .filter(|(shortcut, _)| i.consume_shortcut(shortcut))
@@ -221,6 +225,14 @@ mod tests {
         assert_eq!(
             actions(Key::ArrowDown, CMD_SHIFT),
             vec![Action::Arrange(Arrange::Back)]
+        );
+    }
+
+    #[test]
+    fn command_quote_shows_the_grid() {
+        assert_eq!(
+            actions(Key::Quote, Modifiers::COMMAND),
+            vec![Action::ToggleGrid]
         );
     }
 
