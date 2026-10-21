@@ -15,6 +15,9 @@ pub(super) struct Harness {
     pub(super) canvas: Canvas,
     /// Modifier keys held during the frames.
     pub(super) modifiers: Modifiers,
+    /// Keep the session's view between frames (zoom tests) instead of
+    /// putting it back at 100 % with no pan.
+    pub(super) keep_view: bool,
 }
 
 impl Harness {
@@ -26,6 +29,7 @@ impl Harness {
             doc,
             canvas: Canvas::default(),
             modifiers: Modifiers::NONE,
+            keep_view: false,
         }
     }
 
@@ -41,7 +45,9 @@ impl Harness {
                 ..Default::default()
             };
             s.needs_fit = false;
-            s.editor.view = vextor_core::View::default();
+            if !self.keep_view {
+                s.editor.view = vextor_core::View::default();
+            }
             let (canvas, doc) = (&mut self.canvas, self.doc);
             self.ctx
                 .run_ui(input, |ui| {

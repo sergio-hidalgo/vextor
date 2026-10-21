@@ -27,6 +27,10 @@ pub(super) const PREV_DOC_TAB: KeyboardShortcut =
 pub(super) const FIT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Num0);
 pub(super) const ACTUAL_SIZE: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND, Key::Num1);
+// Zoom in / out one stop (spec 08b): ⌘+ and ⌘- only; no ⌘=, `=` is not a
+// key of its own on every layout.
+pub(super) const ZOOM_IN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Plus);
+pub(super) const ZOOM_OUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Minus);
 /// View ▸ Show Grid (spec 08).
 pub(super) const SHOW_GRID: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND, Key::Quote);
@@ -63,6 +67,7 @@ pub(super) const SELECT_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers
 pub(super) const TEXT_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::T);
 pub(super) const PEN_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::P);
 pub(super) const NODE_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::A);
+pub(super) const ZOOM_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::Z);
 // Path editing (spec 07).
 pub(super) const JOIN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::J);
 pub(super) const TOGGLE_SEGMENT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::C);
@@ -128,6 +133,7 @@ impl VextorApp {
                 (TEXT_TOOL, Action::Tool(ToolId::Text)),
                 (PEN_TOOL, Action::Tool(ToolId::Pen)),
                 (NODE_TOOL, Action::Tool(ToolId::Node)),
+                (ZOOM_TOOL, Action::Tool(ToolId::Zoom)),
             ];
             let tools = SHAPE_TOOLS.map(|(key, tool)| (key, Action::Tool(tool)));
             for (shortcut, action) in keys.into_iter().chain(tools) {
@@ -174,6 +180,8 @@ impl VextorApp {
                 (NEXT_DOC, next),
                 (FIT, Action::Fit),
                 (ACTUAL_SIZE, Action::ActualSize),
+                (ZOOM_IN, Action::Zoom { inward: true }),
+                (ZOOM_OUT, Action::Zoom { inward: false }),
                 (SHOW_GRID, Action::ToggleGrid),
             ]
             .into_iter()
@@ -237,6 +245,23 @@ mod tests {
     }
 
     #[test]
+    fn command_plus_and_minus_zoom_but_not_command_equals() {
+        let zin = vec![Action::Zoom { inward: true }];
+        assert_eq!(actions(Key::Plus, Modifiers::COMMAND), zin);
+        assert_eq!(actions(Key::Equals, Modifiers::COMMAND), vec![]);
+        assert_eq!(actions(Key::Plus, CMD_SHIFT), zin, "⇧= types +");
+        assert_eq!(
+            actions(Key::Minus, Modifiers::COMMAND),
+            vec![Action::Zoom { inward: false }]
+        );
+        assert_eq!(
+            actions(Key::Plus, Modifiers::NONE),
+            vec![Action::Path(PathAction::AddNode)],
+            "plain + still adds a node"
+        );
+    }
+
+    #[test]
     fn letters_pick_tools() {
         assert_eq!(
             actions(Key::T, Modifiers::NONE),
@@ -253,6 +278,15 @@ mod tests {
         assert_eq!(
             actions(Key::A, Modifiers::NONE),
             vec![Action::Tool(ToolId::Node)]
+        );
+        assert_eq!(
+            actions(Key::Z, Modifiers::NONE),
+            vec![Action::Tool(ToolId::Zoom)]
+        );
+        assert_eq!(
+            actions(Key::Z, Modifiers::COMMAND),
+            vec![Action::Undo],
+            "⌘Z still undoes"
         );
     }
 

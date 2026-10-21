@@ -37,7 +37,7 @@ pub use arrange::PanelAction;
 pub use fonts::recent_families;
 
 /// The tools strip, in groups: tool, icon, tooltip (name and key).
-const TOOLS: [&[(ToolId, Icon, &str)]; 4] = [
+const TOOLS: [&[(ToolId, Icon, &str)]; 5] = [
     &[
         (ToolId::Select, Icon::ToolSelect, "Select (V)"),
         (ToolId::Node, Icon::ToolNode, "Nodes (A)"),
@@ -51,10 +51,11 @@ const TOOLS: [&[(ToolId, Icon, &str)]; 4] = [
         (ToolId::Star, Icon::ToolStar, "Star (S)"),
         (ToolId::Line, Icon::ToolLine, "Line (L)"),
     ],
+    &[(ToolId::Zoom, Icon::ToolZoom, "Zoom (Z)")],
 ];
 
 /// Tools (left): one icon per tool, in groups (selecting, drawing, text,
-/// shapes); the active one is highlighted. Returns the tool clicked.
+/// shapes, zoom); the active one is highlighted. Returns the tool clicked.
 pub fn tools(ui: &mut egui::Ui, active: Option<ToolId>) -> Option<ToolId> {
     ui.add_space(6.0);
     let mut picked = None;
@@ -346,7 +347,7 @@ mod tests {
         ids.sort();
         ids.dedup();
         assert_eq!(ids.len(), tools.len(), "no tool twice");
-        assert_eq!(ids.len(), 9, "Select, Nodes, Pen, Text and five shapes");
+        assert_eq!(ids.len(), 10, "Select, Nodes, Pen, Text, five shapes, Zoom");
         for &(tool, _, tooltip) in tools {
             assert!(
                 tooltip.ends_with(')') && tooltip.contains(" ("),

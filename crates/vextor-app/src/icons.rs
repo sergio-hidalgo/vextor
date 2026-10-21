@@ -71,6 +71,8 @@ pub enum Icon {
     ToolPolygon,
     ToolStar,
     ToolLine,
+    /// The zoom tool (spec 08b): a magnifier.
+    ToolZoom,
     /// Artboards list (spec 08): add (a plus), move earlier / later in
     /// the order (arrows), delete (a bin).
     Add,
@@ -236,7 +238,8 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
         | Icon::ToolEllipse
         | Icon::ToolPolygon
         | Icon::ToolStar
-        | Icon::ToolLine => pen.tool_icon(icon),
+        | Icon::ToolLine
+        | Icon::ToolZoom => pen.tool_icon(icon),
         _ => pen.path_icon(icon),
     }
 }

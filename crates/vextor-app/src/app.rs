@@ -161,7 +161,11 @@ impl VextorApp {
     fn run(&mut self, action: Action) {
         if !matches!(
             action,
-            Action::Fit | Action::ActualSize | Action::ToggleGrid | Action::Snap(_)
+            Action::Fit
+                | Action::ActualSize
+                | Action::Zoom { .. }
+                | Action::ToggleGrid
+                | Action::Snap(_)
         ) {
             self.finish_text();
         }
@@ -198,7 +202,11 @@ impl VextorApp {
                 self.docs.cycle(forward);
                 self.picker = None;
             }
-            Action::Undo | Action::Redo | Action::Fit | Action::ActualSize => {
+            Action::Undo
+            | Action::Redo
+            | Action::Fit
+            | Action::ActualSize
+            | Action::Zoom { .. } => {
                 let Some(session) = self.docs.session_mut() else {
                     return;
                 };
@@ -210,6 +218,7 @@ impl VextorApp {
                         session.redo();
                     }
                     Action::Fit => self.canvas.fit(session),
+                    Action::Zoom { inward } => self.canvas.zoom_step(session, inward),
                     _ => self.canvas.actual_size(session),
                 }
             }

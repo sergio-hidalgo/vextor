@@ -7,7 +7,7 @@ use vextor_geom::Align;
 use super::keys::{
     ACTUAL_SIZE, ADD_NODE, BACK, BACKWARD, CLOSE, CONVERT_TO_PATH, COPY, CUT, DELETE, DUPLICATE,
     FIT, FORWARD, FRONT, GROUP, JOIN, NEW, NEXT_DOC, OPEN, OUTLINE_TEXT, PASTE, PASTE_IN_PLACE,
-    PREV_DOC, REDO, SAVE, SAVE_AS, SELECT_ALL, TOGGLE_SEGMENT, UNDO, UNGROUP,
+    PREV_DOC, REDO, SAVE, SAVE_AS, SELECT_ALL, TOGGLE_SEGMENT, UNDO, UNGROUP, ZOOM_IN, ZOOM_OUT,
 };
 use super::{Action, VextorApp};
 use crate::path_ops::PathAction;
@@ -88,6 +88,12 @@ impl VextorApp {
                 }
                 if item(ui, has_doc, "Actual Size", &ACTUAL_SIZE) {
                     actions.push(Action::ActualSize);
+                }
+                if item(ui, has_doc, "Zoom In", &ZOOM_IN) {
+                    actions.push(Action::Zoom { inward: true });
+                }
+                if item(ui, has_doc, "Zoom Out", &ZOOM_OUT) {
+                    actions.push(Action::Zoom { inward: false });
                 }
                 ui.separator();
                 self.grid_items(ui, has_doc, &mut actions);

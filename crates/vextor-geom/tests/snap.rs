@@ -152,6 +152,15 @@ fn dragged_objects_are_not_targets() {
 }
 
 #[test]
+fn a_moved_artboard_is_not_its_own_target() {
+    let (mut d, a) = one_rect();
+    with_artboard(&mut d, 100.0, 100.0, 50.0, 50.0);
+    let mut t = SnapTargets::collect(&d, &Fonts::default(), &[a]);
+    t.without_artboard(Rect::new(100.0, 100.0, 150.0, 150.0));
+    assert_eq!(t.point(Point::new(125.0, 100.4), 1.0), None);
+}
+
+#[test]
 fn turned_off_kinds_are_skipped() {
     let (mut d, _) = one_rect();
     d.grid.snap.to_nodes = false;

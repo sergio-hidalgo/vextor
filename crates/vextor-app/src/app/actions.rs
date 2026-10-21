@@ -38,6 +38,10 @@ pub(super) enum Action {
     Redo,
     Fit,
     ActualSize,
+    /// View ▸ Zoom In / Zoom Out (spec 08b): one stop.
+    Zoom {
+        inward: bool,
+    },
     /// View ▸ Show Grid (spec 08).
     ToggleGrid,
     /// A View ▸ snapping toggle (spec 08).
@@ -117,7 +121,11 @@ impl VextorApp {
                 let _ = self.canvas.finish_pen(s);
                 true
             }
-            Action::Fit | Action::ActualSize | Action::ToggleGrid | Action::Snap(_) => false,
+            Action::Fit
+            | Action::ActualSize
+            | Action::Zoom { .. }
+            | Action::ToggleGrid
+            | Action::Snap(_) => false,
             // ⌘Z that took back a lone first node has done its undo.
             Action::Undo => self.canvas.finish_pen(s),
             _ => {
@@ -153,6 +161,11 @@ impl VextorApp {
             Action::Delete => edit_ops::delete(s),
             Action::SelectAll => {
                 edit_ops::select_all(s);
+                Ok(())
+            }
+            // Esc leaves the zoom tool (spec 08b), keeping the selection.
+            Action::Deselect if s.editor.tool == ToolId::Zoom => {
+                s.editor.tool = ToolId::Select;
                 Ok(())
             }
             Action::Deselect => {

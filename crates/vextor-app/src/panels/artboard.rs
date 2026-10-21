@@ -1,8 +1,9 @@
 //! Inspector ▸ Artboards (spec 08): the document's artboards in export
 //! order, to pick the current one, add, reorder and delete; then
 //! Inspector ▸ Artboard (spec 05e): the current artboard's name, size and
-//! background. Both show while nothing is selected. W and H resize the
-//! artboard about its centre; the objects on it stay where they are.
+//! background. Both show while nothing is selected. X and Y move the
+//! artboard with the objects on it (spec 08b); W and H resize it about its
+//! centre, the objects staying where they are.
 
 use eframe::egui;
 use vextor_core::Artboard;
@@ -97,36 +98,84 @@ pub(super) fn section(ui: &mut egui::Ui, s: &mut Session) {
                 ui.label("Name");
                 name_field(ui, s, &board);
                 ui.end_row();
-                let width = Label("W", Icon::Width, "Width (W)");
-                let height = Label("H", Icon::Height, "Height (H)");
-                let (bw, bh) = (board.rect.width, board.rect.height);
-                for (label, value, wide) in [(width, bw, true), (height, bh, false)] {
-                    label.show(ui);
-                    let mut v = value;
-                    let r = ui
-                        .add_sized(
-                            FIELD_SIZE,
-                            egui::DragValue::new(&mut v)
-                                .range(artboard::MIN_SIDE..=MAX_SIDE)
-                                .clamp_existing_to_range(false)
-                                .max_decimals(2),
-                        )
-                        .on_hover_text("Resizes from the centre; objects stay where they are");
-                    if r.drag_started() {
-                        s.begin_gesture();
-                    }
-                    if r.changed() && (v - value).abs() > vextor_core::EPS {
-                        let (nw, nh) = if wide { (v, bh) } else { (bw, v) };
-                        artboard::resize(s, board.id, nw, nh);
-                    }
-                    if r.drag_stopped() {
-                        s.end_gesture();
-                    }
-                    ui.end_row();
-                }
             });
+        geometry_fields(ui, s, &board);
         background_fields(ui, s, &board);
     });
+}
+
+/// X | Y, then W | H. X and Y move the artboard with the objects on it;
+/// W and H resize it about its centre, the objects staying where they are.
+fn geometry_fields(ui: &mut egui::Ui, s: &mut Session, board: &Artboard) {
+    let rect = board.rect;
+    let place = -MAX_SIDE..=MAX_SIDE;
+    let side = artboard::MIN_SIDE..=MAX_SIDE;
+    let moves = "Moves it with the objects on it";
+    let resizes = "Resizes from the centre; objects stay where they are";
+    egui::Grid::new("artboard-geometry")
+        .num_columns(4)
+        .spacing(GRID_SPACING)
+        .show(ui, |ui| {
+            let x_label = Label("X", Icon::PosX, "Left edge (X)");
+            let y_label = Label("Y", Icon::PosY, "Top edge (Y)");
+            number(ui, s, x_label, rect.x, place.clone(), moves, |s, value| {
+                artboard::move_to(s, board.id, value, rect.y);
+            });
+            number(ui, s, y_label, rect.y, place, moves, |s, value| {
+                artboard::move_to(s, board.id, rect.x, value);
+            });
+            ui.end_row();
+            let w_label = Label("W", Icon::Width, "Width (W)");
+            let h_label = Label("H", Icon::Height, "Height (H)");
+            number(
+                ui,
+                s,
+                w_label,
+                rect.width,
+                side.clone(),
+                resizes,
+                |s, value| {
+                    artboard::resize(s, board.id, value, rect.height);
+                },
+            );
+            number(ui, s, h_label, rect.height, side, resizes, |s, value| {
+                artboard::resize(s, board.id, rect.width, value);
+            });
+            ui.end_row();
+        });
+}
+
+/// A labelled number field in `range` (`hover`: what changing it does)
+/// that calls `apply` with a changed value. A drag is one history gesture.
+fn number(
+    ui: &mut egui::Ui,
+    s: &mut Session,
+    label: Label,
+    value: f64,
+    range: std::ops::RangeInclusive<f64>,
+    hover: &str,
+    apply: impl FnOnce(&mut Session, f64),
+) {
+    label.show(ui);
+    let mut v = value;
+    let r = ui
+        .add_sized(
+            FIELD_SIZE,
+            egui::DragValue::new(&mut v)
+                .range(range)
+                .clamp_existing_to_range(false)
+                .max_decimals(2),
+        )
+        .on_hover_text(hover);
+    if r.drag_started() {
+        s.begin_gesture();
+    }
+    if r.changed() && (v - value).abs() > vextor_core::EPS {
+        apply(s, v);
+    }
+    if r.drag_stopped() {
+        s.end_gesture();
+    }
 }
 
 /// The name, committed when the field loses focus (Enter or a click

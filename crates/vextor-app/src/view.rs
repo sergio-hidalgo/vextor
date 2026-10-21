@@ -11,6 +11,25 @@ pub const MIN_ZOOM: f64 = 0.1;
 pub const MAX_ZOOM: f64 = 64.0;
 /// Space kept around an artboard by "fit", in points.
 pub const FIT_MARGIN: f64 = 40.0;
+/// The zooms that zoom in / zoom out step through (spec 08b), smallest
+/// first, from [`MIN_ZOOM`] to [`MAX_ZOOM`].
+pub const ZOOM_STOPS: [f64; 13] = [
+    0.1,
+    0.25,
+    0.5,
+    2.0 / 3.0,
+    1.0,
+    1.5,
+    2.0,
+    3.0,
+    4.0,
+    8.0,
+    16.0,
+    32.0,
+    64.0,
+];
+/// How close a zoom must be to a stop to count as on it (relative).
+const STOP_TOLERANCE: f64 = 1e-3;
 
 /// Where a document point appears on the canvas.
 #[must_use]
@@ -43,15 +62,89 @@ pub fn zoom_at(view: View, cursor: Point, factor: f64) -> View {
     if !factor.is_finite() || factor <= 0.0 {
         return view;
     }
-    let zoom = (view.zoom * factor).clamp(MIN_ZOOM, MAX_ZOOM);
+    zoom_to(view, cursor, view.zoom * factor)
+}
+
+/// The view at `zoom` (clamped to [`MIN_ZOOM`]..=[`MAX_ZOOM`]), keeping
+/// the document point under `at` where it is.
+#[must_use]
+pub fn zoom_to(view: View, at: Point, zoom: f64) -> View {
+    if !zoom.is_finite() || zoom <= 0.0 {
+        return view;
+    }
+    let zoom = zoom.clamp(MIN_ZOOM, MAX_ZOOM);
     let k = zoom / view.zoom;
     View {
         zoom,
         pan: Vec2::new(
-            cursor.x - (cursor.x - view.pan.x) * k,
-            cursor.y - (cursor.y - view.pan.y) * k,
+            at.x - (at.x - view.pan.x) * k,
+            at.y - (at.y - view.pan.y) * k,
         ),
     }
+}
+
+/// The first stop above `zoom`, or [`MAX_ZOOM`] at the top.
+#[must_use]
+pub fn next_stop(zoom: f64) -> f64 {
+    ZOOM_STOPS
+        .into_iter()
+        .find(|&s| s > zoom * (1.0 + STOP_TOLERANCE))
+        .unwrap_or(MAX_ZOOM)
+}
+
+/// The first stop below `zoom`, or [`MIN_ZOOM`] at the bottom.
+#[must_use]
+pub fn prev_stop(zoom: f64) -> f64 {
+    ZOOM_STOPS
+        .into_iter()
+        .rev()
+        .find(|&s| s < zoom * (1.0 - STOP_TOLERANCE))
+        .unwrap_or(MIN_ZOOM)
+}
+
+/// True when `zoom` is at the smallest zoom (zoom out does nothing).
+#[must_use]
+pub fn at_min(zoom: f64) -> bool {
+    zoom <= MIN_ZOOM * (1.0 + STOP_TOLERANCE)
+}
+
+/// True when `zoom` is at the largest zoom (zoom in does nothing).
+#[must_use]
+pub fn at_max(zoom: f64) -> bool {
+    zoom >= MAX_ZOOM * (1.0 - STOP_TOLERANCE)
+}
+
+/// One stop in (`inward`) or out, keeping the document point under `at`
+/// where it is.
+#[must_use]
+pub fn step(view: View, at: Point, inward: bool) -> View {
+    let zoom = if inward {
+        next_stop(view.zoom)
+    } else {
+        prev_stop(view.zoom)
+    };
+    zoom_to(view, at, zoom)
+}
+
+/// `zoom` as the zoom bar shows it: a whole percentage ("67 %").
+#[must_use]
+pub fn percent(zoom: f64) -> String {
+    format!("{:.0} %", zoom * 100.0)
+}
+
+/// A typed percentage ("150", "150 %", "66.67%") as a zoom, clamped to
+/// [`MIN_ZOOM`]..=[`MAX_ZOOM`]; `None` when it is not a positive number.
+#[must_use]
+pub fn parse_percent(text: &str) -> Option<f64> {
+    let number = text.trim().trim_end_matches('%').trim();
+    let v: f64 = number.replace(',', ".").parse().ok()?;
+    (v.is_finite() && v > 0.0).then(|| (v / 100.0).clamp(MIN_ZOOM, MAX_ZOOM))
+}
+
+/// The centre of a canvas of size `canvas`.
+#[must_use]
+pub fn centre(canvas: Vec2) -> Point {
+    Point::new(canvas.x / 2.0, canvas.y / 2.0)
 }
 
 /// The view at 100 %, keeping the document point at the canvas centre.
@@ -84,6 +177,20 @@ pub fn fit(target: Rect, canvas: Vec2) -> View {
     }
 }
 
+/// The view that fits the screen rectangle from `a` to `b` (canvas
+/// points) on a canvas of size `canvas`: the zoom tool's drag.
+#[must_use]
+pub fn zoom_rect(view: View, a: Point, b: Point, canvas: Vec2) -> View {
+    let (p, q) = (screen_to_doc(view, a), screen_to_doc(view, b));
+    let target = Rect::new(
+        p.x.min(q.x),
+        p.y.min(q.y),
+        (p.x - q.x).abs(),
+        (p.y - q.y).abs(),
+    );
+    fit(target, canvas)
+}
+
 /// The smallest rectangle holding all `rects`, or `None` when there are none.
 #[must_use]
 pub fn bounds(rects: impl IntoIterator<Item = Rect>) -> Option<Rect> {
@@ -109,10 +216,6 @@ pub fn reproject(rendered: View, now: View) -> (Point, f64) {
         ),
         k,
     )
-}
-
-fn centre(canvas: Vec2) -> Point {
-    Point::new(canvas.x / 2.0, canvas.y / 2.0)
 }
 
 #[cfg(test)]
@@ -154,6 +257,89 @@ mod tests {
         let c = Point::new(0.0, 0.0);
         assert!((zoom_at(v, c, 1e6).zoom - MAX_ZOOM).abs() < EPS);
         assert!((zoom_at(v, c, 1e-6).zoom - MIN_ZOOM).abs() < EPS);
+    }
+
+    #[test]
+    fn next_and_prev_stop_from_a_stop_move_one_stop() {
+        assert!((next_stop(1.0) - 1.5).abs() < EPS);
+        assert!((prev_stop(1.0) - 2.0 / 3.0).abs() < EPS);
+        assert!((next_stop(2.0 / 3.0) - 1.0).abs() < EPS);
+        assert!((prev_stop(0.25) - 0.1).abs() < EPS);
+        // A stop reached by float maths still counts as that stop.
+        assert!((next_stop(0.666_67) - 1.0).abs() < EPS);
+    }
+
+    #[test]
+    fn next_and_prev_stop_between_stops_go_to_the_neighbours() {
+        assert!((next_stop(1.2) - 1.5).abs() < EPS);
+        assert!((prev_stop(1.2) - 1.0).abs() < EPS);
+        assert!((next_stop(5.0) - 8.0).abs() < EPS);
+        assert!((prev_stop(5.0) - 4.0).abs() < EPS);
+    }
+
+    #[test]
+    fn stops_are_clamped_at_both_ends() {
+        assert!((next_stop(MAX_ZOOM) - MAX_ZOOM).abs() < EPS);
+        assert!((next_stop(50.0) - MAX_ZOOM).abs() < EPS);
+        assert!((prev_stop(MIN_ZOOM) - MIN_ZOOM).abs() < EPS);
+        assert!((prev_stop(0.2) - MIN_ZOOM).abs() < EPS);
+        assert!(at_min(MIN_ZOOM) && !at_min(0.25));
+        assert!(at_max(MAX_ZOOM) && !at_max(32.0));
+    }
+
+    #[test]
+    fn stepping_keeps_the_point_fixed() {
+        let v = view(1.2, 40.0, -20.0);
+        let at = Point::new(250.0, 120.0);
+        let before = screen_to_doc(v, at);
+        let zin = step(v, at, true);
+        assert!((zin.zoom - 1.5).abs() < EPS);
+        assert!(close(screen_to_doc(zin, at), before));
+        let zout = step(v, at, false);
+        assert!((zout.zoom - 1.0).abs() < EPS);
+        assert!(close(screen_to_doc(zout, at), before));
+    }
+
+    #[test]
+    fn zoom_to_keeps_the_point_fixed_and_clamps() {
+        let v = view(2.0, 13.0, 7.0);
+        let at = Point::new(90.0, 60.0);
+        let z = zoom_to(v, at, 3.0);
+        assert!((z.zoom - 3.0).abs() < EPS);
+        assert!(close(screen_to_doc(z, at), screen_to_doc(v, at)));
+        assert!((zoom_to(v, at, 1e9).zoom - MAX_ZOOM).abs() < EPS);
+        assert_eq!(zoom_to(v, at, f64::NAN), v);
+    }
+
+    #[test]
+    fn zoom_rect_fits_the_dragged_area() {
+        let v = view(1.0, 0.0, 0.0);
+        let canvas = Vec2::new(800.0, 600.0);
+        // Dragged backwards: the corners may come in any order.
+        let z = zoom_rect(
+            v,
+            Point::new(300.0, 200.0),
+            Point::new(100.0, 100.0),
+            canvas,
+        );
+        assert_eq!(z, fit(Rect::new(100.0, 100.0, 200.0, 100.0), canvas));
+        assert!((z.zoom - 3.6).abs() < EPS, "width limits: 720 / 200");
+    }
+
+    #[test]
+    fn percentages_show_whole_and_parse_typed() {
+        assert_eq!(percent(1.0), "100 %");
+        assert_eq!(percent(2.0 / 3.0), "67 %");
+        assert_eq!(percent(MIN_ZOOM), "10 %");
+        assert_eq!(parse_percent("150"), Some(1.5));
+        assert_eq!(parse_percent(" 150 % "), Some(1.5));
+        assert_eq!(parse_percent("50%"), Some(0.5));
+        assert_eq!(parse_percent("12,5"), Some(0.125));
+        assert_eq!(parse_percent("1"), Some(MIN_ZOOM), "clamped up");
+        assert_eq!(parse_percent("99999"), Some(MAX_ZOOM), "clamped down");
+        assert_eq!(parse_percent("abc"), None);
+        assert_eq!(parse_percent("-20"), None);
+        assert_eq!(parse_percent(""), None);
     }
 
     #[test]

@@ -43,6 +43,15 @@ impl Snapper {
         self.hint = None;
     }
 
+    /// Starts a drag of the artboard with bounds `artboard` and the
+    /// objects `exclude` on it: none of them are targets (spec 08b).
+    pub fn begin_artboard(&mut self, s: &Session, artboard: Rect, exclude: &[NodeId]) {
+        let mut t = SnapTargets::collect(&s.doc, &s.fonts, exclude);
+        t.without_artboard(artboard);
+        self.frozen = Some(t);
+        self.hint = None;
+    }
+
     /// Ends the drag: targets and hint go.
     pub fn end(&mut self) {
         self.frozen = None;

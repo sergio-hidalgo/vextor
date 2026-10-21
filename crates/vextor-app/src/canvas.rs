@@ -35,6 +35,8 @@ mod selection;
 mod shapes;
 mod snap;
 mod text;
+mod zoom_bar;
+mod zoom_tool;
 
 /// Side of a drawn transform-box handle, in points.
 const HANDLE_SIZE: f32 = 7.0;
@@ -61,6 +63,12 @@ pub struct Canvas {
     text: TextTool,
     /// An artboard label being renamed (spec 05e).
     rename: Option<artboard_label::Rename>,
+    /// An artboard label being dragged (spec 08b).
+    artboard_drag: Option<crate::artboard::ArtboardDrag>,
+    /// The zoom tool's press in progress (spec 08b).
+    zoom_drag: Option<zoom_tool::ZoomDrag>,
+    /// The zoom bar's typed percentage, while its menu is open (spec 08b).
+    zoom_text: Option<String>,
     /// The document drawn last frame (spec 05f).
     document: Option<DocId>,
     /// Shape tools, corner widgets and the size dialog (spec 06).
@@ -86,6 +94,24 @@ impl Canvas {
     /// Zooms to 100 % about the canvas centre (`⌘1`).
     pub fn actual_size(&self, session: &mut Session) {
         session.editor.view = view::actual_size(session.editor.view, self.size);
+    }
+
+    /// Zooms one stop in (`inward`, `⌘+`) or out (`⌘-`) about the
+    /// selection's centre, or the canvas centre with nothing selected.
+    pub fn zoom_step(&self, session: &mut Session, inward: bool) {
+        let v = session.editor.view;
+        let at = vextor_geom::union_bounds(&session.doc, &session.fonts, &session.selected())
+            .map_or_else(
+                || view::centre(self.size),
+                |b| view::doc_to_screen(v, Point::new(b.center().x, b.center().y)),
+            );
+        session.editor.view = view::step(v, at, inward);
+    }
+
+    /// Sets the zoom to `zoom` about the canvas centre (the zoom bar).
+    pub fn zoom_to(&self, session: &mut Session, zoom: f64) {
+        let v = session.editor.view;
+        session.editor.view = view::zoom_to(v, view::centre(self.size), zoom);
     }
 
     /// Starts afresh for document `doc` when it is not the one drawn last:
@@ -124,7 +150,9 @@ impl Canvas {
         let key_message = self
             .text_keys(ui, session)
             .or_else(|| self.shape_keys(ui, session));
-        let message = if self.label_input(ui, &response, rect, session) {
+        let (used, label_message) = self.label_input(ui, &response, rect, session);
+        let key_message = label_message.or(key_message);
+        let message = if used || self.zoom_input(ui, &response, rect, session) {
             key_message
         } else {
             self.tool_input(ui, &response, rect, session)
@@ -154,11 +182,15 @@ impl Canvas {
             self.draw_pen(ui, &painter, rect.min, session, hover);
         } else if session.editor.tool == vextor_core::ToolId::Node {
             self.draw_nodes(&painter, rect.min, session, hover);
+        } else if session.editor.tool == vextor_core::ToolId::Zoom {
+            self.draw_box(&painter, rect.min, session, &session.selected());
+            self.draw_zoom_rect(&painter);
         } else {
             self.draw_selection(ui, &painter, &response, rect, session);
         }
         self.draw_snap_hint(&painter, rect.min, session, ui.visuals().extreme_bg_color);
-        self.draw_status(ui, &painter, rect, current);
+        self.draw_status(ui, &painter, rect);
+        self.zoom_bar(ui, rect, session);
         self.rename_ui(ui, rect, session);
         self.last_view = Some(current);
         let dialog_message = self.size_dialog_ui(ui.ctx(), rect, session);
@@ -170,14 +202,16 @@ impl Canvas {
         message.or(dialog_message).or(menu_message)
     }
 
-    fn draw_status(&self, ui: &egui::Ui, painter: &Painter, rect: egui::Rect, current: View) {
-        let mut text = format!("{:.0} %", current.zoom * 100.0);
+    /// The debug stats (frame and render times) and a render error. The
+    /// zoom shows in the zoom bar (spec 08b).
+    fn draw_status(&self, ui: &egui::Ui, painter: &Painter, rect: egui::Rect) {
+        let mut text = String::new();
         if self.show_stats {
             let dt = ui.input(|i| i.unstable_dt) * 1000.0;
             let render = self
                 .last_render_ms
                 .map_or_else(|| "–".to_owned(), |ms| format!("{ms:.1} ms"));
-            let _ = write!(text, "   frame {dt:.1} ms   last render {render}");
+            let _ = write!(text, "frame {dt:.1} ms   last render {render}");
         }
         let color = ui.visuals().weak_text_color();
         let font = egui::FontId::proportional(12.0);
