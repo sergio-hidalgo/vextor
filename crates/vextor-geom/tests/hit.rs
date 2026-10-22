@@ -12,7 +12,9 @@ use vextor_core::{
     Command, Container, FillRule, Geometry, NodeKind, Path, PathNode, Shape, Style, SubPath,
     Transform,
 };
-use vextor_geom::{Fonts, bounds, from_affine, pick, selectable, touching, union_bounds};
+use vextor_geom::{
+    Fonts, bounds, from_affine, overlaps, pick, selectable, touching, union_bounds, visual_bounds,
+};
 
 fn rect_close(a: Rect, b: Rect) -> bool {
     [a.x0 - b.x0, a.y0 - b.y0, a.x1 - b.x1, a.y1 - b.y1]
@@ -269,4 +271,51 @@ fn union_bounds_covers_every_object() {
     add(&mut d, layer, vec![rect(a, 0.0, 0.0, 10.0, 10.0), moved]);
     let u = union_bounds(&d, &Fonts::default(), &[a, b]).expect("visible");
     assert!(rect_close(u, Rect::new(0.0, -5.0, 60.0, 10.0)));
+}
+
+#[test]
+fn overlaps_case_table() {
+    let a = Rect::new(0.0, 0.0, 10.0, 10.0);
+    let cases = [
+        ("apart", Rect::new(20.0, 0.0, 30.0, 10.0), false),
+        ("apart vertically", Rect::new(0.0, 11.0, 10.0, 20.0), false),
+        ("crossing", Rect::new(5.0, 5.0, 15.0, 15.0), true),
+        ("touching an edge", Rect::new(10.0, 0.0, 20.0, 10.0), true),
+        ("touching a corner", Rect::new(10.0, 10.0, 20.0, 20.0), true),
+        ("nested", Rect::new(2.0, 2.0, 4.0, 4.0), true),
+        ("identical", a, true),
+    ];
+    for (name, b, expected) in cases {
+        assert_eq!(overlaps(a, b), expected, "{name}");
+        assert_eq!(overlaps(b, a), expected, "{name}, swapped");
+    }
+}
+
+#[test]
+fn visual_bounds_include_half_the_stroke() {
+    let (mut d, layer) = doc();
+    let (plain, stroked, g, inner) = (id(&mut d), id(&mut d), id(&mut d), id(&mut d));
+    add(&mut d, layer, vec![rect(plain, 0.0, 0.0, 10.0, 10.0)]);
+    add(
+        &mut d,
+        layer,
+        vec![outlined(rect(stroked, 0.0, 0.0, 10.0, 10.0), 4.0)],
+    );
+    add(
+        &mut d,
+        layer,
+        vec![
+            group(g, vec![inner], Transform::scale(2.0, 2.0)),
+            outlined(rect(inner, 0.0, 0.0, 10.0, 10.0), 4.0),
+        ],
+    );
+    let fonts = Fonts::default();
+    let v = |id| visual_bounds(&d, &fonts, id).expect("visible");
+    assert!(rect_close(v(plain), Rect::new(0.0, 0.0, 10.0, 10.0)));
+    assert!(rect_close(v(stroked), Rect::new(-2.0, -2.0, 12.0, 12.0)));
+    // The group scales the stroke with it: 4 px wide becomes 8.
+    assert!(rect_close(v(g), Rect::new(-4.0, -4.0, 24.0, 24.0)));
+    // Plain bounds keep leaving strokes out.
+    let b = bounds(&d, &fonts, stroked).expect("visible");
+    assert!(rect_close(b, Rect::new(0.0, 0.0, 10.0, 10.0)));
 }

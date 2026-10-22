@@ -140,7 +140,23 @@ pub fn selectable(doc: &Document) -> Vec<NodeId> {
 #[must_use]
 pub fn bounds(doc: &Document, fonts: &Fonts, id: NodeId) -> Option<Rect> {
     let parent = to_affine(doc.parent_transform(id));
-    subtree_bounds(doc, fonts, id, parent, 0)
+    subtree_bounds(doc, fonts, id, parent, Extent::Geometry, 0)
+}
+
+/// [`bounds`] grown by half of each stroke's width (scaled into document
+/// space): roughly the area the object paints. Miter tips and square caps
+/// may reach a little further.
+#[must_use]
+pub fn visual_bounds(doc: &Document, fonts: &Fonts, id: NodeId) -> Option<Rect> {
+    let parent = to_affine(doc.parent_transform(id));
+    subtree_bounds(doc, fonts, id, parent, Extent::Visual, 0)
+}
+
+/// Whether two boxes share any area or edge (spec 08c: the objects one
+/// arrange step passes over).
+#[must_use]
+pub fn overlaps(a: Rect, b: Rect) -> bool {
+    a.x0 <= b.x1 && b.x0 <= a.x1 && a.y0 <= b.y1 && b.y0 <= a.y1
 }
 
 /// The union of [`bounds`] of `ids`.
@@ -151,11 +167,19 @@ pub fn union_bounds(doc: &Document, fonts: &Fonts, ids: &[NodeId]) -> Option<Rec
         .reduce(|a, b| a.union(b))
 }
 
+/// What [`subtree_bounds`] measures: the geometry, or with strokes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Extent {
+    Geometry,
+    Visual,
+}
+
 fn subtree_bounds(
     doc: &Document,
     fonts: &Fonts,
     id: NodeId,
     parent: Affine,
+    extent: Extent,
     depth: usize,
 ) -> Option<Rect> {
     let node = doc.nodes.get(&id)?;
@@ -163,24 +187,37 @@ fn subtree_bounds(
         return None;
     }
     let world = parent * to_affine(node.transform);
+    let stroked = |r: Rect, stroke: Option<&vextor_core::Stroke>| match stroke {
+        Some(s) if extent == Extent::Visual && s.width.is_finite() => {
+            let half = s.width / 2.0 * world.determinant().abs().sqrt();
+            r.inflate(half, half)
+        }
+        _ => r,
+    };
     match &node.kind {
-        NodeKind::Shape(s) => Some((world * to_bezpath(&s.geometry)).bounding_box()),
+        NodeKind::Shape(s) => Some(stroked(
+            (world * to_bezpath(&s.geometry)).bounding_box(),
+            s.style.stroke.as_ref(),
+        )),
         NodeKind::Image(img) => Some((world * image_outline(img.rect)).bounding_box()),
         NodeKind::Text(t) => {
             let b = text_box(t, &fonts.layout(id, t));
-            Some((world * b.to_path(0.0)).bounding_box())
+            Some(stroked(
+                (world * b.to_path(0.0)).bounding_box(),
+                t.style.stroke.as_ref(),
+            ))
         }
         NodeKind::Layer(c) | NodeKind::Group(c) => {
             let inner = c
                 .children
                 .iter()
                 .filter(|&&child| Some(child) != c.clip)
-                .filter_map(|&child| subtree_bounds(doc, fonts, child, world, depth + 1))
+                .filter_map(|&child| subtree_bounds(doc, fonts, child, world, extent, depth + 1))
                 .reduce(|a, b| a.union(b))?;
-            match c
-                .clip
-                .and_then(|clip| subtree_bounds(doc, fonts, clip, world, depth + 1))
-            {
+            // A clip cuts strokes too: its own are left out.
+            match c.clip.and_then(|clip| {
+                subtree_bounds(doc, fonts, clip, world, Extent::Geometry, depth + 1)
+            }) {
                 Some(clip) => {
                     let r = inner.intersect(clip);
                     (r.width() >= 0.0 && r.height() >= 0.0).then_some(r)

@@ -23,6 +23,7 @@ use crate::view;
 use self::document::Shown;
 
 mod artboard_label;
+mod context_menu;
 mod document;
 mod drag_layers;
 mod grid;
@@ -81,6 +82,8 @@ pub struct Canvas {
     snap: crate::snapping::Snapper,
     /// View ▸ Smart Guides turned off (spec 08; not saved).
     pub hide_smart_guides: bool,
+    /// The last right-click landed on an object (spec 08c).
+    menu_on_object: bool,
 }
 
 impl Canvas {
@@ -197,7 +200,7 @@ impl Canvas {
         let menu_message = if self.is_editing_text() {
             None
         } else {
-            nodes::path_context_menu(&response, session)
+            self.context_menu(&response, rect, session)
         };
         message.or(dialog_message).or(menu_message)
     }

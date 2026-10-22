@@ -29,6 +29,41 @@ pub struct Can {
     pub outline: bool,
     /// A parametric shape is selected (Convert to Path).
     pub convert: bool,
+    /// Something selected can go up (Bring Forward / to Front, spec 08c).
+    pub forward: bool,
+    /// Something selected can go down (Send Backward / to Back).
+    pub backward: bool,
+}
+
+/// The four arrange commands in menu order: command, name, keys (spec
+/// 08c). The Object menu, the Inspector and the canvas context menu all
+/// list these.
+pub const ARRANGE: [(Arrange, &str, &str); 4] = [
+    (Arrange::Front, "Bring to Front", "⇧⌘↑"),
+    (Arrange::Forward, "Bring Forward", "⌘↑"),
+    (Arrange::Backward, "Send Backward", "⌘↓"),
+    (Arrange::Back, "Send to Back", "⇧⌘↓"),
+];
+
+impl Can {
+    /// Whether `how` would move something.
+    #[must_use]
+    pub fn arrange(self, how: Arrange) -> bool {
+        match how {
+            Arrange::Front | Arrange::Forward => self.forward,
+            Arrange::Backward | Arrange::Back => self.backward,
+        }
+    }
+
+    /// Why `how` is disabled, for its tooltip.
+    #[must_use]
+    pub fn arrange_why(self, how: Arrange) -> &'static str {
+        match how {
+            _ if !self.edit => "Select an object first",
+            Arrange::Front | Arrange::Forward => "Already at the front",
+            Arrange::Backward | Arrange::Back => "Already at the back",
+        }
+    }
 }
 
 /// Which selection operations are possible.
@@ -48,6 +83,8 @@ pub fn can(s: &Session) -> Can {
         },
         outline: !crate::outline_text::selected_texts(s).is_empty(),
         convert: !crate::convert_path::convertible(s).is_empty(),
+        forward: s.doc.can_arrange(&sel, Arrange::Forward),
+        backward: s.doc.can_arrange(&sel, Arrange::Backward),
     }
 }
 
@@ -209,12 +246,19 @@ pub fn ungroup(s: &mut Session) -> Result<(), String> {
     Ok(())
 }
 
-/// Restacks the selection.
+/// Restacks the selection. Forward and Backward pass over the siblings
+/// whose painted area (strokes included) does not overlap (spec 08c).
 ///
 /// # Errors
 /// A message for the user when the move is refused.
 pub fn arrange(s: &mut Session, how: Arrange) -> Result<(), String> {
-    match s.doc.arrange(&s.selected(), how) {
+    let overlap = |a, b| {
+        let bounds = |id| vextor_geom::visual_bounds(&s.doc, &s.fonts, id);
+        bounds(a)
+            .zip(bounds(b))
+            .is_some_and(|(a, b)| vextor_geom::overlaps(a, b))
+    };
+    match s.doc.arrange(&s.selected(), how, overlap) {
         Some(cmd) => apply(s, cmd),
         None => Ok(()),
     }
@@ -421,6 +465,37 @@ mod tests {
             vec![ids[1], ids[2], ids[0]]
         );
         undoes(&mut s, &before);
+    }
+
+    #[test]
+    fn arrange_passes_objects_that_do_not_overlap() {
+        // Rects at x 0, 20, 40; the last one moves onto the first.
+        let (mut s, ids) = session(3);
+        nudge_one(&mut s, ids[2], -35.0, 0.0);
+        s.select(vec![ids[0]]);
+        assert!(can(&s).forward && !can(&s).backward);
+        let before = s.doc.clone();
+        arrange(&mut s, Arrange::Forward).expect("moves");
+        let layer = s.doc.layers[0];
+        assert_eq!(
+            s.doc.nodes[&layer].container().expect("layer").children,
+            vec![ids[1], ids[2], ids[0]]
+        );
+        assert!(!can(&s).forward && can(&s).backward);
+        undoes(&mut s, &before);
+    }
+
+    #[test]
+    fn arrange_is_disabled_with_the_reason() {
+        let (mut s, ids) = session(2);
+        let c = can(&s);
+        assert!(!c.arrange(Arrange::Front) && !c.arrange(Arrange::Back));
+        assert_eq!(c.arrange_why(Arrange::Front), "Select an object first");
+        s.select(vec![ids[1]]);
+        let c = can(&s);
+        assert!(!c.arrange(Arrange::Forward) && c.arrange(Arrange::Back));
+        assert_eq!(c.arrange_why(Arrange::Forward), "Already at the front");
+        assert_eq!(c.arrange_why(Arrange::Back), "Already at the back");
     }
 
     #[test]

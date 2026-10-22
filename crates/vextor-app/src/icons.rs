@@ -6,6 +6,7 @@ use eframe::egui::{self, Color32, Painter, Pos2, Rect, Response, Sense, Stroke, 
 
 use crate::theme;
 
+mod arrange;
 mod path;
 mod tools;
 
@@ -79,6 +80,11 @@ pub enum Icon {
     MoveUp,
     MoveDown,
     Delete,
+    /// Arrange (spec 08c): stacked squares with an arrow up or down.
+    ArrangeFront,
+    ArrangeForward,
+    ArrangeBackward,
+    ArrangeBack,
 }
 
 /// A button showing `icon`, highlighted when `selected`, explained by
@@ -240,6 +246,9 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
         | Icon::ToolStar
         | Icon::ToolLine
         | Icon::ToolZoom => pen.tool_icon(icon),
+        Icon::ArrangeFront | Icon::ArrangeForward | Icon::ArrangeBackward | Icon::ArrangeBack => {
+            pen.arrange_icon(icon);
+        }
         _ => pen.path_icon(icon),
     }
 }

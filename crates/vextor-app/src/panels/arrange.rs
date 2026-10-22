@@ -1,11 +1,13 @@
-//! Inspector ▸ Align and ▸ Group (spec 05d): the Object menu's align,
-//! distribute, group and ungroup as icon buttons. They hand back a
-//! [`PanelAction`] that the app runs exactly like the menu item.
+//! Inspector ▸ Align, ▸ Arrange (spec 08c) and ▸ Group (spec 05d): the
+//! Object menu's align, distribute, arrange, group and ungroup as icon
+//! buttons. They hand back a [`PanelAction`] that the app runs exactly
+//! like the menu item.
 
 use eframe::egui;
+use vextor_core::Arrange;
 use vextor_geom::Align;
 
-use crate::edit_ops::Can;
+use crate::edit_ops::{self, Can};
 use crate::icons::{self, Icon};
 
 /// What a button in these sections asks the app to do.
@@ -15,6 +17,7 @@ pub enum PanelAction {
     Distribute {
         horizontal: bool,
     },
+    Arrange(Arrange),
     Group,
     Ungroup,
     /// Artboards ▸ Add (spec 08): opens the size picker.
@@ -100,6 +103,29 @@ fn align_buttons(
     });
 }
 
+/// Arrange: Bring to Front, Bring Forward, Send Backward, Send to Back,
+/// disabled with the reason.
+pub fn arrange_section(ui: &mut egui::Ui, can: Can, out: &mut Vec<PanelAction>) {
+    super::section(ui, "Arrange", |ui| {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            for (how, text, keys) in edit_ops::ARRANGE {
+                let icon = match how {
+                    Arrange::Front => Icon::ArrangeFront,
+                    Arrange::Forward => Icon::ArrangeForward,
+                    Arrange::Backward => Icon::ArrangeBackward,
+                    Arrange::Back => Icon::ArrangeBack,
+                };
+                let tip = format!("{text} ({keys})");
+                let why = can.arrange_why(how);
+                if icons::button(ui, icon, false, can.arrange(how), &tip, why).clicked() {
+                    out.push(PanelAction::Arrange(how));
+                }
+            }
+        });
+    });
+}
+
 /// Group: Group and Ungroup buttons, disabled with the reason.
 pub fn group_section(ui: &mut egui::Ui, can: Can, out: &mut Vec<PanelAction>) {
     super::section(ui, "Group", |ui| group_buttons(ui, can, out));
@@ -174,6 +200,7 @@ mod tests {
             };
             ctx.run_ui(input, |ui| {
                 align_section(ui, can, Targets::Objects, &mut to_artboard, &mut out);
+                arrange_section(ui, can, &mut out);
                 group_section(ui, can, &mut out);
             })
             .textures_delta
@@ -190,6 +217,8 @@ mod tests {
         distribute: true,
         outline: false,
         convert: false,
+        forward: true,
+        backward: true,
     };
 
     #[test]
@@ -206,9 +235,22 @@ mod tests {
             group: false,
             ungroup: false,
             distribute: false,
+            forward: false,
+            backward: false,
             ..ALL
         };
         let (out, _) = click_at(none, egui::pos2(20.0, 40.0));
         assert_eq!(out, []);
+        let (out, _) = click_at(none, ARRANGE_FRONT);
+        assert_eq!(out, []);
+    }
+
+    /// The first Arrange button, below the Align section.
+    const ARRANGE_FRONT: egui::Pos2 = egui::pos2(20.0, 148.0);
+
+    #[test]
+    fn arrange_buttons_hand_back_their_menu_action() {
+        let (out, _) = click_at(ALL, ARRANGE_FRONT);
+        assert_eq!(out, [PanelAction::Arrange(Arrange::Front)]);
     }
 }

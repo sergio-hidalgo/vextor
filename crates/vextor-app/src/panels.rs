@@ -167,6 +167,7 @@ fn inspector_sections(
             to_artboard,
             &mut actions,
         );
+        arrange::arrange_section(ui, can, &mut actions);
         arrange::group_section(ui, can, &mut actions);
         message
     } else {

@@ -148,7 +148,7 @@ impl VextorApp {
         ui.menu_button("Path", |ui| path_menu(ui, session, actions));
         ui.separator();
         ui.add_enabled_ui(can.edit, |ui| {
-            ui.menu_button("Arrange", |ui| arrange_menu(ui, actions));
+            ui.menu_button("Arrange", |ui| arrange_menu(ui, can, actions));
             ui.menu_button("Align", |ui| {
                 align_menu(ui, &mut self.align_to_artboard, actions);
             });
@@ -268,16 +268,16 @@ impl VextorApp {
     }
 }
 
-/// Object ▸ Arrange.
-fn arrange_menu(ui: &mut egui::Ui, actions: &mut Vec<Action>) {
-    let items = [
-        ("Bring to Front", FRONT, Arrange::Front),
-        ("Bring Forward", FORWARD, Arrange::Forward),
-        ("Send Backward", BACKWARD, Arrange::Backward),
-        ("Send to Back", BACK, Arrange::Back),
-    ];
-    for (text, shortcut, how) in items {
-        if why_item(ui, true, text, shortcut, "") {
+/// Object ▸ Arrange, each item disabled with the reason (spec 08c).
+fn arrange_menu(ui: &mut egui::Ui, can: edit_ops::Can, actions: &mut Vec<Action>) {
+    for (how, text, _) in edit_ops::ARRANGE {
+        let shortcut = match how {
+            Arrange::Front => FRONT,
+            Arrange::Forward => FORWARD,
+            Arrange::Backward => BACKWARD,
+            Arrange::Back => BACK,
+        };
+        if why_item(ui, can.arrange(how), text, shortcut, can.arrange_why(how)) {
             actions.push(Action::Arrange(how));
         }
     }
