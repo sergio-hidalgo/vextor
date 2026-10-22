@@ -273,36 +273,43 @@ fn number(
 
 /// A hex field with a swatch (spec 09's paint picker replaces it).
 pub(super) fn color_field(ui: &mut egui::Ui, id: &str, current: Option<Rgba>) -> Option<Rgba> {
-    let mut picked = None;
+    let color = current.unwrap_or(Rgba::BLACK);
     ui.horizontal(|ui| {
-        let color = current.unwrap_or(Rgba::BLACK);
-        let mut swatch = egui::Color32::from_rgba_unmultiplied(color.r, color.g, color.b, color.a);
-        if ui.color_edit_button_srgba(&mut swatch).changed() {
-            let [red, green, blue, alpha] = swatch.to_srgba_unmultiplied();
-            picked = Some(Rgba {
-                r: red,
-                g: green,
-                b: blue,
-                a: alpha,
-            });
-        }
-        let key = egui::Id::unique(id);
-        let mut text = ui
-            .data(|d| d.get_temp::<String>(key))
-            .unwrap_or_else(|| color.to_hex());
-        let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(72.0));
-        if r.changed() {
-            ui.data_mut(|d| d.insert_temp(key, text.clone()));
-        }
-        if r.lost_focus() {
-            if let Ok(parsed) = Rgba::from_hex(text.trim()) {
-                picked = Some(parsed);
-            }
-            ui.data_mut(|d| d.remove::<String>(key));
-        } else if !r.has_focus() {
-            ui.data_mut(|d| d.remove::<String>(key));
-        }
-    });
+        let tile = color_tile(ui, color);
+        hex_field(ui, id, color, 72.0).or(tile)
+    })
+    .inner
+}
+
+/// A colour tile that opens the colour picker, as wide as the layout's
+/// interact size; the colour picked, if any.
+pub(super) fn color_tile(ui: &mut egui::Ui, color: Rgba) -> Option<Rgba> {
+    let mut swatch = egui::Color32::from_rgba_unmultiplied(color.r, color.g, color.b, color.a);
+    if !ui.color_edit_button_srgba(&mut swatch).changed() {
+        return None;
+    }
+    let [r, g, b, a] = swatch.to_srgba_unmultiplied();
+    Some(Rgba { r, g, b, a })
+}
+
+/// A hex field `width` wide, committed when it loses focus; invalid text
+/// is dropped.
+pub(super) fn hex_field(ui: &mut egui::Ui, id: &str, color: Rgba, width: f32) -> Option<Rgba> {
+    let key = egui::Id::unique(id);
+    let mut text = ui
+        .data(|d| d.get_temp::<String>(key))
+        .unwrap_or_else(|| color.to_hex());
+    let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(width));
+    if r.changed() {
+        ui.data_mut(|d| d.insert_temp(key, text.clone()));
+    }
+    let mut picked = None;
+    if r.lost_focus() {
+        picked = Rgba::from_hex(text.trim()).ok();
+        ui.data_mut(|d| d.remove::<String>(key));
+    } else if !r.has_focus() {
+        ui.data_mut(|d| d.remove::<String>(key));
+    }
     picked
 }
 
