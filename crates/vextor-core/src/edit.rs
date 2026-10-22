@@ -16,9 +16,11 @@ use crate::style::Paint;
 /// A change of stacking order among siblings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Arrange {
-    /// One step up, over the next unselected sibling.
+    /// Up over the nearest unselected sibling above that overlaps, else
+    /// one step (spec 08c).
     Forward,
-    /// One step down, under the previous unselected sibling.
+    /// Down under the nearest unselected sibling below that overlaps, else
+    /// one step.
     Backward,
     /// Above all siblings.
     Front,
@@ -183,9 +185,16 @@ impl Document {
 
     /// The command that restacks `ids` among their siblings, or `None` when
     /// nothing would move. Siblings are handled per parent; layers and
-    /// clipping shapes keep their place.
+    /// clipping shapes keep their place. `overlap(a, b)` says whether two
+    /// siblings cover each other on screen: Forward and Backward pass over
+    /// the ones that don't (the geometry lives in `vextor-geom`).
     #[must_use]
-    pub fn arrange(&self, ids: &[NodeId], how: Arrange) -> Option<Command> {
+    pub fn arrange(
+        &self,
+        ids: &[NodeId],
+        how: Arrange,
+        overlap: impl Fn(NodeId, NodeId) -> bool,
+    ) -> Option<Command> {
         let mut by_parent: BTreeMap<NodeId, BTreeSet<NodeId>> = BTreeMap::new();
         for &id in ids {
             if let Some(Parent::Node(p)) = self.parent_of(id) {
@@ -203,17 +212,43 @@ impl Document {
                 Arrange::Front => order.sort_by_key(|id| moving(id)),
                 Arrange::Back => order.sort_by_key(|id| !moving(id)),
                 Arrange::Forward => {
-                    for i in (0..order.len().saturating_sub(1)).rev() {
-                        if moving(&order[i]) && !moving(&order[i + 1]) {
-                            order.swap(i, i + 1);
+                    // Top-down, so a moved object is the limit of the one
+                    // below it and the selection keeps its relative order.
+                    for i in (0..order.len()).rev() {
+                        if !moving(&order[i]) {
+                            continue;
                         }
+                        let limit = (i + 1..order.len())
+                            .find(|&j| moving(&order[j]))
+                            .unwrap_or(order.len());
+                        if i + 1 == limit {
+                            continue;
+                        }
+                        let to = (i + 1..limit)
+                            .find(|&j| overlap(order[i], order[j]))
+                            .unwrap_or(i + 1);
+                        let id = order.remove(i);
+                        order.insert(to, id);
                     }
                 }
                 Arrange::Backward => {
-                    for i in 1..order.len() {
-                        if moving(&order[i]) && !moving(&order[i - 1]) {
-                            order.swap(i, i - 1);
+                    for i in 0..order.len() {
+                        if !moving(&order[i]) {
+                            continue;
                         }
+                        let limit = (0..i)
+                            .rev()
+                            .find(|&j| moving(&order[j]))
+                            .map_or(0, |j| j + 1);
+                        if limit == i {
+                            continue;
+                        }
+                        let to = (limit..i)
+                            .rev()
+                            .find(|&j| overlap(order[i], order[j]))
+                            .unwrap_or(i - 1);
+                        let id = order.remove(i);
+                        order.insert(to, id);
                     }
                 }
             }
@@ -237,6 +272,14 @@ impl Document {
             Arrange::Back => "Send to back",
         };
         Some(Command::Batch { label, commands })
+    }
+
+    /// Whether [`Document::arrange`] would move anything: some selected
+    /// object has an unselected sibling above it (Forward, Front) or below
+    /// it (Backward, Back). Needs no geometry.
+    #[must_use]
+    pub fn can_arrange(&self, ids: &[NodeId], how: Arrange) -> bool {
+        self.arrange(ids, how, |_, _| false).is_some()
     }
 }
 

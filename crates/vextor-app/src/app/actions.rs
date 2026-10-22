@@ -83,6 +83,7 @@ impl From<panels::PanelAction> for Action {
         match a {
             panels::PanelAction::Align(how) => Self::Align(how),
             panels::PanelAction::Distribute { horizontal } => Self::Distribute { horizontal },
+            panels::PanelAction::Arrange(how) => Self::Arrange(how),
             panels::PanelAction::Group => Self::Group,
             panels::PanelAction::Ungroup => Self::Ungroup,
             panels::PanelAction::AddArtboard => Self::AddArtboard,

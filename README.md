@@ -118,8 +118,9 @@ and Line (`L`), then Zoom (`Z`).
 | Cut / copy / paste / paste in place | `⌘X` / `⌘C` / `⌘V` (+10 px) / `⇧⌘V`                     |
 | Duplicate / delete                  | `⌘D` (+10 px) / `⌫`                                    |
 | Group / ungroup                     | `⌘G` / `⇧⌘G`                                           |
-| Bring forward / to front            | `⌘↑` / `⇧⌘↑`                                           |
-| Send backward / to back             | `⌘↓` / `⇧⌘↓`                                           |
+| Bring forward / to front            | `⌘↑` / `⇧⌘↑`; Forward goes just above the next object it overlaps (strokes count), skipping ones elsewhere, or one place when nothing overlaps |
+| Send backward / to back             | `⌘↓` / `⇧⌘↓`; Backward goes just below the next object it overlaps, the same way |
+| Arrange (buttons, menu)             | Inspector ▸ Arrange icon buttons, Object ▸ Arrange, or right-click an object (it gets selected first); disabled when already at the front / back |
 | Align, distribute                   | Inspector ▸ Align icon buttons, or the Object menu (the board icon toggles Align to Artboard) |
 | Group / ungroup (buttons)           | Inspector ▸ Group, or `⌘G` / `⇧⌘G`                     |
 | Flip                                | Object menu                                            |

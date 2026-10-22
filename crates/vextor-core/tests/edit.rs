@@ -240,7 +240,10 @@ fn arrange_moves_within_siblings() {
         ),
     ];
     for (how, ids, expected) in cases {
-        let cmd = fx.doc.arrange(&ids, how).expect("something moves");
+        let cmd = fx
+            .doc
+            .arrange(&ids, how, |_, _| false)
+            .expect("something moves");
         check(&fx.doc, cmd, |d| {
             *children_mut(d, fx.layer) = expected.clone();
         });
@@ -250,10 +253,135 @@ fn arrange_moves_within_siblings() {
 #[test]
 fn arrange_at_the_edge_does_nothing() {
     let fx = fixture();
-    assert_eq!(fx.doc.arrange(&[fx.star], Arrange::Front), None);
-    assert_eq!(fx.doc.arrange(&[fx.group], Arrange::Backward), None);
+    assert_eq!(
+        fx.doc.arrange(&[fx.star], Arrange::Front, |_, _| true),
+        None
+    );
+    assert_eq!(
+        fx.doc.arrange(&[fx.group], Arrange::Backward, |_, _| true),
+        None
+    );
     // Already on top as a block.
-    assert_eq!(fx.doc.arrange(&[fx.path, fx.star], Arrange::Forward), None);
+    assert_eq!(
+        fx.doc
+            .arrange(&[fx.path, fx.star], Arrange::Forward, |_, _| true),
+        None
+    );
+}
+
+/// Spec 08c: a layer holding A, D, B, C (bottom → top) where A, B and C
+/// pile up and D lies far away; `overlap` says which pairs touch.
+struct Pile {
+    doc: Document,
+    layer: NodeId,
+    a: NodeId,
+    d: NodeId,
+    b: NodeId,
+    c: NodeId,
+}
+
+impl Pile {
+    fn new() -> Self {
+        let mut doc = Document::new("pile");
+        let layer = doc.layers[0];
+        let [a, d, b, c] = [(); 4].map(|()| doc.alloc_node_id());
+        let nodes = vec![
+            shape(a, rect_geom(0.0, 0.0, 10.0, 10.0)),
+            shape(d, rect_geom(500.0, 0.0, 10.0, 10.0)),
+            shape(b, rect_geom(5.0, 5.0, 10.0, 10.0)),
+            shape(c, rect_geom(8.0, 8.0, 10.0, 10.0)),
+        ];
+        doc.apply(Command::Insert {
+            parent: Some(layer),
+            index: 0,
+            nodes,
+        })
+        .expect("pile builds");
+        Self {
+            doc,
+            layer,
+            a,
+            d,
+            b,
+            c,
+        }
+    }
+
+    fn overlap(&self) -> impl Fn(NodeId, NodeId) -> bool + use<> {
+        let d = self.d;
+        move |x, y| x != d && y != d
+    }
+
+    /// Arranges `ids` with the pile's overlaps and checks the new order,
+    /// one undo step that undoes and redoes exactly.
+    fn arranges(&self, ids: &[NodeId], how: Arrange, expected: &[NodeId]) {
+        let cmd = self
+            .doc
+            .arrange(ids, how, self.overlap())
+            .expect("something moves");
+        check(&self.doc, cmd, |d| {
+            *children_mut(d, self.layer) = expected.to_vec();
+        });
+    }
+}
+
+#[test]
+fn forward_and_backward_pass_objects_that_do_not_overlap() {
+    let pile = Pile::new();
+    let (a, d, b, c) = (pile.a, pile.d, pile.b, pile.c);
+    // A skips the far-away D and lands just above B.
+    pile.arranges(&[a], Arrange::Forward, &[d, b, a, c]);
+    // C lands just below B.
+    pile.arranges(&[c], Arrange::Backward, &[a, d, c, b]);
+    // D overlaps nothing: one step, as before.
+    pile.arranges(&[d], Arrange::Forward, &[a, b, d, c]);
+    pile.arranges(&[d], Arrange::Backward, &[d, a, b, c]);
+    // Front and back are unchanged.
+    pile.arranges(&[a], Arrange::Front, &[d, b, c, a]);
+    pile.arranges(&[c], Arrange::Back, &[c, a, d, b]);
+}
+
+#[test]
+fn arranging_two_keeps_their_relative_order() {
+    let pile = Pile::new();
+    let (a, d, b, c) = (pile.a, pile.d, pile.b, pile.c);
+    // B passes C; A passes D and C but stays below B.
+    pile.arranges(&[a, b], Arrange::Forward, &[d, c, a, b]);
+    // A is at the bottom; B overlaps nothing below it but A: one step.
+    pile.arranges(&[b, a], Arrange::Backward, &[a, b, d, c]);
+}
+
+#[test]
+fn clips_and_layers_never_move() {
+    let mut fx = fixture();
+    node_mut(&mut fx.doc, fx.group)
+        .container_mut()
+        .expect("group")
+        .clip = Some(fx.rect);
+    // Group children: [rect (clip), ellipse].
+    assert_eq!(
+        fx.doc.arrange(&[fx.rect], Arrange::Forward, |_, _| true),
+        None
+    );
+    assert_eq!(
+        fx.doc.arrange(&[fx.layer], Arrange::Back, |_, _| true),
+        None
+    );
+    assert!(!fx.doc.can_arrange(&[fx.rect], Arrange::Front));
+    assert!(!fx.doc.can_arrange(&[fx.layer2], Arrange::Back));
+}
+
+#[test]
+fn can_arrange_knows_the_top_and_the_bottom() {
+    let p = Pile::new();
+    let can = |ids: &[NodeId], how| p.doc.can_arrange(ids, how);
+    assert!(can(&[p.a], Arrange::Forward) && can(&[p.a], Arrange::Front));
+    assert!(!can(&[p.a], Arrange::Backward) && !can(&[p.a], Arrange::Back));
+    assert!(!can(&[p.c], Arrange::Forward) && !can(&[p.c], Arrange::Front));
+    assert!(can(&[p.c], Arrange::Backward));
+    // Already on top as a block.
+    assert!(!can(&[p.b, p.c], Arrange::Forward));
+    assert!(!can(&[], Arrange::Forward));
 }
 
 #[test]
@@ -261,7 +389,7 @@ fn arrange_handles_several_parents_in_one_step() {
     let fx = fixture();
     let cmd = fx
         .doc
-        .arrange(&[fx.rect, fx.path], Arrange::Front)
+        .arrange(&[fx.rect, fx.path], Arrange::Front, |_, _| false)
         .expect("moves");
     let mut d = fx.doc.clone();
     let mut h = vextor_core::History::new();

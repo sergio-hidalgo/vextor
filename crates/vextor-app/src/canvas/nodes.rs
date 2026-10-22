@@ -113,30 +113,28 @@ impl Canvas {
     }
 }
 
-/// Right-click on the canvas while a path is selected: the path
-/// commands.
-pub(super) fn path_context_menu(
-    response: &egui::Response,
-    session: &mut Session,
-) -> Option<String> {
-    if path_ops::edited(session).is_none() && path_ops::join_target(session).is_none() {
-        return None;
-    }
+/// Whether the canvas context menu has path commands: a path is
+/// selected, or two open paths to join.
+pub(super) fn has_path_menu(session: &Session) -> bool {
+    path_ops::edited(session).is_some() || path_ops::join_target(session).is_some()
+}
+
+/// The path commands of the canvas context menu, each group followed by
+/// a separator. Returns a message when a command was refused.
+pub(super) fn path_menu_items(ui: &mut egui::Ui, session: &mut Session) -> Option<String> {
     let mut message = None;
-    response.context_menu(|ui| {
-        for group in [&PathAction::STRUCTURE[..], &PathAction::EDIT[..]] {
-            for &a in group {
-                let button = ui
-                    .add_enabled(a.can(session), egui::Button::new(a.title()))
-                    .on_disabled_hover_text(a.why());
-                if button.clicked() {
-                    message = a.run(session).err();
-                    ui.close();
-                }
+    for group in [&PathAction::STRUCTURE[..], &PathAction::EDIT[..]] {
+        for &a in group {
+            let button = ui
+                .add_enabled(a.can(session), egui::Button::new(a.title()))
+                .on_disabled_hover_text(a.why());
+            if button.clicked() {
+                message = a.run(session).err();
+                ui.close();
             }
-            ui.separator();
         }
-    });
+        ui.separator();
+    }
     message
 }
 
