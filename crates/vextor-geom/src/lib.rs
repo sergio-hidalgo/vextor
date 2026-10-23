@@ -4,6 +4,7 @@
 mod convert;
 mod draw;
 mod hit;
+mod paint;
 mod path_edit;
 mod resize;
 mod snap;
@@ -20,6 +21,7 @@ pub use hit::{
     bounds, from_affine, overlaps, pick, selectable, to_affine, touching, union_bounds,
     visual_bounds,
 };
+pub use paint::{PaintPart, gradient_space, paint_box};
 pub use path_edit::{
     NodeCorner, SegmentHit, bend, constrain_angle, constrain_vector, from_point, from_vec,
     handle_or_none, hit_node, hit_segment, is_straight, join_open, node_corner, open_endpoints,

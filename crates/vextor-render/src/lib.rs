@@ -1,8 +1,8 @@
 //! Vextor canvas rasteriser: draws a `vextor-core` document into a pixmap.
 //!
-//! Solid fills and strokes, transforms, group opacity, clips and text
-//! (glyph outlines over an optional frame, laid out by `vextor-geom`) are
-//! drawn. Gradients and patterns (spec 09) and images draw nothing yet.
+//! Fills and strokes (solid, linear and radial gradients, patterns; dashes),
+//! transforms, opacity, clips and text (glyph outlines over an optional
+//! frame, laid out by `vextor-geom`) are drawn. Images draw nothing yet.
 
 mod cache;
 mod error;

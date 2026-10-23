@@ -73,6 +73,8 @@ pub(super) enum Action {
     Tool(ToolId),
     OutlineText,
     ConvertToPath,
+    /// Object ▸ Make Pattern (spec 09).
+    MakePattern,
     /// A path command (spec 07).
     Path(PathAction),
 }
@@ -87,6 +89,7 @@ impl From<panels::PanelAction> for Action {
             panels::PanelAction::Group => Self::Group,
             panels::PanelAction::Ungroup => Self::Ungroup,
             panels::PanelAction::AddArtboard => Self::AddArtboard,
+            panels::PanelAction::Flip { horizontal } => Self::Flip { horizontal },
         }
     }
 }
@@ -198,6 +201,7 @@ impl VextorApp {
                 None => crate::outline_text::convert(s),
             },
             Action::ConvertToPath => crate::convert_path::convert(s),
+            Action::MakePattern => crate::paint_edit::make_pattern(s),
             _ => Ok(()),
         };
         if let Err(e) = result {

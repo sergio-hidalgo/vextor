@@ -26,7 +26,7 @@ fn reference(svg: &str, width: u32, height: u32) -> tiny_skia::Pixmap {
     pixmap
 }
 
-fn ours(width: u32, height: u32) -> Pixmap {
+fn ours(doc: &vextor_core::Document, width: u32, height: u32) -> Pixmap {
     let viewport = Viewport {
         view: View {
             zoom: ZOOM,
@@ -36,7 +36,7 @@ fn ours(width: u32, height: u32) -> Pixmap {
         height,
         pixels_per_point: 1.0,
     };
-    render(&fixtures::basic_shapes(), &Fonts::default(), &viewport).expect("valid viewport")
+    render(doc, &Fonts::default(), &viewport).expect("valid viewport")
 }
 
 /// RGBA of the pixel at `(x, y)`.
@@ -46,8 +46,8 @@ fn pixel(data: &[u8], width: u32, x: u32, y: u32) -> [u8; 4] {
 }
 
 /// Writes both images and a diff (red = differs) next to the test binary.
-fn save_failure(actual: &Pixmap, expected: &tiny_skia::Pixmap, different: &[bool]) {
-    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("basic_shapes");
+fn save_failure(name: &str, actual: &Pixmap, expected: &tiny_skia::Pixmap, different: &[bool]) {
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
     std::fs::create_dir_all(&dir).expect("target tmp dir is writable");
     let size = tiny_skia::IntSize::from_wh(actual.width(), actual.height()).expect("non-empty");
     let actual = tiny_skia::Pixmap::from_vec(actual.data().to_vec(), size).expect("same size");
@@ -63,16 +63,13 @@ fn save_failure(actual: &Pixmap, expected: &tiny_skia::Pixmap, different: &[bool
     eprintln!("render comparison images written to {}", dir.display());
 }
 
-#[test]
-fn basic_shapes_matches_reference() {
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // 400×240
-    let (width, height) = (
-        (fixtures::BASIC_SHAPES_SIZE.0 * ZOOM) as u32,
-        (fixtures::BASIC_SHAPES_SIZE.1 * ZOOM) as u32,
-    );
-    let svg = include_str!("fixtures/basic_shapes.svg");
+/// Renders `doc` (`size` in document px) and its SVG twin `svg` and
+/// checks that they match within the tolerances above.
+fn compare(name: &str, doc: &vextor_core::Document, svg: &str, size: (f64, f64)) {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // small fixtures
+    let (width, height) = ((size.0 * ZOOM) as u32, (size.1 * ZOOM) as u32);
     let expected = reference(svg, width, height);
-    let actual = ours(width, height);
+    let actual = ours(doc, width, height);
 
     let different: Vec<bool> = actual
         .data()
@@ -90,13 +87,34 @@ fn basic_shapes_matches_reference() {
     #[allow(clippy::cast_precision_loss)] // pixel counts are small
     let share = count as f64 / different.len() as f64;
     if share > MAX_DIFFERENT {
-        save_failure(&actual, &expected, &different);
+        save_failure(name, &actual, &expected, &different);
     }
     assert!(
         share <= MAX_DIFFERENT,
-        "{count} of {} pixels differ ({:.3} %)",
+        "{name}: {count} of {} pixels differ ({:.3} %)",
         different.len(),
         share * 100.0
+    );
+}
+
+#[test]
+fn basic_shapes_matches_reference() {
+    compare(
+        "basic_shapes",
+        &fixtures::basic_shapes(),
+        include_str!("fixtures/basic_shapes.svg"),
+        fixtures::BASIC_SHAPES_SIZE,
+    );
+}
+
+#[test]
+fn paints_match_reference() {
+    // Spec 09: gradients, patterns, a gradient stroke, dots, opacity.
+    compare(
+        "paints",
+        &fixtures::paints(),
+        include_str!("fixtures/paints.svg"),
+        fixtures::PAINTS_SIZE,
     );
 }
 
@@ -104,7 +122,7 @@ fn basic_shapes_matches_reference() {
 fn basic_shapes_is_not_blank() {
     // Guards the comparison above against two equally empty images.
     let (width, height) = (400, 240);
-    let actual = ours(width, height);
+    let actual = ours(&fixtures::basic_shapes(), width, height);
     // Centre of the rounded rect (40, 30) at zoom 2: #1e90ff, opaque.
     assert_eq!(
         pixel(actual.data(), width, 80, 60),
@@ -115,4 +133,78 @@ fn basic_shapes_is_not_blank() {
         pixel(actual.data(), width, 396, 4),
         [0xff, 0xff, 0xff, 0xff]
     );
+}
+
+#[test]
+fn paints_are_not_blank() {
+    // Guards the comparison above against two equally empty images.
+    let (width, height) = (400, 320);
+    let actual = ours(&fixtures::paints(), width, height);
+    let at = |x: f64, y: f64| {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // in the image
+        pixel(actual.data(), width, (x * ZOOM) as u32, (y * ZOOM) as u32)
+    };
+    // Top-left of the diagonal gradient: its first stop, red.
+    let [r, g, b, _] = at(11.0, 11.0);
+    assert!(r > 240 && g < 20 && b < 20, "{:?}", [r, g, b]);
+    // The dots pattern's dark square, then its orange circle.
+    assert_eq!(at(72.0, 72.0), [0x22, 0x22, 0x22, 0xff]);
+    let [r, g, b, _] = at(77.5, 77.5);
+    assert!(
+        r > 240 && (0x50..0x70).contains(&g) && b < 0x50,
+        "{:?}",
+        [r, g, b]
+    );
+}
+
+#[test]
+fn a_pattern_painting_itself_on_many_scaled_objects_still_renders() {
+    // A hostile file (spec 09): nesting and the tile budget bound the work.
+    use vextor_core::{
+        Command, Document, Geometry, Node, NodeKind, Paint, Pattern, Rect, Resource, Shape, Style,
+        Transform,
+    };
+    let mut doc = Document::new("hostile");
+    let pid = doc.alloc_resource_id();
+    let cell = doc.alloc_node_id();
+    let square = |paint| {
+        NodeKind::Shape(Shape {
+            geometry: Geometry::Rect {
+                rect: Rect::new(0.0, 0.0, 4.0, 4.0),
+                radius: vextor_core::CornerRadii::default(),
+            },
+            style: Style {
+                fill: paint,
+                stroke: None,
+            },
+        })
+    };
+    doc.apply(Command::PutResource {
+        id: pid,
+        resource: Resource::Pattern(Pattern {
+            name: None,
+            tile: Rect::new(0.0, 0.0, 8.0, 8.0),
+            transform: Transform::IDENTITY,
+            content: vec![cell],
+        }),
+        nodes: vec![Node::new(cell, square(Paint::Pattern(pid)))],
+    })
+    .expect("a pattern may paint with itself");
+    let nodes: Vec<Node> = (0..2_000)
+        .map(|i| {
+            let mut n = Node::new(doc.alloc_node_id(), square(Paint::Pattern(pid)));
+            let k = 1.0 + f64::from(i) / 100.0;
+            n.transform = Transform::scale(k, k);
+            n
+        })
+        .collect();
+    doc.apply(Command::Insert {
+        parent: Some(doc.layers[0]),
+        index: 0,
+        nodes,
+    })
+    .expect("nodes");
+    // Terminates: nesting stops at 4 tiles deep, and at most 256 tiles
+    // are drawn whatever the number of scales.
+    let _ = ours(&doc, 400, 400);
 }

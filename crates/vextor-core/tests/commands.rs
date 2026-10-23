@@ -922,6 +922,46 @@ fn remove_resource_rejects_a_resource_in_use() {
     );
 }
 
+#[test]
+fn editing_a_gradient_and_repainting_undo_restores_paints_and_resources() {
+    // Spec 09: one step that edits a shared gradient and paints the
+    // ellipse with it; undo puts back both the paint and the resource.
+    let fx = fixture();
+    let vextor_core::Resource::Gradient(mut g) = common::gradient() else {
+        unreachable!("fixture gradient")
+    };
+    g.spread = vextor_core::Spread::Reflect;
+    g.stops[1].color = Rgba::rgb(0, 128, 0);
+    let style = Style {
+        fill: Paint::Gradient(fx.gradient),
+        stroke: Some(vextor_core::Stroke {
+            paint: Paint::Pattern(fx.pattern),
+            ..vextor_core::Stroke::default()
+        }),
+    };
+    let cmd = Command::Batch {
+        label: "Change fill",
+        commands: vec![
+            Command::PutResource {
+                id: fx.gradient,
+                resource: vextor_core::Resource::Gradient(g.clone()),
+                nodes: vec![],
+            },
+            Command::SetStyle {
+                ids: vec![fx.ellipse],
+                style: style.clone(),
+            },
+        ],
+    };
+    check(&fx.doc, cmd, |d| {
+        d.resources
+            .insert(fx.gradient, vextor_core::Resource::Gradient(g));
+        if let NodeKind::Shape(s) = &mut node_mut(d, fx.ellipse).kind {
+            s.style = style;
+        }
+    });
+}
+
 // ----- document -----
 
 #[test]

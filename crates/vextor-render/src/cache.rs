@@ -1,7 +1,7 @@
 //! The last rendered frame, kept until the document or the view changes.
 
 use tiny_skia::Pixmap;
-use vextor_core::Document;
+use vextor_core::{Document, Rgba};
 use vextor_geom::Fonts;
 
 use crate::error::RenderError;
@@ -69,6 +69,25 @@ impl RenderCache {
                 height: viewport.height,
             }),
         }
+    }
+
+    /// The colour of the cached frame's pixel at `(x, y)` (physical
+    /// pixels), not premultiplied: what the eyedropper picks (spec 09).
+    /// `None` outside the frame or without one.
+    #[must_use]
+    pub fn pixel(&self, x: u32, y: u32) -> Option<Rgba> {
+        let pixmap = self.pixmap.as_ref()?;
+        // tiny-skia does not check `x`: past the edge it reads the next row.
+        if x >= pixmap.width() {
+            return None;
+        }
+        let p = pixmap.pixel(x, y)?.demultiply();
+        Some(Rgba {
+            r: p.red(),
+            g: p.green(),
+            b: p.blue(),
+            a: p.alpha(),
+        })
     }
 
     /// Forgets the cached frame, so the next call renders.
@@ -158,6 +177,30 @@ mod tests {
                 .expect("valid")
                 .fresh
         );
+    }
+
+    #[test]
+    fn pixel_reads_the_cached_frame_unpremultiplied() {
+        let mut doc = crate::fixtures::basic_shapes();
+        let mut cache = RenderCache::new();
+        assert_eq!(cache.pixel(0, 0), None, "nothing rendered yet");
+        let viewport = Viewport {
+            view: vextor_core::View::default(),
+            width: 200,
+            height: 120,
+            pixels_per_point: 1.0,
+        };
+        cache
+            .frame(&doc, &Fonts::default(), 1, &viewport)
+            .expect("valid viewport");
+        // Centre of the rounded rect: #1e90ff, opaque.
+        assert_eq!(cache.pixel(40, 30), Some(Rgba::rgb(0x1e, 0x90, 0xff)));
+        assert_eq!(cache.pixel(200, 0), None, "outside the frame");
+        doc.artboards.clear();
+        cache
+            .frame(&doc, &Fonts::default(), 2, &viewport)
+            .expect("valid viewport");
+        assert_eq!(cache.pixel(199, 119).map(|c| c.a), Some(0), "transparent");
     }
 
     #[test]

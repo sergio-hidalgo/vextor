@@ -7,15 +7,17 @@ use eframe::egui::{self, Color32, Painter, Pos2, Rect, Response, Sense, Stroke, 
 use crate::theme;
 
 mod arrange;
+mod buttons;
+mod paint;
 mod path;
 mod tools;
+
+pub use buttons::{button, choice_button, quiet_button, tight_button};
 
 /// Side of the square an icon button's icon is drawn in, in points.
 pub const SIZE: f32 = 16.0;
 /// Side of a field-label icon, in points.
 pub const LABEL_SIZE: f32 = 13.0;
-/// Size of an icon button, in points.
-const BUTTON: Vec2 = Vec2::new(28.0, 24.0);
 /// Line width of an icon at 16 pt.
 const LINE: f32 = 1.5;
 
@@ -85,37 +87,29 @@ pub enum Icon {
     ArrangeForward,
     ArrangeBackward,
     ArrangeBack,
-}
-
-/// A button showing `icon`, highlighted when `selected`, explained by
-/// `tooltip` on hover, or by `why` on hover while disabled.
-pub fn button(
-    ui: &mut egui::Ui,
-    icon: Icon,
-    selected: bool,
-    enabled: bool,
-    tooltip: &str,
-    why: &str,
-) -> Response {
-    let r = ui
-        .add_enabled(
-            enabled,
-            egui::Button::selectable(selected, "").min_size(BUTTON),
-        )
-        .on_hover_text(tooltip)
-        .on_disabled_hover_text(why);
-    let color = if !enabled {
-        theme::GREY_500
-    } else if selected {
-        theme::YELLOW
-    } else if r.hovered() {
-        theme::WHITE
-    } else {
-        theme::GREY_100
-    };
-    let square = Rect::from_center_size(r.rect.center(), Vec2::splat(SIZE));
-    paint(ui.painter(), square, icon, color);
-    r
+    /// Paint (spec 09): a pipette that picks a colour from the canvas.
+    Eyedropper,
+    /// Rect corner radius: a corner bracket with a dot inside that corner;
+    /// all four small for every corner at once.
+    CornerTopLeft,
+    CornerTopRight,
+    CornerBottomRight,
+    CornerBottomLeft,
+    CornerAll,
+    /// Flip: two outlined triangles mirrored across a narrow gap.
+    FlipHorizontal,
+    FlipVertical,
+    /// Stroke caps, drawn like the Align icons: a filled bar (the stroke)
+    /// and a guide line where the path ends; the bar stops at it (butt),
+    /// ends past it in a half disc (round) or square (projecting).
+    CapButt,
+    CapRound,
+    CapSquare,
+    /// Stroke joins: a filled L-shaped corner, its outer corner sharp
+    /// (miter), rounded or cut (bevel).
+    JoinMiter,
+    JoinRound,
+    JoinBevel,
 }
 
 /// Size of a tool button in the tools strip, and of its icon, in points.
@@ -236,6 +230,20 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.line((6.5, 7.0), (6.5, 12.0));
             pen.line((9.5, 7.0), (9.5, 12.0));
         }
+        Icon::Eyedropper
+        | Icon::CornerTopLeft
+        | Icon::CornerTopRight
+        | Icon::CornerBottomRight
+        | Icon::CornerBottomLeft
+        | Icon::CornerAll
+        | Icon::FlipHorizontal
+        | Icon::FlipVertical
+        | Icon::CapButt
+        | Icon::CapRound
+        | Icon::CapSquare
+        | Icon::JoinMiter
+        | Icon::JoinRound
+        | Icon::JoinBevel => pen.paint_icon(icon),
         Icon::ToolSelect
         | Icon::ToolNode
         | Icon::ToolPen

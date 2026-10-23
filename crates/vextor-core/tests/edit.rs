@@ -7,8 +7,8 @@ use std::collections::BTreeSet;
 
 use common::{check, children_mut, fixture, node_mut, rect_geom, shape};
 use vextor_core::{
-    Arrange, ClipboardPayload, Command, Document, NodeId, NodeKind, Paint, Point, Selection,
-    Transform,
+    Arrange, ClipboardPayload, Command, Document, History, NodeId, NodeKind, Paint, Point, Rect,
+    Resource, Selection, Transform,
 };
 
 fn close(a: Point, b: Point) -> bool {
@@ -417,4 +417,49 @@ fn copy_of_solid_shapes_carries_no_resources() {
         })
         .expect("inserts");
     assert_eq!(fx.doc.copy(&[id]).expect("copies").resources.len(), 0);
+}
+
+// ----- make pattern (spec 09) -----
+
+#[test]
+fn make_pattern_copies_the_objects_relative_to_the_tile() {
+    let fx = fixture();
+    let mut doc = fx.doc.clone();
+    node_mut(&mut doc, fx.path).transform = Transform::translate(10.0, 20.0);
+    let before = doc.clone();
+    let tile = Rect::new(5.0, 5.0, 40.0, 30.0);
+    let (cmd, id) = doc
+        .make_pattern(&[fx.path, fx.star], tile)
+        .expect("pattern made");
+    let mut h = History::new();
+    h.apply(&mut doc, cmd, &Selection::None).expect("applies");
+    doc.validate().expect("valid");
+
+    let Some(Resource::Pattern(p)) = doc.resources.get(&id) else {
+        panic!("a pattern under {id:?}");
+    };
+    assert_eq!(p.tile, Rect::new(0.0, 0.0, 40.0, 30.0));
+    assert_eq!(p.content.len(), 2);
+    // The path copy sits where the path did, measured from the tile corner.
+    let copy = &doc.nodes[&p.content[0]];
+    let origin = copy.transform.apply(Point::new(0.0, 0.0));
+    assert!(close(origin, Point::new(5.0, 15.0)), "{origin:?}");
+    // The originals are untouched and the copies have new ids.
+    assert_eq!(doc.nodes[&fx.path], before.nodes[&fx.path]);
+    assert!(!p.content.contains(&fx.path) && !p.content.contains(&fx.star));
+
+    assert!(h.undo(&mut doc).is_some());
+    assert_eq!(doc, before, "undo removes the pattern and its content");
+}
+
+#[test]
+fn make_pattern_rejects_nothing_layers_and_empty_tiles() {
+    let fx = fixture();
+    let mut doc = fx.doc.clone();
+    let tile = Rect::new(0.0, 0.0, 10.0, 10.0);
+    assert!(doc.make_pattern(&[], tile).is_err());
+    assert!(doc.make_pattern(&[fx.layer], tile).is_err());
+    let flat = Rect::new(0.0, 0.0, 10.0, 0.0);
+    assert!(doc.make_pattern(&[fx.path], flat).is_err());
+    assert_eq!(doc, fx.doc);
 }

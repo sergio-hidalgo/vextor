@@ -1,12 +1,21 @@
 //! Rasterising a document region.
 
+use std::cell::{Cell, RefCell};
+use std::collections::BTreeMap;
+use std::rc::Rc;
+
 use tiny_skia::{Mask, Pixmap, PixmapPaint};
 use vextor_core::{
-    Container, Document, EPS, Geometry, NodeId, NodeKind, Rect, Shape, Text, Transform, View,
+    Document, EPS, Geometry, NodeId, NodeKind, Paint, Rect, Resource, ResourceId, Shape, Style,
+    Text, Transform, View,
 };
 use vextor_geom::{Fonts, text_box, to_bezpath};
 
 use crate::error::RenderError;
+
+mod pattern;
+
+use self::pattern::MAX_TILES;
 use crate::paint;
 
 /// Largest pixmap side rendered, in physical pixels.
@@ -95,8 +104,9 @@ fn new_pixmap(width: u32, height: u32) -> Result<Pixmap, RenderError> {
 fn draw(doc: &Document, fonts: &Fonts, viewport: &Viewport, target: &mut Pixmap) {
     let base = viewport.to_pixels();
     draw_artboard_backgrounds(doc, base, target);
+    let scene = Scene::new(doc, fonts);
     for &id in &doc.layers {
-        draw_node(doc, fonts, id, base, target, 0);
+        scene.draw_node(id, base, target, 0);
     }
 }
 
@@ -115,137 +125,202 @@ fn draw_artboard_backgrounds(doc: &Document, base: Transform, target: &mut Pixma
     }
 }
 
-/// Draws one node and its subtree. `parent` maps the parent's coordinates
-/// to pixmap pixels.
-fn draw_node(
-    doc: &Document,
-    fonts: &Fonts,
-    id: NodeId,
-    parent: Transform,
-    target: &mut Pixmap,
-    depth: usize,
-) {
-    let Some(node) = doc.nodes.get(&id) else {
-        return;
-    };
-    if !node.visible || node.opacity <= EPS || depth > MAX_DEPTH {
-        return;
-    }
-    let world = node.transform.then(parent);
-    let clip = node.container().and_then(|c| c.clip);
-    if node.opacity >= 1.0 - EPS && clip.is_none() {
-        draw_content(doc, fonts, id, &node.kind, world, target, depth);
-        return;
-    }
-    // Group opacity and clips are applied to the subtree as a whole, so it
-    // is drawn into its own layer first.
-    let Some(mut layer) = Pixmap::new(target.width(), target.height()) else {
-        return;
-    };
-    draw_content(doc, fonts, id, &node.kind, world, &mut layer, depth);
-    if let Some(clip) = clip {
-        apply_clip(doc, clip, world, &mut layer);
-    }
-    #[allow(clippy::cast_possible_truncation)] // opacity is in 0..=1
-    let paint = PixmapPaint {
-        opacity: node.opacity as f32,
-        ..PixmapPaint::default()
-    };
-    target.draw_pixmap(
-        0,
-        0,
-        layer.as_ref(),
-        &paint,
-        tiny_skia::Transform::identity(),
-        None,
-    );
+/// A rendered pattern tile and the transform from its pixels to the
+/// painted object's own coordinates.
+type Tile = Rc<(Pixmap, Transform)>;
+
+/// What one render draws from, and the pattern tiles drawn so far (each
+/// pattern is drawn once per scale per render, however many objects use
+/// it).
+struct Scene<'a> {
+    doc: &'a Document,
+    fonts: &'a Fonts,
+    /// How many pattern tiles deep this scene draws (guards patterns that
+    /// contain themselves).
+    nesting: usize,
+    tiles: RefCell<BTreeMap<(ResourceId, u64, u64), Option<Tile>>>,
+    /// Tiles this render may still draw, shared with nested scenes.
+    budget: Rc<Cell<usize>>,
 }
 
-fn draw_content(
-    doc: &Document,
-    fonts: &Fonts,
-    id: NodeId,
-    kind: &NodeKind,
-    world: Transform,
-    target: &mut Pixmap,
-    depth: usize,
-) {
-    match kind {
-        NodeKind::Layer(c) | NodeKind::Group(c) => {
-            draw_children(doc, fonts, c, world, target, depth);
-        }
-        NodeKind::Shape(shape) => draw_shape(shape, world, target),
-        NodeKind::Text(text) => draw_text(fonts, id, text, world, target),
-        // Embedded images are drawn from a later spec.
-        NodeKind::Image(_) => {}
-    }
-}
-
-fn draw_children(
-    doc: &Document,
-    fonts: &Fonts,
-    c: &Container,
-    world: Transform,
-    target: &mut Pixmap,
-    depth: usize,
-) {
-    for &child in &c.children {
-        if Some(child) != c.clip {
-            draw_node(doc, fonts, child, world, target, depth + 1);
+impl<'a> Scene<'a> {
+    fn new(doc: &'a Document, fonts: &'a Fonts) -> Self {
+        Self {
+            doc,
+            fonts,
+            nesting: 0,
+            tiles: RefCell::default(),
+            budget: Rc::new(Cell::new(MAX_TILES)),
         }
     }
-}
 
-fn draw_shape(shape: &Shape, world: Transform, target: &mut Pixmap) {
-    let Some(path) = paint::path(&to_bezpath(&shape.geometry)) else {
-        return;
-    };
-    let ts = paint::transform(world);
-    if let Some(fill) = paint::solid(shape.style.fill) {
-        target.fill_path(&path, &fill, paint::fill_rule(&shape.geometry), ts, None);
-    }
-    if let Some(stroke) = &shape.style.stroke
-        && stroke.width > EPS
-        && let Some(color) = paint::solid(stroke.paint)
-    {
-        target.stroke_path(&path, &color, &paint::stroke(stroke), ts, None);
-    }
-}
-
-/// Draws a text: its frame (background, then border) behind the glyph
-/// outlines, which are filled and stroked like a shape (non-zero rule).
-fn draw_text(fonts: &Fonts, id: NodeId, text: &Text, world: Transform, target: &mut Pixmap) {
-    let layout = fonts.layout(id, text);
-    let ts = paint::transform(world);
-    if let Some(frame) = &text.frame {
-        let b = text_box(text, &layout);
-        let geometry = Geometry::Rect {
-            rect: Rect::new(b.x0, b.y0, b.width(), b.height()),
-            radius: frame.radius,
+    /// Draws one node and its subtree. `parent` maps the parent's
+    /// coordinates to pixmap pixels.
+    fn draw_node(&self, id: NodeId, parent: Transform, target: &mut Pixmap, depth: usize) {
+        let Some(node) = self.doc.nodes.get(&id) else {
+            return;
         };
-        if let Some(path) = paint::path(&to_bezpath(&geometry)) {
-            if let Some(fill) = paint::solid(frame.fill) {
-                target.fill_path(&path, &fill, tiny_skia::FillRule::Winding, ts, None);
+        if !node.visible || node.opacity <= EPS || depth > MAX_DEPTH {
+            return;
+        }
+        let world = node.transform.then(parent);
+        let clip = node.container().and_then(|c| c.clip);
+        if node.opacity >= 1.0 - EPS && clip.is_none() {
+            self.draw_content(id, &node.kind, world, target, depth);
+            return;
+        }
+        // Group opacity and clips are applied to the subtree as a whole, so
+        // it is drawn into its own layer first.
+        let Some(mut layer) = Pixmap::new(target.width(), target.height()) else {
+            return;
+        };
+        self.draw_content(id, &node.kind, world, &mut layer, depth);
+        if let Some(clip) = clip {
+            apply_clip(self.doc, clip, world, &mut layer);
+        }
+        #[allow(clippy::cast_possible_truncation)] // opacity is in 0..=1
+        let paint = PixmapPaint {
+            opacity: node.opacity as f32,
+            ..PixmapPaint::default()
+        };
+        target.draw_pixmap(
+            0,
+            0,
+            layer.as_ref(),
+            &paint,
+            tiny_skia::Transform::identity(),
+            None,
+        );
+    }
+
+    fn draw_content(
+        &self,
+        id: NodeId,
+        kind: &NodeKind,
+        world: Transform,
+        target: &mut Pixmap,
+        depth: usize,
+    ) {
+        match kind {
+            NodeKind::Layer(c) | NodeKind::Group(c) => {
+                for &child in &c.children {
+                    if Some(child) != c.clip {
+                        self.draw_node(child, world, target, depth + 1);
+                    }
+                }
             }
-            if let Some(stroke) = &frame.stroke
-                && stroke.width > EPS
-                && let Some(color) = paint::solid(stroke.paint)
-            {
-                target.stroke_path(&path, &color, &paint::stroke(stroke), ts, None);
-            }
+            NodeKind::Shape(shape) => self.draw_shape(shape, world, target),
+            NodeKind::Text(text) => self.draw_text(id, text, world, target),
+            // Embedded images are drawn from a later spec.
+            NodeKind::Image(_) => {}
         }
     }
-    let Some(path) = paint::path(&layout.glyphs) else {
-        return;
-    };
-    if let Some(fill) = paint::solid(text.style.fill) {
-        target.fill_path(&path, &fill, tiny_skia::FillRule::Winding, ts, None);
+
+    fn draw_shape(&self, shape: &Shape, world: Transform, target: &mut Pixmap) {
+        let bez = to_bezpath(&shape.geometry);
+        let Some(path) = paint::path(&bez) else {
+            return;
+        };
+        let rule = paint::fill_rule(&shape.geometry);
+        self.fill_and_stroke(target, &path, &bez, &shape.style, rule, world);
     }
-    if let Some(stroke) = &text.style.stroke
-        && stroke.width > EPS
-        && let Some(color) = paint::solid(stroke.paint)
-    {
-        target.stroke_path(&path, &color, &paint::stroke(stroke), ts, None);
+
+    /// Draws a text: its frame (background, then border) behind the glyph
+    /// outlines, which are filled and stroked like a shape (non-zero rule).
+    fn draw_text(&self, id: NodeId, text: &Text, world: Transform, target: &mut Pixmap) {
+        let layout = self.fonts.layout(id, text);
+        let winding = tiny_skia::FillRule::Winding;
+        if let Some(frame) = &text.frame {
+            let b = text_box(text, &layout);
+            let geometry = Geometry::Rect {
+                rect: Rect::new(b.x0, b.y0, b.width(), b.height()),
+                radius: frame.radius,
+            };
+            let bez = to_bezpath(&geometry);
+            if let Some(path) = paint::path(&bez) {
+                let style = Style {
+                    fill: frame.fill,
+                    stroke: frame.stroke.clone(),
+                };
+                self.fill_and_stroke(target, &path, &bez, &style, winding, world);
+            }
+        }
+        if let Some(path) = paint::path(&layout.glyphs) {
+            self.fill_and_stroke(target, &path, &layout.glyphs, &text.style, winding, world);
+        }
+    }
+
+    /// Fills `path` (`bez` in the object's own coordinates), then strokes
+    /// it, as SVG paints a shape.
+    fn fill_and_stroke(
+        &self,
+        target: &mut Pixmap,
+        path: &tiny_skia::Path,
+        bez: &kurbo::BezPath,
+        style: &Style,
+        rule: tiny_skia::FillRule,
+        world: Transform,
+    ) {
+        // Only bounding-box gradients need the box (spec 09); solid paints,
+        // most of a document, skip it.
+        let gradient = |p: Paint| matches!(p, Paint::Gradient(_));
+        let bbox =
+            if gradient(style.fill) || style.stroke.as_ref().is_some_and(|s| gradient(s.paint)) {
+                kurbo::Shape::bounding_box(bez)
+            } else {
+                kurbo::Rect::ZERO
+            };
+        let ts = paint::transform(world);
+        self.with_paint(style.fill, bbox, world, |p| {
+            target.fill_path(path, p, rule, ts, None);
+        });
+        if let Some(stroke) = &style.stroke
+            && stroke.width > EPS
+        {
+            let s = paint::stroke(stroke);
+            self.with_paint(stroke.paint, bbox, world, |p| {
+                target.stroke_path(path, p, &s, ts, None);
+            });
+        }
+    }
+
+    /// Calls `draw` with the tiny-skia paint for `paint` on an object whose
+    /// geometry bounds are `bbox` and whose coordinates `world` maps to
+    /// pixels; not at all when it paints nothing.
+    fn with_paint(
+        &self,
+        paint: Paint,
+        bbox: kurbo::Rect,
+        world: Transform,
+        draw: impl FnOnce(&tiny_skia::Paint<'_>),
+    ) {
+        match paint {
+            Paint::Gradient(id) => {
+                if let Some(Resource::Gradient(g)) = self.doc.resources.get(&id)
+                    && let Some(shader) = paint::gradient(g, bbox)
+                {
+                    draw(&paint::shaded(shader));
+                }
+            }
+            Paint::Pattern(id) => {
+                if let Some(tile) = self.pattern_tile(id, world) {
+                    let (pixmap, ts) = &*tile;
+                    let shader = tiny_skia::Pattern::new(
+                        pixmap.as_ref(),
+                        tiny_skia::SpreadMode::Repeat,
+                        tiny_skia::FilterQuality::Bicubic,
+                        1.0,
+                        paint::transform(*ts),
+                    );
+                    draw(&paint::shaded(shader));
+                }
+            }
+            solid => {
+                if let Some(p) = paint::solid(solid) {
+                    draw(&p);
+                }
+            }
+        }
     }
 }
 

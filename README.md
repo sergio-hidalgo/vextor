@@ -115,6 +115,7 @@ and Line (`L`), then Zoom (`Z`).
 | Scale                               | drag a handle; `⇧` keeps proportions, `⌥` from the centre (strokes keep their width; text scales its font size and always keeps proportions) |
 | Rotate                              | drag just outside any corner (curved-arrow cursor); `⇧` in 15° steps |
 | Exact position, size, rotation      | Inspector (right): X, Y, W, H, ° (hover the small icons for what each is) |
+| Flip                                | Object ▸ Flip Horizontal / Vertical, or the two flip buttons under H in Inspector ▸ Transform |
 | Cut / copy / paste / paste in place | `⌘X` / `⌘C` / `⌘V` (+10 px) / `⇧⌘V`                     |
 | Duplicate / delete                  | `⌘D` (+10 px) / `⌫`                                    |
 | Group / ungroup                     | `⌘G` / `⇧⌘G`                                           |
@@ -136,7 +137,7 @@ and Line (`L`), then Zoom (`Z`).
 | Polygon sides, star points   | `↑` / `↓` while dragging (3–20), or Inspector ▸ Shape      |
 | Star inner radius            | `←` / `→` while dragging, or Inspector ▸ Shape (% of the outer radius) |
 | Cancel a drag                | `Esc` while dragging                                       |
-| Round a rectangle's corners  | with one rectangle selected, drag a dot inside a corner: all corners round together, `⌥` rounds only that one; or Inspector ▸ Shape (each corner, or all) |
+| Round a rectangle's corners  | with one rectangle selected, drag a dot inside a corner: all corners round together, `⌥` rounds only that one; or Inspector ▸ Corners (each corner, laid out as they sit, or all; hover an icon for its name) |
 | Round polygon / star corners | Inspector ▸ Shape ▸ Rounding                               |
 | Convert to path              | Object ▸ Convert to Path (`⇧⌘P`): an editable path that looks exactly the same |
 
@@ -145,6 +146,31 @@ New shapes take the last fill and stroke given to a shape in the document
 black, and no fill. The corner dots show only when the rectangle is at
 least 40 points on screen; zoom in for small ones. Each drag, dialog or
 inspector change is one undo step.
+
+### Colour and paint
+
+Select one or more objects; Inspector ▸ Fill, Stroke and Opacity show the
+first one and change every selected object that has that paint.
+
+| Action                        | How                                                         |
+| :---------------------------- | :---------------------------------------------------------- |
+| Fill or stroke kind           | Inspector ▸ Fill / Stroke ▸ Paint: None, Solid colour, Linear gradient, Radial gradient, Pattern, currentColor (takes the CSS `color` of the page, for icons). Stroke ▸ None removes the stroke |
+| Colour pad                    | click the colour tile next to the hex value: a saturation/brightness square with hue and transparency strips (also for an artboard's background). One drag in it is one undo step |
+| Exact colour                  | the hex field (`#RGB`, `#RRGGBB` or `#RRGGBBAA`, applied when you leave the field; a red note says when it does not read, `Esc` puts the colour back) or the R G B A sliders (0–255). RGB only |
+| Pick a colour from the canvas | the pipette button, then click the canvas (what you see is picked, transparency included); `Esc` or the button again cancels |
+| Swatches                      | under the colour: click one to apply it, `+` adds the current colour, right-click to rename (type, then Enter) or delete. Fills (and text backgrounds) and strokes (and text borders) keep separate lists. Swatches belong to Vextor, not to a document: every document shows them, and they are kept as soon as they change, saved document or not |
+| Gradient stops                | the strip under Gradient: click to add a stop, drag a marker to move it; the selected stop's position (%), colour and bin button below (a gradient keeps two stops) |
+| Place a gradient              | with one object selected (Select tool), drag the handles on the canvas: start and end (linear); centre, radius and focal point (radial; `⌥`-drag the centre to pull the focal point out) |
+| Spread                        | Pad, Reflect or Repeat: how the colours go on past the ends |
+| Share a gradient              | Gradient ▸ pick an existing one; editing it changes every object painted with it (the count shows next to the name) |
+| Make a pattern                | select objects, Object ▸ Make Pattern: copies of them, tiled by their bounds (strokes included), become a pattern; then Fill or Stroke ▸ Pattern. Scale, rotation and offset of the tile in the inspector |
+| Name or delete a gradient or pattern | under its menu in Fill or Stroke: Name (applied when you leave the field, `Esc` cancels; blank goes back to "Pattern 2"), and the bin button: every object painted with it loses that paint (a stroke or border goes). One undo step each |
+| Stroke shape                  | Inspector ▸ Stroke: width, cap, join, miter limit, dashes (Solid, Dashed, Dotted, or Custom lengths like `6 3`) |
+| Object opacity                | Inspector ▸ Opacity (0–100 %)                               |
+
+Every paint change, drag or slider move is one undo step; undo also puts
+back gradients and patterns. Swatch edits are not undo steps. No blend modes, no colour spaces
+other than RGB.
 
 ### Pen and paths
 
@@ -192,7 +218,7 @@ Vextor starts; until then text is placed but not drawn.
 | Finish editing             | `Esc`, or click outside (one undo step per edit)           |
 | While editing              | arrows; `⌥`+arrows by word; `⌘`+arrows to the line ends; `⇧` selects; `⌘A`; `⌘C` / `⌘X` / `⌘V` (plain text); `Enter` new line |
 | Font, style, size, spacing | Inspector ▸ Text: searchable font list (recently used first, each name in its own face), the family's real styles, size, line height, letter spacing, alignment |
-| Colour, background, border | Inspector ▸ Text: text colour; Background (colour, padding, corner radius); Border (colour, width) |
+| Colour, background, border | the letters: Inspector ▸ Fill and Stroke; the frame: Inspector ▸ Text ▸ Background (any paint, padding, corner radius) and Border (any paint, width, dashes) |
 | Convert to outlines        | Object ▸ Convert Text to Outlines (`⇧⌘O`): a group with the background rect and one shape per letter (ungroup to move letters one by one) |
 
 A label emptied when editing ends is removed. A document keeps a font's
@@ -208,8 +234,8 @@ artboard (Object ▸ Align ▸ Align to Artboard forces the artboard).
 Distribute needs three or more. Hidden and locked objects cannot be
 selected. Copy also puts the selection on the system clipboard as SVG
 (shapes, groups, text, solid colours, strokes and clips; gradients are
-written as their first colour and images are left out until full export
-arrives).
+written as their first colour, patterns as no paint, and images are left
+out until full export arrives).
 
 Ctrl replaces ⌘ on Windows and Linux.
 
@@ -246,7 +272,9 @@ While a document has unsaved changes, Vextor autosaves a copy every
 Windows and Linux), never next to your files. A clean save or quit deletes
 the copy. If Vextor crashes or is killed, the next launch offers
 **Recover unsaved work?**. File ▸ Open Recent lists the last 10 files; the
-list is kept in the same folder (`recent.json`).
+list is kept in the same folder (`recent.json`), and so are the swatches
+(`swatches.json`; up to 256, read only up to 1 MB, an unreadable file
+starts an empty library).
 
 Debug builds have a **Debug** menu: sample documents (basic shapes, 500
 and 5 000 shapes), an undoable "nudge layer" step and a frame-time readout.
@@ -261,9 +289,9 @@ VEXTOR_DEBUG_MENU=1 cargo run -p vextor-app --release
 | Crate           | Holds                                                      |
 | :-------------- | :--------------------------------------------------------- |
 | `vextor-core`   | document model, commands, undo history, `.vxtr` bytes (no UI, no file I/O) |
-| `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, path editing (segment hit-tests, split, bend, joins), text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`), snapping; later booleans |
+| `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, path editing (segment hit-tests, split, bend, joins), text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`), snapping, where a gradient lands on an object; later booleans |
 | `vextor-svg`    | SVG export and import                                      |
-| `vextor-render` | rasterising documents for the canvas (`tiny-skia`), sample documents |
+| `vextor-render` | rasterising documents for the canvas (`tiny-skia`: solid colours, gradients, patterns, dashes, clips, opacity), sample documents |
 | `vextor-app`    | the desktop app (`eframe`/`egui`), file dialogs (`rfd`), autosave |
 
 Dependencies point downwards only: `app → svg/render → geom → core`.

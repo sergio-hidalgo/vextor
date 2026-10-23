@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="160" viewBox="0 0 200 160">
+  <!-- Hand-written twin of vextor_render::fixtures::paints() (spec 09). -->
+  <defs>
+    <linearGradient id="diagonal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff0000"/>
+      <stop offset="1" stop-color="#0000ff" stop-opacity="0.50196"/>
+    </linearGradient>
+    <linearGradient id="stripes" gradientUnits="userSpaceOnUse" x1="80" y1="35" x2="100" y2="35"
+                    spreadMethod="reflect">
+      <stop offset="0" stop-color="#ffd700"/>
+      <stop offset="1" stop-color="#2e8b57"/>
+    </linearGradient>
+    <radialGradient id="rings" cx="0.5" cy="0.5" r="0.25" fx="0.4" fy="0.4" spreadMethod="repeat">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#1e90ff"/>
+    </radialGradient>
+    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="35" cy="95" r="30">
+      <stop offset="0.2" stop-color="#ff6347"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.50196"/>
+      <stop offset="1" stop-color="#800080"/>
+    </radialGradient>
+    <pattern id="dots" patternUnits="userSpaceOnUse" x="0" y="0" width="10" height="10">
+      <rect width="5" height="5" fill="#222222"/>
+      <circle cx="7.5" cy="7.5" r="2.5" fill="#ff6347"/>
+    </pattern>
+    <pattern id="bars" patternUnits="userSpaceOnUse" x="2" y="2" width="8" height="8"
+             patternTransform="rotate(45)">
+      <rect width="4" height="8" fill="#1e90ff"/>
+    </pattern>
+  </defs>
+  <rect width="200" height="160" fill="#ffffff"/>
+  <rect x="10" y="10" width="50" height="50" fill="url(#diagonal)"/>
+  <rect x="70" y="10" width="50" height="50" fill="url(#stripes)"/>
+  <circle cx="155" cy="35" r="25" fill="url(#rings)"/>
+  <rect x="10" y="70" width="50" height="50" fill="url(#glow)"/>
+  <rect x="70" y="70" width="50" height="50" fill="url(#dots)"/>
+  <circle cx="155" cy="95" r="25" fill="url(#bars)"/>
+  <rect x="130" y="130" width="60" height="20" fill="none" stroke="url(#diagonal)" stroke-width="6"/>
+  <line x1="10" y1="140" x2="90" y2="140" stroke="#222222" stroke-width="4" stroke-linecap="round"
+        stroke-dasharray="0 8"/>
+  <rect x="100" y="128" width="20" height="24" fill="#ff0000" opacity="0.5"/>
+</svg>

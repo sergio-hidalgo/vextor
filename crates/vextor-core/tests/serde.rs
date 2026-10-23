@@ -12,7 +12,7 @@ use vextor_core::{
     Document, FillRule, Geometry, GradientKind, GradientStop, GradientUnits, GridSettings, IdMode,
     Image, ImageMime, ImageSource, LineCap, LineJoin, Node, NodeId, NodeKind, NodeType, Paint,
     PathNode, PathNodeRef, Point, Rect, ResourceId, Rgba, Selection, Shape, SnapSettings, Spread,
-    Stroke, Style, Styling, SvgExportOptions, Swatch, ToolId, Transform, Vec2, View,
+    Stroke, Style, Styling, SvgExportOptions, Swatch, SwatchKind, ToolId, Transform, Vec2, View,
 };
 
 fn round_trip<T: Serialize + DeserializeOwned + PartialEq + Debug>(value: &T) -> String {
@@ -150,10 +150,26 @@ fn style_and_paint() {
         fill: Paint::CurrentColor,
         stroke: Some(stroke),
     });
-    round_trip(&Swatch {
-        name: Some("brand".into()),
-        color: Rgba::rgb(30, 144, 255),
-    });
+    for kind in [SwatchKind::Fill, SwatchKind::Stroke] {
+        round_trip(&Swatch {
+            name: Some("brand".into()),
+            color: Rgba::rgb(30, 144, 255),
+            kind,
+        });
+    }
+}
+
+#[test]
+fn swatches_saved_before_fill_and_stroke_lists_load_as_fill() {
+    // Spec 09: files written before swatches had a kind.
+    let old: Swatch = serde_json::from_str(r##"{"name":null,"color":"#1e90ff"}"##).expect("loads");
+    assert_eq!(old.kind, SwatchKind::Fill);
+    let json = serde_json::to_string(&Swatch {
+        kind: SwatchKind::Stroke,
+        ..old
+    })
+    .expect("saves");
+    assert!(json.contains(r#""kind":"stroke""#), "{json}");
 }
 
 #[test]

@@ -22,6 +22,10 @@ pub enum PanelAction {
     Ungroup,
     /// Artboards ▸ Add (spec 08): opens the size picker.
     AddArtboard,
+    /// Transform's flip buttons (like Object ▸ Flip Horizontal / Vertical).
+    Flip {
+        horizontal: bool,
+    },
 }
 
 /// The six align buttons: action, icon, tooltip.

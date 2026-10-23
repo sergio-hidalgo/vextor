@@ -5,6 +5,7 @@ mod closing;
 mod file_flow;
 mod keys;
 mod menus;
+mod paint;
 mod view_menu;
 
 use std::path::PathBuf;
@@ -21,6 +22,7 @@ use crate::fonts::SystemFonts;
 use crate::new_doc::{Outcome, Picker};
 use crate::recovery::{Orphan, Recovery};
 use crate::session::Session;
+use crate::swatch_library::Swatches;
 use crate::tabs;
 use crate::theme;
 use crate::{panels, prompts};
@@ -51,6 +53,8 @@ pub struct VextorApp {
     /// Vextor's own folder; `None` turns off recent files and autosave.
     data_dir: Option<PathBuf>,
     recent: RecentFiles,
+    /// The swatch library every document shares (spec 09).
+    swatches: Swatches,
     /// Each new document claims an autosave slot (off when the recovery
     /// folder could not be read at launch).
     autosave: bool,
@@ -87,6 +91,7 @@ impl VextorApp {
             .as_deref()
             .map(RecentFiles::load)
             .unwrap_or_default();
+        let swatches = data_dir.as_deref().map(Swatches::load).unwrap_or_default();
         let mut message = None;
         let (autosave, orphans) = match data_dir.as_deref().map(Recovery::orphans) {
             Some(Ok(o)) => (true, o),
@@ -105,6 +110,7 @@ impl VextorApp {
             title: String::new(),
             data_dir,
             recent,
+            swatches,
             autosave,
             orphans,
             confirm: None,
@@ -131,6 +137,7 @@ impl VextorApp {
     fn open(&mut self, mut session: Session) -> DocId {
         self.finish_text();
         session.fonts = self.fonts.current();
+        session.swatches = self.swatches.clone();
         let recovery = self.claim_autosave();
         self.picker = None;
         self.docs.add(session, recovery)
@@ -298,6 +305,7 @@ impl VextorApp {
 impl eframe::App for VextorApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        self.save_swatches();
         if let Some(fonts) = self.fonts.poll() {
             for tab in self.docs.tabs_mut() {
                 tab.session.set_fonts(fonts.clone());
@@ -306,6 +314,7 @@ impl eframe::App for VextorApp {
         self.handle_close(&ctx);
         let prompt_open =
             self.confirm.is_some() || !self.orphans.is_empty() || self.outline_prompt.is_some();
+        self.paint_escape(&ctx);
         // While a shape is drawn, keys belong to it (arrows, Esc).
         if !prompt_open && !self.canvas.is_drawing() {
             // While text is typed, letters and Edit keys belong to it.

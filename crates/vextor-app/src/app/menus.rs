@@ -144,6 +144,15 @@ impl VextorApp {
         ) {
             actions.push(Action::ConvertToPath);
         }
+        let make_pattern = ui
+            .add_enabled(can.edit, egui::Button::new("Make Pattern"))
+            .on_hover_text(
+                "Turns copies of the selection into a pattern, to pick in Fill or Stroke",
+            )
+            .on_disabled_hover_text("Select the objects to repeat");
+        if make_pattern.clicked() {
+            actions.push(Action::MakePattern);
+        }
         let session = self.docs.session().filter(|_| self.picker.is_none());
         ui.menu_button("Path", |ui| path_menu(ui, session, actions));
         ui.separator();

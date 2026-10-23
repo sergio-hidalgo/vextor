@@ -9,6 +9,7 @@ mod structure;
 mod text;
 
 use crate::change::{Change, Patch};
+use crate::color::ColorFormat;
 use crate::command::Command;
 use crate::document::{Artboard, Document};
 use crate::editor::Selection;
@@ -169,13 +170,18 @@ fn run(tx: &mut Tx<'_>, cmd: Command) -> Result<(), CoreError> {
         }
         C::SetName(name) => set_name(tx, name),
         C::SetColorFormat(format) => {
-            if tx.before.color_format.is_none() {
-                tx.before.color_format = Some(tx.doc.color_format);
-            }
-            tx.doc.color_format = format;
+            set_color_format(tx, format);
             Ok(())
         }
     }
+}
+
+/// [`Command::SetColorFormat`].
+fn set_color_format(tx: &mut Tx<'_>, format: ColorFormat) {
+    if tx.before.color_format.is_none() {
+        tx.before.color_format = Some(tx.doc.color_format);
+    }
+    tx.doc.color_format = format;
 }
 
 /// [`Command::SetName`].
