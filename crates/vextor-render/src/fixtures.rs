@@ -7,6 +7,10 @@ use vextor_core::{
     Transform, Vec2,
 };
 
+mod paints;
+
+pub use paints::{PAINTS_SIZE, paints};
+
 /// Size of the [`basic_shapes`] artboard, in document px.
 pub const BASIC_SHAPES_SIZE: (f64, f64) = (200.0, 120.0);
 

@@ -4,7 +4,10 @@
 #![allow(clippy::cast_possible_truncation)] // f64 → f32 at the rasteriser boundary
 
 use kurbo::{BezPath, PathEl};
-use vextor_core::{FillRule, Geometry, LineCap, LineJoin, Paint, Rect, Rgba, Stroke, Transform};
+use vextor_core::{
+    EPS, FillRule, Geometry, Gradient, GradientKind, LineCap, LineJoin, Paint, Rect, Rgba, Spread,
+    Stroke, Transform,
+};
 
 /// A model transform as a `tiny-skia` transform.
 #[allow(clippy::many_single_char_names)] // SVG matrix coefficient names
@@ -48,13 +51,14 @@ pub(crate) fn fill_rule(geometry: &Geometry) -> tiny_skia::FillRule {
     }
 }
 
-/// A paint the canvas can draw now, or `None` when it draws nothing.
-/// `currentColor` shows as black, the CSS default text colour.
+/// A solid paint, or `None` when it draws nothing (no paint, a fully
+/// transparent colour, or a gradient or pattern: see [`gradient`] and the
+/// renderer's pattern tiles). `currentColor` shows as black, the CSS
+/// default text colour.
 pub(crate) fn solid(paint: Paint) -> Option<tiny_skia::Paint<'static>> {
     let color = match paint {
         Paint::Solid(c) => c,
         Paint::CurrentColor => Rgba::BLACK,
-        // Gradients and patterns are drawn from spec 09.
         Paint::None | Paint::Gradient(_) | Paint::Pattern(_) => return None,
     };
     if color.a == 0 {
@@ -64,6 +68,65 @@ pub(crate) fn solid(paint: Paint) -> Option<tiny_skia::Paint<'static>> {
     p.set_color_rgba8(color.r, color.g, color.b, color.a);
     p.anti_alias = true;
     Some(p)
+}
+
+/// A paint drawing `shader`, anti-aliased.
+pub(crate) fn shaded(shader: tiny_skia::Shader<'_>) -> tiny_skia::Paint<'_> {
+    tiny_skia::Paint {
+        shader,
+        anti_alias: true,
+        ..tiny_skia::Paint::default()
+    }
+}
+
+/// The shader of a gradient painting an object whose geometry bounds are
+/// `bbox` (its own coordinates), SVG semantics: bounding-box units map
+/// 0..1 onto `bbox` and paint nothing when it is flat; a gradient without
+/// length or radius paints its last stop's colour.
+pub(crate) fn gradient(g: &Gradient, bbox: kurbo::Rect) -> Option<tiny_skia::Shader<'static>> {
+    let units = transform(vextor_geom::gradient_space(g.units, bbox)?);
+    let color = |c: Rgba| tiny_skia::Color::from_rgba8(c.r, c.g, c.b, c.a);
+    let stops: Vec<tiny_skia::GradientStop> = g
+        .stops
+        .iter()
+        .map(|s| tiny_skia::GradientStop::new(s.offset as f32, color(s.color)))
+        .collect();
+    let last = color(g.stops.last()?.color);
+    let mode = match g.spread {
+        Spread::Pad => tiny_skia::SpreadMode::Pad,
+        Spread::Reflect => tiny_skia::SpreadMode::Reflect,
+        Spread::Repeat => tiny_skia::SpreadMode::Repeat,
+    };
+    let point = |p: vextor_core::Point| tiny_skia::Point::from_xy(p.x as f32, p.y as f32);
+    let shader = match g.kind {
+        GradientKind::Linear { start, end } => {
+            if (end - start).length() <= EPS {
+                return Some(tiny_skia::Shader::SolidColor(last));
+            }
+            tiny_skia::LinearGradient::new(point(start), point(end), stops, mode, units)
+        }
+        GradientKind::Radial {
+            center,
+            radius,
+            focal,
+        } => {
+            if radius <= EPS {
+                return Some(tiny_skia::Shader::SolidColor(last));
+            }
+            let focal = focal.unwrap_or(center);
+            tiny_skia::RadialGradient::new(
+                point(focal),
+                0.0,
+                point(center),
+                radius as f32,
+                stops,
+                mode,
+                units,
+            )
+        }
+    };
+    // tiny-skia refuses only degenerate cases, handled above like SVG.
+    Some(shader.unwrap_or(tiny_skia::Shader::SolidColor(last)))
 }
 
 /// A model stroke as a `tiny-skia` stroke, SVG semantics: an odd dash list

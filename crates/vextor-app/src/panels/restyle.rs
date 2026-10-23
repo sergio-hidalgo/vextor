@@ -1,22 +1,10 @@
 //! What a Text section change does to each selected text (spec 05c).
+//! Colours, background and border are paints (spec 09, `paint_edit`).
 
-use vextor_core::{Command, CornerRadii, NodeId, Paint, Rgba, Stroke, Text, TextAlign, TextFrame};
+use vextor_core::{Command, CornerRadii, NodeId, Paint, Text, TextAlign};
 use vextor_geom::FaceStyle;
 
-/// The frame a text gets when a background or border is first turned on.
-pub(super) fn empty_frame() -> TextFrame {
-    TextFrame {
-        padding: [8.0, 16.0, 8.0, 16.0],
-        radius: CornerRadii {
-            tl: 6.0,
-            tr: 6.0,
-            br: 6.0,
-            bl: 6.0,
-        },
-        fill: Paint::None,
-        stroke: None,
-    }
-}
+use crate::paint_edit::empty_frame;
 
 /// One change from the Text section.
 #[derive(Clone, Debug, PartialEq)]
@@ -27,15 +15,9 @@ pub(super) enum Edit {
     LineHeight(f64),
     Spacing(f64),
     Align(TextAlign),
-    Color(Rgba),
-    /// Background colour, or `None` to remove it.
-    Background(Option<Rgba>),
     PaddingX(f64),
     PaddingY(f64),
     Radius(f64),
-    /// Border, or `None` to remove it.
-    Border(Option<Stroke>),
-    BorderWidth(f64),
 }
 
 impl Edit {
@@ -51,12 +33,6 @@ impl Edit {
             Self::LineHeight(v) => t.line_height = *v,
             Self::Spacing(v) => t.letter_spacing = *v,
             Self::Align(a) => t.align = *a,
-            Self::Color(c) => t.style.fill = Paint::Solid(*c),
-            Self::Background(c) => {
-                let mut f = frame();
-                f.fill = c.map_or(Paint::None, Paint::Solid);
-                t.frame = Some(f);
-            }
             Self::PaddingX(v) => {
                 let mut f = frame();
                 f.padding[1] = *v;
@@ -79,18 +55,6 @@ impl Edit {
                 };
                 t.frame = Some(f);
             }
-            Self::Border(b) => {
-                let mut f = frame();
-                f.stroke.clone_from(b);
-                t.frame = Some(f);
-            }
-            Self::BorderWidth(w) => {
-                let mut f = frame();
-                if let Some(b) = &mut f.stroke {
-                    b.width = *w;
-                }
-                t.frame = Some(f);
-            }
         }
         // Neither background nor border: no frame at all.
         if t.frame
@@ -107,7 +71,6 @@ impl Edit {
             Self::Size(_) | Self::LineHeight(_) | Self::Spacing(_) | Self::Align(_) => {
                 "Change text style"
             }
-            Self::Color(_) => "Change text colour",
             _ => "Change text frame",
         }
     }

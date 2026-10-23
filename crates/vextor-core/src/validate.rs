@@ -8,7 +8,7 @@ use crate::ids::{NodeId, ResourceId};
 use crate::math::{Point, Rect};
 use crate::node::{CornerRadii, Geometry, Node, NodeKind};
 use crate::resource::{GradientKind, Resource};
-use crate::style::{Paint, Stroke, Style};
+use crate::style::{MAX_SWATCH_NAME_CHARS, MAX_SWATCHES, Paint, Stroke, Style};
 use crate::text::{FONT_WEIGHTS, MAX_FONT_FAMILY_CHARS, MAX_TEXT_CHARS, Text};
 
 /// Most sides of a polygon; more looks like a circle.
@@ -366,6 +366,16 @@ impl Checker<'_> {
             && g.snap.angle_step_deg > 0.0
             && nonneg(g.snap.tolerance_px);
         self.check(ok, || "grid or snap settings are invalid".to_owned());
+        let swatches = &self.doc.swatches;
+        let ok = swatches.len() <= MAX_SWATCHES
+            && swatches.iter().all(|s| {
+                s.name
+                    .as_ref()
+                    .is_none_or(|n| n.chars().count() <= MAX_SWATCH_NAME_CHARS)
+            });
+        self.check(ok, || {
+            format!("more than {MAX_SWATCHES} swatches or a name over {MAX_SWATCH_NAME_CHARS} characters")
+        });
         let precision = self.doc.export.precision;
         self.check(precision <= 6, || {
             format!("export precision {precision} is above 6")

@@ -1,6 +1,8 @@
-//! The inspector's Shape section (spec 06), for one selected rect, polygon
-//! or star: corner radii, sides, points, inner radius and corner rounding.
-//! Each change is a `SetGeometry`; a drag on a field is one undo step.
+//! The inspector's Corners section for one selected rect (its four corner
+//! radii laid out like the corners, then all at once, icon labelled on
+//! the Transform grid), and Shape for a polygon or star (sides, points,
+//! inner radius, rounding) (spec 06). Each change is a `SetGeometry`; a
+//! drag on a field is one undo step.
 
 use eframe::egui;
 use vextor_core::{
@@ -8,7 +10,8 @@ use vextor_core::{
 };
 use vextor_geom::Corner;
 
-use super::{FIELD_SIZE, GRID_SPACING, LABEL_WIDTH};
+use super::{FIELD_SIZE, GRID_SPACING, LABEL_WIDTH, Label};
+use crate::icons::Icon;
 use crate::session::Session;
 
 /// Undo label of a Shape section change.
@@ -35,17 +38,27 @@ fn selected(s: &Session) -> Option<(NodeId, Geometry)> {
     }
 }
 
-/// The Shape section. Returns a message when an edit was refused.
+/// The Corners (rect) or Shape (polygon, star) section. Returns a
+/// message when an edit was refused.
 pub fn section(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
     let (id, geometry) = selected(s)?;
     let mut changed = None;
-    super::section(ui, "Shape", |ui| {
-        egui::Grid::new("shape-inspector")
-            .num_columns(2)
-            .spacing(GRID_SPACING)
-            .min_col_width(LABEL_WIDTH)
-            .show(ui, |ui| changed = fields(ui, s, &geometry));
-    });
+    if let Geometry::Rect { rect, radius } = geometry {
+        super::section(ui, "Corners", |ui| {
+            egui::Grid::new("corners-inspector")
+                .num_columns(4)
+                .spacing(GRID_SPACING)
+                .show(ui, |ui| changed = corner_fields(ui, s, rect, radius));
+        });
+    } else {
+        super::section(ui, "Shape", |ui| {
+            egui::Grid::new("shape-inspector")
+                .num_columns(2)
+                .spacing(GRID_SPACING)
+                .min_col_width(LABEL_WIDTH)
+                .show(ui, |ui| changed = fields(ui, s, &geometry));
+        });
+    }
     let geometry = changed?;
     s.apply(Command::Batch {
         label: LABEL,
@@ -57,43 +70,78 @@ pub fn section(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
     .map(|e| format!("Change shape failed: {e}"))
 }
 
-/// The rows for `g`; returns the edited geometry, if any.
-fn fields(ui: &mut egui::Ui, s: &mut Session, g: &Geometry) -> Option<Geometry> {
+/// A rect's corners as they sit (top left | top right, bottom left |
+/// bottom right), then All corners (blank-looking 0 while they differ);
+/// returns the edited geometry, if any.
+fn corner_fields(
+    ui: &mut egui::Ui,
+    s: &mut Session,
+    rect: vextor_core::Rect,
+    radius: CornerRadii,
+) -> Option<Geometry> {
     let mut out = None;
-    match g.clone() {
-        Geometry::Rect { rect, radius } => {
-            let names = [
-                (Corner::TopLeft, "Top left"),
-                (Corner::TopRight, "Top right"),
-                (Corner::BottomRight, "Bottom right"),
-                (Corner::BottomLeft, "Bottom left"),
-            ];
-            for (corner, name) in names {
-                if let Some(v) = number(ui, s, name, corner.radius(radius), 0.0..=MAX_RADIUS, false)
-                {
-                    out = Some(Geometry::Rect {
-                        rect,
-                        radius: corner.with(radius, v),
-                    });
-                }
-            }
-            let all = radius.tl;
-            let same = [radius.tr, radius.br, radius.bl]
-                .iter()
-                .all(|r| (r - all).abs() < vextor_core::EPS);
-            let shown = if same { all } else { 0.0 };
-            if let Some(v) = number(ui, s, "All corners", shown, 0.0..=MAX_RADIUS, false) {
+    let rows = [
+        [
+            (Corner::TopLeft, Label("", Icon::CornerTopLeft, "Top left")),
+            (
+                Corner::TopRight,
+                Label("", Icon::CornerTopRight, "Top right"),
+            ),
+        ],
+        [
+            (
+                Corner::BottomLeft,
+                Label("", Icon::CornerBottomLeft, "Bottom left"),
+            ),
+            (
+                Corner::BottomRight,
+                Label("", Icon::CornerBottomRight, "Bottom right"),
+            ),
+        ],
+    ];
+    for row in rows {
+        for (corner, label) in row {
+            if let Some(v) = radius_field(ui, s, label, corner.radius(radius)) {
                 out = Some(Geometry::Rect {
                     rect,
-                    radius: CornerRadii {
-                        tl: v,
-                        tr: v,
-                        br: v,
-                        bl: v,
-                    },
+                    radius: corner.with(radius, v),
                 });
             }
         }
+        ui.end_row();
+    }
+    let all = radius.tl;
+    let same = [radius.tr, radius.br, radius.bl]
+        .iter()
+        .all(|r| (r - all).abs() < vextor_core::EPS);
+    let shown = if same { all } else { 0.0 };
+    let label = Label("", Icon::CornerAll, "All corners");
+    if let Some(v) = radius_field(ui, s, label, shown) {
+        out = Some(Geometry::Rect {
+            rect,
+            radius: CornerRadii {
+                tl: v,
+                tr: v,
+                br: v,
+                bl: v,
+            },
+        });
+    }
+    ui.end_row();
+    out
+}
+
+/// One icon-labelled corner radius (a grid cell pair, no row end); the
+/// new value when the user changed it. A drag is one undo step.
+fn radius_field(ui: &mut egui::Ui, s: &mut Session, label: Label, value: f64) -> Option<f64> {
+    label.show(ui);
+    edited(ui, s, value, 0.0..=MAX_RADIUS, false)
+}
+
+/// The rows for a polygon or star; returns the edited geometry, if any.
+fn fields(ui: &mut egui::Ui, s: &mut Session, g: &Geometry) -> Option<Geometry> {
+    let mut out = None;
+    match g.clone() {
         Geometry::Polygon {
             center,
             radius,
@@ -171,6 +219,20 @@ fn number(
     whole: bool,
 ) -> Option<f64> {
     ui.label(label);
+    let out = edited(ui, s, value, range, whole);
+    ui.end_row();
+    out
+}
+
+/// A number field for `value` in `range` (`whole`: a count); the new
+/// value when the user changed it. A drag is one undo step.
+fn edited(
+    ui: &mut egui::Ui,
+    s: &mut Session,
+    value: f64,
+    range: std::ops::RangeInclusive<f64>,
+    whole: bool,
+) -> Option<f64> {
     let mut v = value;
     let r = ui.add_sized(
         FIELD_SIZE,
@@ -180,7 +242,6 @@ fn number(
             .clamp_existing_to_range(false)
             .max_decimals(if whole { 0 } else { 2 }),
     );
-    ui.end_row();
     if r.drag_started() {
         s.begin_gesture();
     }
@@ -239,11 +300,22 @@ mod tests {
             sides: 7,
             corner_radius: 50_000.0,
         };
-        let (mut s, _) = session(big);
-        let before = s.doc.clone();
-        show(&mut s);
-        assert_eq!(s.doc, before);
-        assert_eq!(s.edit_menu().undo, None);
+        let mixed = Geometry::Rect {
+            rect: Rect::new(0.0, 0.0, 40.0, 20.0),
+            radius: CornerRadii {
+                tl: 2.0,
+                tr: 4.0,
+                br: 6.0,
+                bl: 8.0,
+            },
+        };
+        for geometry in [big, mixed] {
+            let (mut s, _) = session(geometry);
+            let before = s.doc.clone();
+            show(&mut s);
+            assert_eq!(s.doc, before);
+            assert_eq!(s.edit_menu().undo, None);
+        }
     }
 
     #[test]

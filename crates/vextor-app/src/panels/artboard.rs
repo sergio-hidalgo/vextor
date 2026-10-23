@@ -10,7 +10,7 @@ use vextor_core::Artboard;
 
 use super::PanelAction;
 use super::text::{color_tile, hex_field, section_toggle};
-use super::{FIELD_SIZE, GRID_SPACING, Label};
+use super::{FIELD_SIZE, GRID_SPACING, GRID_WIDTH, Label};
 use crate::artboard::{self, DEFAULT_BACKGROUND, MAX_NAME_CHARS};
 use crate::icons::{self, Icon};
 use crate::new_doc::MAX_SIDE;
@@ -55,8 +55,15 @@ struct Placed {
 }
 
 /// The Artboards list: one row per artboard (a click makes it current),
-/// the current one's move up / move down / delete buttons, and Add.
-pub(super) fn list_section(ui: &mut egui::Ui, s: &mut Session, actions: &mut Vec<PanelAction>) {
+/// the current one's move up / move down / delete buttons, and Add. The
+/// rows are as wide as the Artboard grid below, so the buttons end where
+/// its right-hand fields do. Returns the current row's buttons' rect.
+pub(super) fn list_section(
+    ui: &mut egui::Ui,
+    s: &mut Session,
+    actions: &mut Vec<PanelAction>,
+) -> Option<egui::Rect> {
+    let mut buttons = None;
     let current = artboard::current(s).map(|a| a.id);
     let rows: Vec<(vextor_core::ArtboardId, String)> = s
         .doc
@@ -68,53 +75,66 @@ pub(super) fn list_section(ui: &mut egui::Ui, s: &mut Session, actions: &mut Vec
     super::section(ui, "Artboards", |ui| {
         for (i, (id, name)) in rows.into_iter().enumerate() {
             let chosen = current == Some(id);
-            ui.horizontal(|ui| {
-                if ui.selectable_label(chosen, &name).clicked() {
-                    artboard::pick(s, id);
-                }
-                if !chosen {
-                    return;
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let only = "A document keeps at least one artboard";
-                    if icons::button(ui, Icon::Delete, false, count > 1, "Delete artboard", only)
-                        .clicked()
-                    {
-                        let _ = artboard::delete(s, id);
+            let row = egui::vec2(GRID_WIDTH, ui.spacing().interact_size.y);
+            ui.allocate_ui(row, |ui| {
+                ui.horizontal(|ui| {
+                    if ui.selectable_label(chosen, &name).clicked() {
+                        artboard::pick(s, id);
                     }
-                    let last = "Already the last";
-                    if icons::button(
-                        ui,
-                        Icon::MoveDown,
-                        false,
-                        i + 1 < count,
-                        "Move down (later in export order)",
-                        last,
-                    )
-                    .clicked()
-                    {
-                        artboard::reorder(s, id, false);
+                    if !chosen {
+                        return;
                     }
-                    let first = "Already the first";
-                    if icons::button(
-                        ui,
-                        Icon::MoveUp,
-                        false,
-                        i > 0,
-                        "Move up (earlier in export order)",
-                        first,
-                    )
-                    .clicked()
-                    {
-                        artboard::reorder(s, id, true);
-                    }
-                });
+                    let r =
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let only = "A document keeps at least one artboard";
+                            if icons::button(
+                                ui,
+                                Icon::Delete,
+                                false,
+                                count > 1,
+                                "Delete artboard",
+                                only,
+                            )
+                            .clicked()
+                            {
+                                let _ = artboard::delete(s, id);
+                            }
+                            let last = "Already the last";
+                            if icons::button(
+                                ui,
+                                Icon::MoveDown,
+                                false,
+                                i + 1 < count,
+                                "Move down (later in export order)",
+                                last,
+                            )
+                            .clicked()
+                            {
+                                artboard::reorder(s, id, false);
+                            }
+                            let first = "Already the first";
+                            if icons::button(
+                                ui,
+                                Icon::MoveUp,
+                                false,
+                                i > 0,
+                                "Move up (earlier in export order)",
+                                first,
+                            )
+                            .clicked()
+                            {
+                                artboard::reorder(s, id, true);
+                            }
+                        });
+                    buttons = Some(r.response.rect);
+                })
             });
         }
         if icons::button(ui, Icon::Add, false, true, "Add artboard…", "").clicked() {
             actions.push(PanelAction::AddArtboard);
         }
     });
+    buttons
 }
 
 /// The Artboard section, or "Nothing selected." for a document without
@@ -356,5 +376,29 @@ mod tests {
         // Name above X | Y, the Colour row below W | H.
         assert!(placed.name.bottom() <= placed.x.top());
         assert!(tile.top() > placed.h.bottom());
+    }
+
+    #[test]
+    fn the_artboard_list_buttons_end_with_the_artboard_fields() {
+        let mut s = Session::new(new_document("card", 320.0, 200.0));
+        let board = s.doc.artboards[0].clone();
+        let ctx = egui::Context::default();
+        let (mut left, mut buttons, mut fields) = (0.0, None, None);
+        for _ in 0..2 {
+            ctx.run_ui(egui::RawInput::default(), |ui| {
+                left = ui.cursor().min.x;
+                let indent = ui.spacing().indent;
+                buttons =
+                    list_section(ui, &mut s, &mut Vec::new()).map(|r| r.right() - (left + indent));
+                fields = Some(body(ui, &mut s, &board).y.right() - left);
+            })
+            .textures_delta
+            .clear();
+        }
+        let buttons = buttons.expect("the current artboard's buttons");
+        let fields = fields.expect("the Y field");
+        // Both measured from where their section's content starts.
+        assert!((fields - GRID_WIDTH).abs() < 0.5, "{fields}");
+        assert!((buttons - GRID_WIDTH).abs() < 0.5, "{buttons}");
     }
 }

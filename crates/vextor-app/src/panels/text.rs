@@ -1,15 +1,18 @@
 //! The inspector's Text section (spec 05c): font family and style, size,
-//! line height, letter spacing, alignment, text colour, background and
-//! border. Values show the first selected text; a change applies to every
-//! selected text, each keeping its other values.
+//! line height, letter spacing, alignment, background and border. The
+//! glyphs' colour is Inspector ▸ Fill and Stroke; background and border
+//! use the same paint picker (spec 09). Values show the first selected
+//! text; a change applies to every selected text, each keeping its other
+//! values.
 
 use eframe::egui::{self, RichText};
-use vextor_core::{NodeId, NodeKind, Paint, Rgba, Stroke, Text, TextAlign};
+use vextor_core::{NodeId, NodeKind, Paint, Rgba, Text, TextAlign};
 
 use super::fonts::{family_picker, remember_family, style_picker};
-use super::restyle::{Edit, empty_frame, restyle};
+use super::restyle::{Edit, restyle};
 use super::{FIELD_SIZE, GRID_SPACING, LABEL_WIDTH};
 use crate::icons::{self, Icon};
+use crate::paint_edit::{self, Target};
 use crate::session::Session;
 use crate::theme;
 
@@ -103,20 +106,19 @@ fn body(ui: &mut egui::Ui, s: &mut Session, texts: &[(NodeId, Text)]) -> Option<
                 }
             });
             ui.end_row();
-            ui.label("Colour");
-            if let Some(c) = color_field(ui, "text-colour", solid(first.style.fill)) {
-                edit = Some(Edit::Color(c));
-            }
-            ui.end_row();
         });
 
-    frame_fields(ui, s, &first, &mut edit);
+    let ids: Vec<NodeId> = texts.iter().map(|(id, _)| *id).collect();
+    let frame_message = frame_fields(ui, s, &ids, &first, &mut edit);
 
-    let edit = edit?;
+    let Some(edit) = edit else {
+        return frame_message;
+    };
     let cmd = restyle(texts, &edit);
     s.apply(cmd)
         .err()
         .map(|e| format!("Change text failed: {e}"))
+        .or(frame_message)
 }
 
 /// "Font missing: X — showing Y", or that fonts are still loading.
@@ -133,27 +135,35 @@ fn font_note(ui: &mut egui::Ui, s: &Session, id: NodeId, t: &Text) {
     ui.label(RichText::new(note).color(theme::YELLOW).small());
 }
 
-/// Background (colour, padding, radius) and Border (colour, width): each
-/// a ticked section title with its fields underneath while it is on.
-fn frame_fields(ui: &mut egui::Ui, s: &mut Session, t: &Text, edit: &mut Option<Edit>) {
-    let frame = t.frame.clone().unwrap_or_else(empty_frame);
+/// Background (its paint, padding, radius) and Border (its paint and
+/// stroke): each a ticked section title with its fields underneath while
+/// it is on. Paint changes are applied here (`paint_edit`); padding and
+/// radius go into `edit`. Returns a message when a paint edit was refused.
+fn frame_fields(
+    ui: &mut egui::Ui,
+    s: &mut Session,
+    ids: &[NodeId],
+    t: &Text,
+    edit: &mut Option<Edit>,
+) -> Option<String> {
+    let frame = t.frame.clone().unwrap_or_else(paint_edit::empty_frame);
+    let mut message = None;
     let background = frame.fill != Paint::None;
     if section_toggle(ui, "Background", background) {
-        *edit = Some(Edit::Background(
-            (!background).then_some(Rgba::rgb(0xE7, 0xE7, 0xE7)),
-        ));
+        let paint = if background {
+            Paint::None
+        } else {
+            Paint::Solid(Rgba::rgb(0xE7, 0xE7, 0xE7))
+        };
+        message = toggle(s, ids, Target::Background, paint);
     }
     if background {
+        message = super::paint::picker(ui, s, ids, Target::Background).or(message);
         egui::Grid::new("text-background-inspector")
             .num_columns(2)
             .spacing(GRID_SPACING)
             .min_col_width(LABEL_WIDTH)
             .show(ui, |ui| {
-                ui.label("Colour");
-                if let Some(c) = color_field(ui, "text-background", solid(frame.fill)) {
-                    *edit = Some(Edit::Background(Some(c)));
-                }
-                ui.end_row();
                 let [top, right, ..] = frame.padding;
                 number(
                     ui,
@@ -188,39 +198,27 @@ fn frame_fields(ui: &mut egui::Ui, s: &mut Session, t: &Text, edit: &mut Option<
             });
     }
 
-    let border = frame.stroke.clone();
-    if section_toggle(ui, "Border", border.is_some()) {
-        *edit = Some(Edit::Border(border.is_none().then(|| Stroke {
-            paint: Paint::Solid(Rgba::BLACK),
-            ..Stroke::default()
-        })));
+    let border = frame.stroke.is_some();
+    if section_toggle(ui, "Border", border) {
+        let paint = if border {
+            Paint::None
+        } else {
+            Paint::Solid(Rgba::BLACK)
+        };
+        message = toggle(s, ids, Target::Border, paint).or(message);
     }
-    if let Some(b) = &border {
-        egui::Grid::new("text-border-inspector")
-            .num_columns(2)
-            .spacing(GRID_SPACING)
-            .min_col_width(LABEL_WIDTH)
-            .show(ui, |ui| {
-                ui.label("Colour");
-                if let Some(c) = color_field(ui, "text-border", solid(b.paint)) {
-                    *edit = Some(Edit::Border(Some(Stroke {
-                        paint: Paint::Solid(c),
-                        ..b.clone()
-                    })));
-                }
-                ui.end_row();
-                number(
-                    ui,
-                    s,
-                    "Width",
-                    b.width,
-                    0.1,
-                    0.0..=100.0,
-                    edit,
-                    Edit::BorderWidth,
-                );
-            });
+    if border {
+        message = super::paint::picker(ui, s, ids, Target::Border).or(message);
     }
+    message
+}
+
+/// Turns a background or border on (with `paint`) or off (`Paint::None`).
+fn toggle(s: &mut Session, ids: &[NodeId], target: Target, paint: Paint) -> Option<String> {
+    let cmd = paint_edit::command(&s.doc, ids, target, &paint_edit::Edit::Paint(paint))?;
+    s.apply(cmd)
+        .err()
+        .map(|e| format!("{} failed: {e}", target.label()))
 }
 
 /// A section title with a tick box that turns the section on and off.
@@ -271,21 +269,13 @@ fn number(
     ui.end_row();
 }
 
-/// A hex field with a swatch (spec 09's paint picker replaces it).
-pub(super) fn color_field(ui: &mut egui::Ui, id: &str, current: Option<Rgba>) -> Option<Rgba> {
-    let color = current.unwrap_or(Rgba::BLACK);
-    ui.horizontal(|ui| {
-        let tile = color_tile(ui, color);
-        hex_field(ui, id, color, 72.0).or(tile)
-    })
-    .inner
-}
-
-/// A colour tile that opens the colour picker, as wide as the layout's
+/// Artboard background (spec 05e): a colour tile that opens the colour picker, as wide as the layout's
 /// interact size; the colour picked, if any.
 pub(super) fn color_tile(ui: &mut egui::Ui, color: Rgba) -> Option<Rgba> {
     let mut swatch = egui::Color32::from_rgba_unmultiplied(color.r, color.g, color.b, color.a);
-    if !ui.color_edit_button_srgba(&mut swatch).changed() {
+    // Normal blending only: SVG has no additive colour.
+    let alpha = egui::color_picker::Alpha::OnlyBlend;
+    if !egui::color_picker::color_edit_button_srgba(ui, &mut swatch, alpha).changed() {
         return None;
     }
     let [r, g, b, a] = swatch.to_srgba_unmultiplied();
@@ -311,13 +301,6 @@ pub(super) fn hex_field(ui: &mut egui::Ui, id: &str, color: Rgba, width: f32) ->
         ui.data_mut(|d| d.remove::<String>(key));
     }
     picked
-}
-
-fn solid(p: Paint) -> Option<Rgba> {
-    match p {
-        Paint::Solid(c) => Some(c),
-        _ => None,
-    }
 }
 
 #[cfg(test)]
@@ -390,31 +373,43 @@ mod tests {
             let texts = selected_texts(s);
             s.apply(restyle(&texts, &e)).expect("applies");
         };
-        step(&mut s, Edit::Background(Some(Rgba::rgb(30, 144, 255))));
+        let blue = Paint::Solid(Rgba::rgb(30, 144, 255));
+        assert_eq!(toggle(&mut s, &ids, Target::Background, blue), None);
         let f = text(&s, ids[0]).frame.clone().expect("framed");
-        assert_eq!(f.fill, Paint::Solid(Rgba::rgb(30, 144, 255)));
+        assert_eq!(f.fill, blue);
         assert_eq!(f.padding, [8.0, 16.0, 8.0, 16.0]);
         step(&mut s, Edit::PaddingX(4.0));
         step(&mut s, Edit::Radius(12.0));
-        step(&mut s, Edit::Border(Some(Stroke::default())));
-        step(&mut s, Edit::BorderWidth(2.0));
+        let black = Paint::Solid(Rgba::BLACK);
+        assert_eq!(toggle(&mut s, &ids, Target::Border, black), None);
+        let width =
+            paint_edit::command(&s.doc, &ids, Target::Border, &paint_edit::Edit::Width(2.0));
+        s.apply(width.expect("a border")).expect("applies");
         let f = text(&s, ids[0]).frame.clone().expect("framed");
         assert_eq!(f.padding, [8.0, 4.0, 8.0, 4.0]);
         assert!((f.radius.br - 12.0).abs() < 1e-9);
         assert!((f.stroke.expect("border").width - 2.0).abs() < 1e-9);
 
-        step(&mut s, Edit::Background(None));
+        assert_eq!(toggle(&mut s, &ids, Target::Background, Paint::None), None);
         assert!(text(&s, ids[0]).frame.is_some(), "the border remains");
-        step(&mut s, Edit::Border(None));
+        assert_eq!(toggle(&mut s, &ids, Target::Border, Paint::None), None);
         assert_eq!(text(&s, ids[0]).frame, None);
-        assert_eq!(s.edit_menu().undo, Some("Change text frame"));
+        assert_eq!(s.edit_menu().undo, Some("Change border"));
     }
 
     #[test]
-    fn colour_size_and_alignment() {
+    fn padding_without_a_background_or_border_makes_no_frame() {
+        let (mut s, ids) = session_with(vec![Text::new("x", "Inter")]);
+        let texts = selected_texts(&s);
+        s.apply(restyle(&texts, &Edit::PaddingX(4.0)))
+            .expect("applies");
+        assert_eq!(text(&s, ids[0]).frame, None);
+    }
+
+    #[test]
+    fn size_and_alignment() {
         let (mut s, ids) = session_with(vec![Text::new("x", "Inter")]);
         for e in [
-            Edit::Color(Rgba::rgb(255, 0, 0)),
             Edit::Size(18.0),
             Edit::LineHeight(1.5),
             Edit::Spacing(0.5),
@@ -424,7 +419,6 @@ mod tests {
             s.apply(restyle(&texts, &e)).expect("applies");
         }
         let t = text(&s, ids[0]);
-        assert_eq!(t.style.fill, Paint::Solid(Rgba::rgb(255, 0, 0)));
         assert!((t.size - 18.0).abs() < 1e-9);
         assert!((t.line_height - 1.5).abs() < 1e-9);
         assert!((t.letter_spacing - 0.5).abs() < 1e-9);

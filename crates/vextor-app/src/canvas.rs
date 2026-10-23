@@ -26,6 +26,8 @@ mod artboard_label;
 mod context_menu;
 mod document;
 mod drag_layers;
+mod eyedropper;
+mod gradient_handles;
 mod grid;
 #[cfg(test)]
 mod harness;
@@ -84,6 +86,11 @@ pub struct Canvas {
     pub hide_smart_guides: bool,
     /// The last right-click landed on an object (spec 08c).
     menu_on_object: bool,
+    /// A gradient handle being dragged (spec 09).
+    gradient_drag: Option<gradient_handles::GradientDrag>,
+    /// The gradient handle under the pointer (or dragged) this frame: its
+    /// grab cursor wins over the Select tool's resize and rotate ones.
+    gradient_hover: Option<crate::paint_edit::GradientPoint>,
 }
 
 impl Canvas {
@@ -155,7 +162,12 @@ impl Canvas {
             .or_else(|| self.shape_keys(ui, session));
         let (used, label_message) = self.label_input(ui, &response, rect, session);
         let key_message = label_message.or(key_message);
-        let message = if used || self.zoom_input(ui, &response, rect, session) {
+        self.gradient_hover = None;
+        let message = if used
+            || self.eyedropper_input(ui, &response, rect, session)
+            || self.gradient_input(ui, &response, rect, session)
+            || self.zoom_input(ui, &response, rect, session)
+        {
             key_message
         } else {
             self.tool_input(ui, &response, rect, session)
@@ -190,7 +202,9 @@ impl Canvas {
             self.draw_zoom_rect(&painter);
         } else {
             self.draw_selection(ui, &painter, &response, rect, session);
+            self.draw_gradient_handles(&painter, rect.min, session);
         }
+        Self::draw_eyedropper_hint(ui, &painter, rect, session);
         self.draw_snap_hint(&painter, rect.min, session, ui.visuals().extreme_bg_color);
         self.draw_status(ui, &painter, rect);
         self.zoom_bar(ui, rect, session);

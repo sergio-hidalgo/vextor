@@ -46,7 +46,10 @@ pub use resource::{
     Gradient, GradientKind, GradientStop, GradientUnits, Pattern, Resource, Spread,
 };
 pub use settings::{GridSettings, IdMode, SnapSettings, Styling, SvgExportOptions};
-pub use style::{LineCap, LineJoin, Paint, Stroke, Style, Swatch};
+pub use style::{
+    LineCap, LineJoin, MAX_SWATCH_NAME_CHARS, MAX_SWATCHES, Paint, Stroke, Style, Swatch,
+    SwatchKind,
+};
 pub use text::{
     FONT_WEIGHTS, FontSpec, MAX_FONT_FAMILY_CHARS, MAX_TEXT_CHARS, Text, TextAlign, TextFrame,
 };

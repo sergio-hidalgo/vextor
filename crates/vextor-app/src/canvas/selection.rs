@@ -126,6 +126,11 @@ impl Canvas {
     /// Resize arrows over (or dragging) a handle, the move cursor while
     /// moving, and no system cursor where the drawn rotate cursor shows.
     fn set_cursor(&self, ui: &egui::Ui, session: &Session, at: Option<kurbo::Point>) {
+        // A gradient handle under the pointer keeps its grab cursor, even
+        // on a scale handle or in the rotate zone (spec 09).
+        if self.gradient_hover.is_some() {
+            return;
+        }
         let tool = session.editor.tool;
         let cursor = if self.is_editing_text() || tool == vextor_core::ToolId::Text {
             Some(egui::CursorIcon::Text)
@@ -178,7 +183,7 @@ impl Canvas {
             return;
         };
         let at = view::screen_to_doc(view, to_point(p - rect.min));
-        let target = (!self.tool.is_dragging())
+        let target = (!self.tool.is_dragging() && self.gradient_hover.is_none())
             .then(|| SelectTool::target(session, kurbo::Point::new(at.x, at.y), view.zoom));
         if let Some(Target::Object(o)) = target
             && !selected.contains(&o)

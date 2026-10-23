@@ -1,5 +1,6 @@
 //! Edit operations that build [`Command`]s from the current document:
-//! copy / paste, stacking order, and the world transforms they rely on.
+//! copy / paste, stacking order, making a pattern (spec 09), and the world
+//! transforms they rely on.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -8,9 +9,9 @@ use crate::document::{Document, Parent};
 use crate::editor::{ClipResource, ClipboardPayload};
 use crate::error::CoreError;
 use crate::ids::{NodeId, ResourceId};
-use crate::math::Transform;
+use crate::math::{EPS, Rect, Transform};
 use crate::node::Node;
-use crate::resource::Resource;
+use crate::resource::{Pattern, Resource};
 use crate::style::Paint;
 
 /// A change of stacking order among siblings.
@@ -181,6 +182,63 @@ impl Document {
             nodes,
         });
         Ok((Command::Batch { label, commands }, roots))
+    }
+
+    /// The command that adds a pattern made of copies of `roots` (listed
+    /// bottom → top) tiled by `tile`, a document-space rectangle; and the
+    /// new pattern's id. The copies keep their place relative to the
+    /// tile's top-left corner, which becomes the pattern's origin; the
+    /// originals stay where they are. One undo step, "Make pattern".
+    ///
+    /// # Errors
+    /// [`CoreError::NodeNotFound`] for a missing root;
+    /// [`CoreError::InvalidCommand`] when `roots` is empty or holds a layer,
+    /// or `tile` has no area.
+    pub fn make_pattern(
+        &mut self,
+        roots: &[NodeId],
+        tile: Rect,
+    ) -> Result<(Command, ResourceId), CoreError> {
+        if roots.is_empty() {
+            return Err(CoreError::InvalidCommand(
+                "select the objects to make a pattern of",
+            ));
+        }
+        if roots
+            .iter()
+            .any(|id| self.nodes.get(id).is_some_and(Node::is_layer))
+        {
+            return Err(CoreError::InvalidCommand("a layer cannot become a pattern"));
+        }
+        if !tile.is_finite() || tile.width <= EPS || tile.height <= EPS {
+            return Err(CoreError::InvalidCommand("a pattern tile needs an area"));
+        }
+        let payload = self.copy(roots)?;
+        let (mut nodes, map) = self.fresh_copies_mapped(&payload.nodes);
+        // `copy` succeeded, so every root is in `map`.
+        let content: Vec<NodeId> = roots.iter().map(|id| map[id]).collect();
+        let to_tile = Transform::translate(-tile.x, -tile.y);
+        for node in &mut nodes {
+            if content.contains(&node.id) {
+                node.transform = node.transform.then(to_tile);
+            }
+        }
+        let id = self.alloc_resource_id();
+        let pattern = Pattern {
+            name: None,
+            tile: Rect::new(0.0, 0.0, tile.width, tile.height),
+            transform: Transform::IDENTITY,
+            content,
+        };
+        let cmd = Command::Batch {
+            label: "Make pattern",
+            commands: vec![Command::PutResource {
+                id,
+                resource: Resource::Pattern(pattern),
+                nodes,
+            }],
+        };
+        Ok((cmd, id))
     }
 
     /// The command that restacks `ids` among their siblings, or `None` when

@@ -58,11 +58,29 @@ pub enum LineJoin {
     Bevel,
 }
 
-/// A named colour kept with the document.
+/// Most swatches a document keeps.
+pub const MAX_SWATCHES: usize = 256;
+/// Longest swatch name, in characters.
+pub const MAX_SWATCH_NAME_CHARS: usize = 64;
+
+/// A named colour kept with the document, in the fill or the stroke list.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Swatch {
     pub name: Option<String>,
     pub color: Rgba,
+    /// Which list it is in. Files without it load as fill swatches.
+    #[serde(default)]
+    pub kind: SwatchKind,
+}
+
+/// The swatch lists: fills (and text backgrounds), strokes (and text
+/// borders). Each colour editor shows and adds to its own list.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SwatchKind {
+    #[default]
+    Fill,
+    Stroke,
 }
 
 impl Default for Style {

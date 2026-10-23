@@ -5,11 +5,12 @@ use std::sync::Arc;
 
 use vextor_core::{
     Command, CoreError, Document, EditorState, Geometry, GridSettings, History, NodeId, NodeKind,
-    Path, PathNode, PathNodeRef, Selection, Shape, Style,
+    Path, PathNode, PathNodeRef, Rgba, Selection, Shape, Style,
 };
 use vextor_geom::Fonts;
 
 use crate::files;
+use crate::swatch_library::Swatches;
 
 /// The document being edited, its undo history and what the user is
 /// working with. Every edit goes through [`Session::apply`].
@@ -27,6 +28,14 @@ pub struct Session {
     /// The artboard last picked, shown by Inspector ▸ Artboard (spec 08;
     /// see `artboard::current`).
     pub artboard: Option<vextor_core::ArtboardId>,
+    /// The eyedropper (spec 09): the colour editor waiting for a pick on
+    /// the canvas, by its key; and the colour picked for it, until that
+    /// editor takes it. Not saved, not undone.
+    pub eyedropper: Option<u64>,
+    pub picked: Option<(u64, Rgba)>,
+    /// The app's swatch library, shared by every session (spec 09; the
+    /// app loads and saves it). Empty and unsaved in tests.
+    pub swatches: Swatches,
     /// The file the document was opened from or last saved to.
     path: Option<PathBuf>,
     /// `revision` when the document last matched its file (or was
@@ -55,6 +64,9 @@ impl Session {
             revision: 0,
             needs_fit: true,
             artboard: None,
+            eyedropper: None,
+            picked: None,
+            swatches: Swatches::default(),
             path: None,
             saved_revision: Some(0),
         }

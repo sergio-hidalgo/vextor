@@ -16,18 +16,31 @@ const GRID_SPACING: [f32; 2] = [12.0, 6.0];
 /// Width of the label column in the Text section's grids, so their
 /// fields (colour swatches and hex values included) line up.
 const LABEL_WIDTH: f32 = 84.0;
+/// Width of an icon label's column in the four-column grids (Transform,
+/// Artboard, Corners): fixed, so their fields line up from section to
+/// section whatever letter or icon labels them. It equals egui's minimum
+/// grid column width (the interact width, 40), which those grids apply
+/// anyway, so the constant says what is on screen.
+const ICON_LABEL_WIDTH: f32 = 40.0;
 /// Size of every number field: fixed, so typing or dragging a longer
 /// value never shifts the panel.
 const FIELD_SIZE: [f32; 2] = [64.0, 20.0];
+/// Width of a four-column grid (label, field, label, field): where its
+/// right-hand fields end. Rows of buttons end there too.
+const GRID_WIDTH: f32 = 2.0 * ICON_LABEL_WIDTH + 2.0 * FIELD_SIZE[0] + 3.0 * GRID_SPACING[0];
 /// Space kept free at the right of the inspector's content, matching the
 /// panel's own margin on the left (the scroll bar floats over it).
 const RIGHT_MARGIN: i8 = 10;
+/// Empty space under the inspector's last section, so scrolled to the
+/// end it sits clear of the Layers panel instead of against its edge.
+const INSPECTOR_END_SPACE: f32 = 24.0;
 /// Starting height of the Layers area, in points.
 const LAYERS_HEIGHT: f32 = 160.0;
 
 mod arrange;
 mod artboard;
 mod fonts;
+mod paint;
 mod path;
 mod restyle;
 mod shape;
@@ -35,6 +48,7 @@ mod text;
 
 pub use arrange::PanelAction;
 pub use fonts::recent_families;
+pub use paint::escape_bad_hex;
 
 /// The tools strip, in groups: tool, icon, tooltip (name and key).
 const TOOLS: [&[(ToolId, Icon, &str)]; 5] = [
@@ -103,7 +117,9 @@ pub fn inspector_and_layers(
         .id_salt("inspector-scroll")
         .auto_shrink(false)
         .show(ui, |ui| {
-            right_margin(ui, |ui| inspector_sections(ui, session, to_artboard))
+            let out = right_margin(ui, |ui| inspector_sections(ui, session, to_artboard));
+            ui.add_space(INSPECTOR_END_SPACE);
+            out
         })
         .inner
 }
@@ -157,7 +173,7 @@ fn inspector_sections(
             artboard::section(ui, s);
             return (None, actions);
         }
-        let message = inspector(ui, s);
+        let message = inspector(ui, s, &mut actions);
         let message = path::sections(ui, s).or(message);
         let can = edit_ops::can(s);
         arrange::align_section(
@@ -190,7 +206,8 @@ fn section(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
 
 /// X, Y, W, H of the selection box and the rotation of a single object.
 /// Dragging a value is one undo step; typing one is one step per change.
-fn inspector(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
+fn inspector(ui: &mut egui::Ui, s: &mut Session, actions: &mut Vec<PanelAction>) -> Option<String> {
+    let can_edit = edit_ops::can(s).edit;
     let ids = s.selected();
     let Some(b) = union_bounds(&s.doc, &s.fonts, &ids) else {
         ui.weak("Nothing selected.");
@@ -225,16 +242,21 @@ fn inspector(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
                     });
                 } else {
                     angle.show(ui);
-                    ui.add_enabled(false, egui::DragValue::new(&mut 0.0))
-                        .on_disabled_hover_text(
-                            "Rotate one object at a time here, or use the corners",
-                        );
+                    ui.add_enabled_ui(false, |ui| {
+                        ui.add_sized(FIELD_SIZE, egui::DragValue::new(&mut 0.0))
+                    })
+                    .inner
+                    .on_disabled_hover_text("Rotate one object at a time here, or use the corners");
                 }
+                // Under H's label (empty), then the flips ending with its field.
+                ui.label("");
+                flip_buttons(ui, can_edit, actions);
                 ui.end_row();
             });
     });
     let shape_message = shape::section(ui, s);
     let text_message = text::section(ui, s).or(shape_message);
+    let text_message = paint::sections(ui, s).or(text_message);
     let Some(change) = edit else {
         return text_message;
     };
@@ -245,6 +267,33 @@ fn inspector(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
         _ => edit_ops::transform(s, affine, label),
     }
     .err()
+}
+
+/// Flip Horizontal and Flip Vertical as icon buttons sharing a number
+/// field's width, so they start and end where the fields above do (like
+/// Object ▸ Flip). Returns the buttons' rect.
+fn flip_buttons(ui: &mut egui::Ui, enabled: bool, actions: &mut Vec<PanelAction>) -> egui::Rect {
+    let size = egui::vec2(FIELD_SIZE[0], FIELD_SIZE[1]);
+    let layout = egui::Layout::right_to_left(egui::Align::Center);
+    let gap = 4.0;
+    // Each button: half the field (less the gap), and the field's height,
+    // so the row stays one even line with the ° field beside it.
+    let button = egui::vec2((FIELD_SIZE[0] - gap) / 2.0, FIELD_SIZE[1]);
+    ui.allocate_ui_with_layout(size, layout, |ui| {
+        ui.spacing_mut().item_spacing.x = gap;
+        // Right to left: vertical sits last, so horizontal reads first.
+        for (icon, horizontal, tip) in [
+            (Icon::FlipVertical, false, "Flip vertically"),
+            (Icon::FlipHorizontal, true, "Flip horizontally"),
+        ] {
+            let why = "Select an object first";
+            if icons::quiet_button(ui, icon, button, false, enabled, tip, why).clicked() {
+                actions.push(PanelAction::Flip { horizontal });
+            }
+        }
+    })
+    .response
+    .rect
 }
 
 /// One edit from the inspector.
@@ -284,17 +333,24 @@ impl Change {
 }
 
 /// A labelled number. A drag is wrapped in a history gesture.
-/// A field's label: its letter, then a small icon saying what it is.
+/// A field's label: its letter (may be empty), then a small icon saying
+/// what it is; the last part is the tooltip. Always
+/// [`ICON_LABEL_WIDTH`] wide, so fields line up across sections.
 #[derive(Clone, Copy)]
 struct Label(&'static str, Icon, &'static str);
 
 impl Label {
-    fn show(self, ui: &mut egui::Ui) {
+    fn show(self, ui: &mut egui::Ui) -> egui::Rect {
         ui.horizontal(|ui| {
+            ui.set_min_width(ICON_LABEL_WIDTH);
             ui.spacing_mut().item_spacing.x = 4.0;
-            ui.label(self.0);
+            if !self.0.is_empty() {
+                ui.label(self.0);
+            }
             icons::label(ui, self.1, self.2);
-        });
+        })
+        .response
+        .rect
     }
 }
 
@@ -340,6 +396,77 @@ mod tests {
     use super::*;
 
     const B: Rect = Rect::new(10.0, 20.0, 50.0, 40.0);
+
+    #[test]
+    fn every_grid_label_is_one_width_so_fields_line_up_across_sections() {
+        // Transform, Artboard and Corners share the four-column grid; with
+        // labels this wide their fields start and end at the same x.
+        let labels = [
+            Label("X", Icon::PosX, ""),
+            Label("Y", Icon::PosY, ""),
+            Label("W", Icon::Width, ""),
+            Label("H", Icon::Height, ""),
+            Label("°", Icon::Angle, ""),
+            Label("", Icon::CornerTopLeft, ""),
+            Label("", Icon::CornerBottomRight, ""),
+            Label("", Icon::CornerAll, ""),
+        ];
+        let ctx = egui::Context::default();
+        let mut widths = Vec::new();
+        ctx.run_ui(egui::RawInput::default(), |ui| {
+            for label in labels {
+                widths.push(label.show(ui).width());
+            }
+        })
+        .textures_delta
+        .clear();
+        for w in widths {
+            assert!((w - ICON_LABEL_WIDTH).abs() < 0.5, "{w}");
+        }
+    }
+
+    #[test]
+    fn flip_buttons_span_a_field_and_flip_each_way() {
+        let ctx = egui::Context::default();
+        let run = |events: Vec<egui::Event>| {
+            let mut actions = Vec::new();
+            let mut cell = egui::Rect::NOTHING;
+            let input = egui::RawInput {
+                events,
+                ..egui::RawInput::default()
+            };
+            ctx.run_ui(input, |ui| cell = flip_buttons(ui, true, &mut actions))
+                .textures_delta
+                .clear();
+            (cell, actions)
+        };
+        let (cell, _) = run(vec![]);
+        // Drawn from the cell's left (0): the buttons start and end where
+        // a field does.
+        assert!((cell.right() - FIELD_SIZE[0]).abs() < 0.5, "{cell:?}");
+        assert!(cell.left().abs() < 0.5, "{cell:?}");
+        // As tall as a field, from the same top.
+        assert!((cell.height() - FIELD_SIZE[1]).abs() < 0.5, "{cell:?}");
+        assert!(cell.top().abs() < 0.5, "{cell:?}");
+        let click = |pos| {
+            [true, false].map(|pressed| egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            })
+        };
+        // Vertical is flush right; horizontal sits just left of it.
+        let vertical = cell.right_center() - egui::vec2(6.0, 0.0);
+        let horizontal = cell.right_center() - egui::vec2(40.0, 0.0);
+        for (at, want) in [(horizontal, true), (vertical, false)] {
+            run(vec![egui::Event::PointerMoved(at)]);
+            let [down, up] = click(at);
+            run(vec![down]);
+            let (_, actions) = run(vec![up]);
+            assert_eq!(actions, vec![PanelAction::Flip { horizontal: want }]);
+        }
+    }
 
     #[test]
     fn every_tool_is_in_the_strip_once_with_its_name_and_key() {
