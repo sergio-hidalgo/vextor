@@ -47,6 +47,15 @@ pub enum Command {
     Ungroup {
         id: NodeId,
     },
+    /// Groups siblings like [`Command::Group`] and makes the topmost of
+    /// them, which must be a shape, the new group's clip (spec 10).
+    MakeClip {
+        ids: Vec<NodeId>,
+    },
+    /// Stops a group clipping: its clip shape stays, drawn again.
+    ReleaseClip {
+        id: NodeId,
+    },
 
     // ----- properties -----
     SetTransform {
@@ -208,6 +217,8 @@ impl Command {
             Self::Reparent { .. } => "Move to layer",
             Self::Group { .. } => "Group",
             Self::Ungroup { .. } => "Ungroup",
+            Self::MakeClip { .. } => "Make clip",
+            Self::ReleaseClip { .. } => "Release clip",
             Self::SetTransform { .. } | Self::SetTransforms { .. } => "Transform",
             Self::SetStyle { .. } => "Change style",
             Self::SetText { .. } => "Edit text",

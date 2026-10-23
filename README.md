@@ -147,6 +147,25 @@ black, and no fill. The corner dots show only when the rectangle is at
 least 40 points on screen; zoom in for small ones. Each drag, dialog or
 inspector change is one undo step.
 
+### Layers
+
+The Layers panel (bottom of the right-hand panel) lists the layers, groups
+and objects, top of the stack first.
+
+| Action                        | How                                                        |
+| :---------------------------- | :--------------------------------------------------------- |
+| Select an object              | click its row (`⇧`-click adds or removes); selecting on the canvas opens and scrolls to its row |
+| Current layer                 | click a layer row: it is highlighted, and new shapes, text, paths and pastes go into it when nothing is selected |
+| Show / hide, lock / unlock    | the eye and lock at the left of each row. Hidden objects are not drawn or copied; locked ones cannot be clicked on the canvas |
+| Rename                        | double-click the name, type, `Enter` (`Esc` cancels; blank goes back to the default name). Text is listed with a `T` and its first line until renamed. Names are kept as typed and become ids (lowercase, words joined by `-`) in exported SVG |
+| Open / close a layer or group | the triangle before its icon                               |
+| Reorder, move into            | drag a row: drop on the top or bottom edge of a row to place it above or below, on the middle of a layer or group to move it inside. Objects stay where they are on the canvas |
+| Layer opacity                 | the Opacity field over the list, for the current layer (each layer keeps its own) |
+| New, duplicate, delete layer  | the `+`, duplicate and bin buttons over the list. Delete takes the layer's contents with it; the last layer stays |
+| Clip                          | select objects with a shape on top, Object ▸ Make Clip (or right-click): the shape clips the rest, in a new group. Object ▸ Release Clip undoes the clipping |
+
+Every change is one undo step. No blend modes or layer effects.
+
 ### Colour and paint
 
 Select one or more objects; Inspector ▸ Fill, Stroke and Opacity show the

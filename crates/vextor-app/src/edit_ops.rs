@@ -8,8 +8,10 @@ use vextor_core::{Arrange, Command, Document, NodeId, NodeKind, Parent, Transfor
 
 use crate::session::Session;
 
+mod clip;
 mod placement;
 
+pub use clip::{MAKE_CLIP_HINT, make_clip, release_clip};
 pub(crate) use placement::artboard_at;
 pub use placement::{align, distribute, flip, has_text, nudge, resize, resize_commands, transform};
 
@@ -33,6 +35,9 @@ pub struct Can {
     pub forward: bool,
     /// Something selected can go down (Send Backward / to Back).
     pub backward: bool,
+    /// Make Clip / Release Clip (spec 10).
+    pub make_clip: bool,
+    pub release_clip: bool,
 }
 
 /// The four arrange commands in menu order: command, name, keys (spec
@@ -85,6 +90,8 @@ pub fn can(s: &Session) -> Can {
         convert: !crate::convert_path::convertible(s).is_empty(),
         forward: s.doc.can_arrange(&sel, Arrange::Forward),
         backward: s.doc.can_arrange(&sel, Arrange::Backward),
+        make_clip: clip::make_clip_why(s).is_none(),
+        release_clip: clip::can_release_clip(s),
     }
 }
 
@@ -271,20 +278,28 @@ fn apply(s: &mut Session, cmd: Command) -> Result<(), String> {
 }
 
 /// Where a paste (or a new object) goes: above the topmost selected
-/// object, else on top of the topmost visible, unlocked layer.
+/// object, else on top of the current layer (spec 10) when it is visible
+/// and unlocked, else of the topmost visible, unlocked layer.
 pub(crate) fn paste_target(s: &Session) -> Option<(NodeId, usize)> {
     if let Some(&top) = s.selected().last()
         && let Some(Parent::Node(p)) = s.doc.parent_of(top)
     {
         return Some((p, index_in(&s.doc, p, top)? + 1));
     }
-    s.doc
-        .layers
-        .iter()
-        .rev()
-        .filter_map(|l| s.doc.nodes.get(l))
-        .find(|l| l.visible && !l.locked)
-        .and_then(|l| Some((l.id, l.container()?.children.len())))
+    let open = |l: &&vextor_core::Node| l.visible && !l.locked;
+    crate::layers::current_layer(s)
+        .and_then(|l| s.doc.nodes.get(&l))
+        .filter(open)
+        .into_iter()
+        .chain(
+            s.doc
+                .layers
+                .iter()
+                .rev()
+                .filter_map(|l| s.doc.nodes.get(l))
+                .filter(open),
+        )
+        .find_map(|l| Some((l.id, l.container()?.children.len())))
 }
 
 fn index_in(doc: &Document, parent: NodeId, id: NodeId) -> Option<usize> {

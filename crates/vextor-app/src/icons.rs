@@ -8,6 +8,7 @@ use crate::theme;
 
 mod arrange;
 mod buttons;
+mod layers;
 mod paint;
 mod path;
 mod tools;
@@ -110,6 +111,15 @@ pub enum Icon {
     JoinMiter,
     JoinRound,
     JoinBevel,
+    /// Layers panel (spec 10): visible / hidden, locked / unlocked, the
+    /// row icons of a layer and an image, and Duplicate layer.
+    Eye,
+    EyeOff,
+    Lock,
+    Unlock,
+    Layer,
+    Image,
+    Duplicate,
 }
 
 /// Size of a tool button in the tools strip, and of its icon, in points.
@@ -257,6 +267,13 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
         Icon::ArrangeFront | Icon::ArrangeForward | Icon::ArrangeBackward | Icon::ArrangeBack => {
             pen.arrange_icon(icon);
         }
+        Icon::Eye
+        | Icon::EyeOff
+        | Icon::Lock
+        | Icon::Unlock
+        | Icon::Layer
+        | Icon::Image
+        | Icon::Duplicate => pen.layers_icon(icon),
         _ => pen.path_icon(icon),
     }
 }

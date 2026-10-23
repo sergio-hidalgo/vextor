@@ -16,6 +16,7 @@ mod error;
 mod format;
 mod history;
 mod ids;
+mod layers;
 mod math;
 mod node;
 mod path;
@@ -39,7 +40,8 @@ pub use history::{DEFAULT_LIMIT, History};
 pub use ids::{ArtboardId, NodeId, ResourceId};
 pub use math::{EPS, Point, Rect, Transform, Vec2};
 pub use node::{
-    Container, CornerRadii, Geometry, Image, ImageMime, ImageSource, Node, NodeKind, Shape,
+    Container, CornerRadii, Geometry, Image, ImageMime, ImageSource, MAX_NODE_NAME_CHARS, Node,
+    NodeKind, Shape, clean_name,
 };
 pub use path::{FillRule, NodeType, Path, PathNode, PathNodeRef, Side, SubPath};
 pub use resource::{

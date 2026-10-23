@@ -223,6 +223,8 @@ mod tests {
         convert: false,
         forward: true,
         backward: true,
+        make_clip: true,
+        release_clip: true,
     };
 
     #[test]

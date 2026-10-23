@@ -37,6 +37,10 @@ impl Canvas {
                 message = nodes::path_menu_items(ui, session);
             }
             message = arrange_items(ui, session).or(message.take());
+            if self.menu_on_object {
+                ui.separator();
+                message = clip_items(ui, session).or(message.take());
+            }
         });
         message
     }
@@ -71,6 +75,29 @@ fn arrange_items(ui: &mut egui::Ui, session: &mut Session) -> Option<String> {
             message = edit_ops::arrange(session, how).err();
             ui.close();
         }
+    }
+    message
+}
+
+/// Make Clip and Release Clip (spec 10), disabled with the reason.
+fn clip_items(ui: &mut egui::Ui, session: &mut Session) -> Option<String> {
+    let can = edit_ops::can(session);
+    let mut message = None;
+    if ui
+        .add_enabled(can.make_clip, egui::Button::new("Make Clip"))
+        .on_disabled_hover_text(edit_ops::MAKE_CLIP_HINT)
+        .clicked()
+    {
+        message = edit_ops::make_clip(session).err();
+        ui.close();
+    }
+    if ui
+        .add_enabled(can.release_clip, egui::Button::new("Release Clip"))
+        .on_disabled_hover_text("Select a clip group")
+        .clicked()
+    {
+        message = edit_ops::release_clip(session).err();
+        ui.close();
     }
     message
 }

@@ -182,6 +182,11 @@ pub(super) fn reparent(
 }
 
 pub(super) fn group(tx: &mut Tx<'_>, ids: &[NodeId]) -> Result<(), CoreError> {
+    new_group(tx, ids).map(|_| ())
+}
+
+/// Groups `ids` like [`group`] and returns the new group's id.
+fn new_group(tx: &mut Tx<'_>, ids: &[NodeId]) -> Result<NodeId, CoreError> {
     ensure_unique(ids)?;
     let first = *ids
         .first()
@@ -230,6 +235,32 @@ pub(super) fn group(tx: &mut Tx<'_>, ids: &[NodeId]) -> Result<(), CoreError> {
         .children;
     list.retain(|c| !children.contains(c));
     list.insert(index, gid);
+    Ok(gid)
+}
+
+pub(super) fn make_clip(tx: &mut Tx<'_>, ids: &[NodeId]) -> Result<(), CoreError> {
+    let gid = new_group(tx, ids)?;
+    let group = tx
+        .node_mut(gid)?
+        .container_mut()
+        .expect("new_group made a group");
+    let top = *group.children.last().expect("new_group refuses no ids");
+    group.clip = Some(top);
+    if !matches!(tx.node(top)?.kind, NodeKind::Shape(_)) {
+        return Err(CoreError::InvalidCommand(
+            "the topmost object must be a shape to clip with",
+        ));
+    }
+    Ok(())
+}
+
+pub(super) fn release_clip(tx: &mut Tx<'_>, id: NodeId) -> Result<(), CoreError> {
+    let NodeKind::Group(c) = &mut tx.node_mut(id)?.kind else {
+        return Err(CoreError::WrongKind(id, "group"));
+    };
+    if c.clip.take().is_none() {
+        return Err(CoreError::InvalidCommand("the group has no clip"));
+    }
     Ok(())
 }
 

@@ -6,7 +6,7 @@ use std::fmt;
 use crate::document::Document;
 use crate::ids::{NodeId, ResourceId};
 use crate::math::{Point, Rect};
-use crate::node::{CornerRadii, Geometry, Node, NodeKind};
+use crate::node::{CornerRadii, Geometry, MAX_NODE_NAME_CHARS, Node, NodeKind};
 use crate::resource::{GradientKind, Resource};
 use crate::style::{MAX_SWATCH_NAME_CHARS, MAX_SWATCHES, Paint, Stroke, Style};
 use crate::text::{FONT_WEIGHTS, MAX_FONT_FAMILY_CHARS, MAX_TEXT_CHARS, Text};
@@ -175,6 +175,14 @@ impl Checker<'_> {
         self.check(n.transform.is_finite(), || {
             format!("{id:?} transform is not finite")
         });
+        self.check(
+            n.name.as_deref().is_none_or(|name| {
+                !name.trim().is_empty()
+                    && name.chars().count() <= MAX_NODE_NAME_CHARS
+                    && !name.chars().any(char::is_control)
+            }),
+            || format!("{id:?} name is blank, over {MAX_NODE_NAME_CHARS} characters or has control characters"),
+        );
         match &n.kind {
             NodeKind::Layer(_) | NodeKind::Group(_) => {}
             NodeKind::Shape(s) => {
