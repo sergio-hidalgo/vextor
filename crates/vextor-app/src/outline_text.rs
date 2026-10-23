@@ -93,12 +93,12 @@ pub fn convert(s: &mut Session) -> Result<(), String> {
             let child = alloc();
             children.push(child);
             let mut leaf = Node::new(child, NodeKind::Shape(shape));
-            leaf.name = name.filter(|n| !n.trim().is_empty());
+            leaf.name = name.as_deref().and_then(vextor_core::clean_name);
             inserted.push(leaf);
         }
         let group = Node {
             id: group_id,
-            name: Some(group_name(&text.content)),
+            name: vextor_core::clean_name(&group_name(&text.content)),
             kind: NodeKind::Group(Container {
                 children,
                 clip: None,
@@ -318,5 +318,20 @@ mod tests {
         assert_eq!(group_name("  Buy now \nmore"), "Buy now");
         assert_eq!(group_name("\n\n"), "Text");
         assert_eq!(group_name(&"a".repeat(50)), format!("{}…", "a".repeat(40)));
+    }
+
+    #[test]
+    fn outlining_text_with_a_tab_gives_valid_names() {
+        let text = Text {
+            content: "Pay\tnow".to_owned(),
+            ..label("Noto Sans")
+        };
+        let (mut s, _) = session(vec![text]);
+        convert(&mut s).expect("converts");
+        let [g] = s.selected()[..] else {
+            panic!("the group is selected");
+        };
+        assert_eq!(s.doc.nodes[&g].name.as_deref(), Some("Pay now"));
+        s.doc.validate().expect("every name is valid");
     }
 }

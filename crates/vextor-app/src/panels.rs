@@ -1,5 +1,5 @@
-//! The side and bottom panels. Layers and Code are placeholders until
-//! their specs fill them.
+//! The side and bottom panels. Code is a placeholder until its spec
+//! fills it.
 
 use eframe::egui;
 use kurbo::{Affine, Rect};
@@ -35,11 +35,12 @@ const RIGHT_MARGIN: i8 = 10;
 /// end it sits clear of the Layers panel instead of against its edge.
 const INSPECTOR_END_SPACE: f32 = 24.0;
 /// Starting height of the Layers area, in points.
-const LAYERS_HEIGHT: f32 = 160.0;
+const LAYERS_HEIGHT: f32 = 220.0;
 
 mod arrange;
 mod artboard;
 mod fonts;
+mod layers;
 mod paint;
 mod path;
 mod restyle;
@@ -94,26 +95,27 @@ pub fn tools(ui: &mut egui::Ui, active: Option<ToolId>) -> Option<ToolId> {
 /// to run like their menu items. `to_artboard` is Align to Artboard.
 pub fn inspector_and_layers(
     ui: &mut egui::Ui,
-    session: Option<&mut Session>,
+    mut session: Option<&mut Session>,
     to_artboard: &mut bool,
 ) -> (Option<String>, Vec<PanelAction>) {
     // Layers keep their own resizable area at the bottom; the inspector
     // scrolls in the space above, so neither draws past the panel.
-    egui::Panel::bottom("layers")
+    let layers_message = egui::Panel::bottom("layers")
         .resizable(true)
         .default_size(LAYERS_HEIGHT)
         .min_size(48.0)
         .show(ui, |ui| {
             ui.add_space(6.0);
             panel_title(ui, "Layers");
-            egui::ScrollArea::vertical()
-                .id_salt("layers-scroll")
-                .auto_shrink(false)
-                .show(ui, |ui| {
-                    right_margin(ui, |ui| ui.weak("The layer list will appear here."));
-                });
-        });
-    egui::ScrollArea::vertical()
+            if let Some(s) = session.as_deref_mut() {
+                layers::show(ui, s)
+            } else {
+                ui.weak("No document open.");
+                None
+            }
+        })
+        .inner;
+    let (message, actions) = egui::ScrollArea::vertical()
         .id_salt("inspector-scroll")
         .auto_shrink(false)
         .show(ui, |ui| {
@@ -121,7 +123,8 @@ pub fn inspector_and_layers(
             ui.add_space(INSPECTOR_END_SPACE);
             out
         })
-        .inner
+        .inner;
+    (layers_message.or(message), actions)
 }
 
 /// A panel's title (Inspector, Layers), in the title yellow so it reads

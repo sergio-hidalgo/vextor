@@ -8,11 +8,32 @@ use crate::path::Path;
 use crate::style::{Paint, Style};
 use crate::text::Text;
 
+/// Longest node name, in characters (spec 10).
+pub const MAX_NODE_NAME_CHARS: usize = 64;
+
+/// `typed` as a valid node name (spec 10): control characters become
+/// spaces, the ends are trimmed and it is cut to [`MAX_NODE_NAME_CHARS`];
+/// `None` when nothing is left.
+#[must_use]
+pub fn clean_name(typed: &str) -> Option<String> {
+    let name: String = typed
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect::<String>()
+        .trim()
+        .chars()
+        .take(MAX_NODE_NAME_CHARS)
+        .collect();
+    let name = name.trim_end();
+    (!name.is_empty()).then(|| name.to_owned())
+}
+
 /// One entry of [`crate::Document::nodes`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Node {
     pub id: NodeId,
-    /// Becomes the SVG `id` when set.
+    /// Becomes the SVG `id` (slugified) when set. Not blank, at most
+    /// [`MAX_NODE_NAME_CHARS`], no control characters (spec 10).
     pub name: Option<String>,
     pub visible: bool,
     pub locked: bool,

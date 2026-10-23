@@ -12,6 +12,7 @@ mod files;
 mod fonts;
 mod icon;
 mod icons;
+mod layers;
 mod new_doc;
 mod node_tool;
 mod outline_text;

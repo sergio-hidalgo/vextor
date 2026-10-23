@@ -78,6 +78,11 @@ pub fn from_bytes(bytes: &[u8]) -> Result<Document, FormatError> {
     if doc.nodes.len() > MAX_NODES {
         return Err(FormatError::TooManyNodes(doc.nodes.len()));
     }
+    // Names from before spec 10 had no rules (an outlined text could name
+    // a letter shape after a tab): tidy them rather than refuse the file.
+    for node in doc.nodes.values_mut() {
+        node.name = node.name.as_deref().and_then(crate::node::clean_name);
+    }
     if let Err(violations) = doc.validate() {
         let first = violations
             .first()

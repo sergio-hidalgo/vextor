@@ -58,6 +58,9 @@ pub(super) enum Action {
     Deselect,
     Group,
     Ungroup,
+    /// Object ▸ Make Clip / Release Clip (spec 10).
+    MakeClip,
+    ReleaseClip,
     Arrange(Arrange),
     Align(Align),
     Distribute {
@@ -178,6 +181,8 @@ impl VextorApp {
             }
             Action::Group => edit_ops::group(s),
             Action::Ungroup => edit_ops::ungroup(s),
+            Action::MakeClip => edit_ops::make_clip(s),
+            Action::ReleaseClip => edit_ops::release_clip(s),
             Action::Arrange(how) => edit_ops::arrange(s, *how),
             Action::Align(how) => edit_ops::align(s, *how, self.align_to_artboard),
             Action::Distribute { horizontal } => edit_ops::distribute(s, *horizontal),

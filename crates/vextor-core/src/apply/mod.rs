@@ -92,6 +92,8 @@ fn run(tx: &mut Tx<'_>, cmd: Command) -> Result<(), CoreError> {
         } => structure::reparent(tx, &ids, new_parent, index),
         C::Group { ids } => structure::group(tx, &ids),
         C::Ungroup { id } => structure::ungroup(tx, id),
+        C::MakeClip { ids } => structure::make_clip(tx, &ids),
+        C::ReleaseClip { id } => structure::release_clip(tx, id),
         C::SetTransform { ids, transform } => structure::set_transform(tx, &ids, transform),
         C::SetTransforms { items } => structure::set_transforms(tx, items),
         C::SetStyle { ids, style } => structure::set_style(tx, &ids, &style),

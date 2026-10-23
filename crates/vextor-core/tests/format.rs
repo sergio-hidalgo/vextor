@@ -222,3 +222,26 @@ fn error_messages_read_as_sentences() {
         "the file uses format version 7; this Vextor reads versions 1 to 2"
     );
 }
+
+#[test]
+fn names_from_before_spec_10_are_tidied_not_refused() {
+    // An outlined text could name a letter shape after a tab, and names
+    // had no length limit.
+    let mut doc = fixture().doc;
+    let fx = fixture();
+    let long = "x".repeat(100);
+    for (id, name) in [(fx.rect, "\t"), (fx.star, "a\tb"), (fx.path, long.as_str())] {
+        doc.nodes.get_mut(&id).expect("exists").name = Some(name.to_owned());
+    }
+    let bytes = serde_json::to_vec(&doc).expect("encodes");
+    let back = from_bytes(&bytes).expect("still opens");
+    assert_eq!(back.nodes[&fx.rect].name, None);
+    assert_eq!(back.nodes[&fx.star].name.as_deref(), Some("a b"));
+    assert_eq!(
+        back.nodes[&fx.path]
+            .name
+            .as_deref()
+            .map(|n| n.chars().count()),
+        Some(vextor_core::MAX_NODE_NAME_CHARS)
+    );
+}

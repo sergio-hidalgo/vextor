@@ -125,6 +125,20 @@ impl VextorApp {
         if why_item(ui, can.ungroup, "Ungroup", UNGROUP, "Select a group") {
             actions.push(Action::Ungroup);
         }
+        let make_clip = ui
+            .add_enabled(can.make_clip, egui::Button::new("Make Clip"))
+            .on_hover_text("The topmost selected shape clips the objects under it")
+            .on_disabled_hover_text(edit_ops::MAKE_CLIP_HINT);
+        if make_clip.clicked() {
+            actions.push(Action::MakeClip);
+        }
+        if ui
+            .add_enabled(can.release_clip, egui::Button::new("Release Clip"))
+            .on_disabled_hover_text("Select a clip group")
+            .clicked()
+        {
+            actions.push(Action::ReleaseClip);
+        }
         ui.separator();
         if why_item(
             ui,

@@ -136,6 +136,30 @@ fn basic_shapes_is_not_blank() {
 }
 
 #[test]
+fn hidden_layers_are_not_drawn() {
+    // Spec 10: hiding a layer from the Layers panel hides its contents.
+    let (width, height) = (400, 240);
+    let mut doc = fixtures::basic_shapes();
+    for layer in doc.layers.clone() {
+        let n = doc.nodes[&layer].clone();
+        doc.apply(vextor_core::Command::SetProps {
+            id: layer,
+            name: n.name,
+            visible: false,
+            locked: n.locked,
+            opacity: n.opacity,
+        })
+        .expect("hides");
+    }
+    let actual = ours(&doc, width, height);
+    // Where the rounded rect was: only the white artboard is left.
+    assert_eq!(
+        pixel(actual.data(), width, 80, 60),
+        [0xff, 0xff, 0xff, 0xff]
+    );
+}
+
+#[test]
 fn paints_are_not_blank() {
     // Guards the comparison above against two equally empty images.
     let (width, height) = (400, 320);

@@ -28,6 +28,11 @@ pub struct Session {
     /// The artboard last picked, shown by Inspector ▸ Artboard (spec 08;
     /// see `artboard::current`).
     pub artboard: Option<vextor_core::ArtboardId>,
+    /// The current layer, picked in the Layers panel (spec 10): new
+    /// objects go into it. See `layers::current_layer`.
+    pub layer: Option<NodeId>,
+    /// What the Layers panel remembers (open rows, scrolling).
+    pub layers_panel: crate::layers::PanelState,
     /// The eyedropper (spec 09): the colour editor waiting for a pick on
     /// the canvas, by its key; and the colour picked for it, until that
     /// editor takes it. Not saved, not undone.
@@ -64,6 +69,8 @@ impl Session {
             revision: 0,
             needs_fit: true,
             artboard: None,
+            layer: None,
+            layers_panel: crate::layers::PanelState::default(),
             eyedropper: None,
             picked: None,
             swatches: Swatches::default(),
