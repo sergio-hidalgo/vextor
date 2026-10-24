@@ -16,7 +16,7 @@ mod render;
 
 pub use cache::{CachedFrame, RenderCache};
 pub use error::RenderError;
-pub use image::rgba_png;
+pub use image::{TRACE_SIDE, TracePixels, rgba_png, trace_pixels};
 pub use png::artboard_png;
 pub use render::{MAX_PIXMAP_SIDE, Viewport, render, render_into};
 pub use tiny_skia::Pixmap;

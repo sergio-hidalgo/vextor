@@ -51,34 +51,8 @@ impl VextorApp {
             actions.push(Action::ReleaseClip);
         }
         ui.separator();
-        if why_item(
-            ui,
-            can.outline,
-            "Convert Text to Outlines",
-            OUTLINE_TEXT,
-            "Select a text",
-        ) {
-            actions.push(Action::OutlineText);
-        }
-        if why_item(
-            ui,
-            can.convert,
-            "Convert to Path",
-            CONVERT_TO_PATH,
-            "Select a rectangle, ellipse, polygon, star or line",
-        ) {
-            actions.push(Action::ConvertToPath);
-        }
-        let make_pattern = ui
-            .add_enabled(can.edit, egui::Button::new("Make Pattern"))
-            .on_hover_text(
-                "Turns copies of the selection into a pattern, to pick in Fill or Stroke",
-            )
-            .on_disabled_hover_text("Select the objects to repeat");
-        if make_pattern.clicked() {
-            actions.push(Action::MakePattern);
-        }
         let session = self.docs.session().filter(|_| self.picker.is_none());
+        convert_items(ui, can, session_traceable(session), actions);
         ui.menu_button("Path", |ui| path_menu(ui, session, actions));
         ui.menu_button("Path Operations", |ui| {
             super::shape_menu::shape_menu(ui, session, actions);
@@ -192,4 +166,52 @@ fn path_menu(ui: &mut egui::Ui, session: Option<&Session>, actions: &mut Vec<Act
             ui.separator();
         }
     }
+}
+
+/// Convert Text to Outlines, Convert to Path, Image to Vector… (spec 13b,
+/// `traceable`: one image that can be traced is selected) and Make
+/// Pattern.
+fn convert_items(
+    ui: &mut egui::Ui,
+    can: edit_ops::Can,
+    traceable: bool,
+    actions: &mut Vec<Action>,
+) {
+    if why_item(
+        ui,
+        can.outline,
+        "Convert Text to Outlines",
+        OUTLINE_TEXT,
+        "Select a text",
+    ) {
+        actions.push(Action::OutlineText);
+    }
+    if why_item(
+        ui,
+        can.convert,
+        "Convert to Path",
+        CONVERT_TO_PATH,
+        "Select a rectangle, ellipse, polygon, star or line",
+    ) {
+        actions.push(Action::ConvertToPath);
+    }
+    let image_to_vector = ui
+        .add_enabled(traceable, egui::Button::new("Image to Vector…"))
+        .on_disabled_hover_text(crate::image_trace::SELECT_ONE_IMAGE);
+    if image_to_vector.clicked() {
+        actions.push(Action::ImageToVector);
+    }
+    let make_pattern = ui
+        .add_enabled(can.edit, egui::Button::new("Make Pattern"))
+        .on_hover_text("Turns copies of the selection into a pattern, to pick in Fill or Stroke")
+        .on_disabled_hover_text("Select the objects to repeat");
+    if make_pattern.clicked() {
+        actions.push(Action::MakePattern);
+    }
+}
+
+/// True when the active document's selection is one image that can be
+/// traced (spec 13b).
+fn session_traceable(s: Option<&Session>) -> bool {
+    s.is_some_and(|s| crate::image_trace::traceable(s).is_ok())
 }

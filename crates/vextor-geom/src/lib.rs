@@ -11,6 +11,7 @@ mod path_edit;
 mod resize;
 mod snap;
 mod text;
+mod trace;
 mod transform;
 
 pub use convert::{
@@ -35,6 +36,9 @@ pub use snap::{BoxSnap, Guide, Snap, SnapKind, SnapTargets, minor_spacing, pixel
 pub use text::{
     FaceStyle, FontDb, Fonts, GlyphSpan, LineBox, MissingFont, ResolvedFace, TextLayout, layout,
     text_box, text_outlines,
+};
+pub use trace::{
+    MAX_TRACE_NODES, MAX_TRACE_SHAPES, Pixels, TraceError, TraceMode, TracedColor, trace,
 };
 pub use transform::{
     Align, Handle, ROTATE_STEP, align, distribute, flip, retarget, rotate, rotation_angle,

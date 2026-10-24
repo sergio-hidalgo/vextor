@@ -326,6 +326,16 @@ impl VextorApp {
     /// The path operations' dialog or text prompt (spec 11), when one is
     /// open. Returns true when one was shown.
     fn path_prompts(&mut self, ctx: &egui::Context) -> bool {
+        if let Some(dialog) = &mut self.trace_dialog {
+            if let Some(s) = self.docs.session_mut() {
+                if dialog.show(ctx, self.canvas_rect, s) {
+                    self.trace_dialog = None;
+                }
+            } else {
+                self.trace_dialog = None;
+            }
+            return true;
+        }
         if let Some(dialog) = &mut self.path_dialog {
             if let Some(s) = self.docs.session_mut() {
                 if dialog.show(ctx, self.canvas_rect, s) {

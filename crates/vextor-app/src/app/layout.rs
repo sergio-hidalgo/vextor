@@ -106,6 +106,7 @@ impl VextorApp {
         actions.extend(self.canvas.take_request().map(|r| match r {
             MenuRequest::Shape(op) => Action::Shape(op),
             MenuRequest::ExportSelection => Action::ExportSelection,
+            MenuRequest::ImageToVector => Action::ImageToVector,
         }));
         actions
     }

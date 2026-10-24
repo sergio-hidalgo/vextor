@@ -103,6 +103,8 @@ pub(super) enum Action {
     Path(PathAction),
     /// A path operation (spec 11).
     Shape(ShapeOp),
+    /// Object ▸ Image to Vector… (spec 13b): opens its dialog.
+    ImageToVector,
 }
 
 impl From<panels::PanelAction> for Action {
@@ -117,6 +119,7 @@ impl From<panels::PanelAction> for Action {
             panels::PanelAction::AddArtboard => Self::AddArtboard,
             panels::PanelAction::Flip { horizontal } => Self::Flip { horizontal },
             panels::PanelAction::Shape(op) => Self::Shape(op),
+            panels::PanelAction::ImageToVector => Self::ImageToVector,
         }
     }
 }
@@ -249,6 +252,9 @@ impl VextorApp {
             }
             Action::Shape(op) => op.run(s),
             Action::MakePattern => crate::paint_edit::make_pattern(s),
+            Action::ImageToVector => crate::trace_dialog::TraceDialog::open(s).map(|d| {
+                self.trace_dialog = Some(d);
+            }),
             _ => Ok(()),
         };
         if let Err(e) = result {

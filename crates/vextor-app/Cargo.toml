@@ -21,6 +21,8 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+# Image to vector snapshots (spec 13b).
+insta.workspace = true
 resvg.workspace = true
 
 [lints]

@@ -122,7 +122,43 @@ pub fn rgba_png(width: u32, height: u32, rgba: Vec<u8>) -> Option<Vec<u8>> {
     Some(out)
 }
 
-fn decode(mime: ImageMime, bytes: &[u8]) -> Option<Pixmap> {
+/// Longest side an image is traced at (spec 13b): bigger images are
+/// scaled down first, for speed and less noise.
+pub const TRACE_SIDE: u32 = 1_000;
+
+/// Straight (not premultiplied) RGBA pixels of an image to trace.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TracePixels {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
+/// `bytes` (a `mime` image) decoded with the import limits and scaled down
+/// so its longer side is at most [`TRACE_SIDE`] (spec 13b). `None` when it
+/// cannot be decoded.
+#[must_use]
+pub fn trace_pixels(mime: ImageMime, bytes: &[u8]) -> Option<TracePixels> {
+    let mut rgba = decode_rgba(mime, bytes)?;
+    let (w, h) = (rgba.width(), rgba.height());
+    let longer = w.max(h);
+    if longer > TRACE_SIDE {
+        let scale = |side: u32| {
+            let scaled = u64::from(side) * u64::from(TRACE_SIDE) / u64::from(longer);
+            u32::try_from(scaled).unwrap_or(TRACE_SIDE).max(1)
+        };
+        // area averaging: fast, and every source pixel counts
+        rgba = image::imageops::thumbnail(&rgba, scale(w), scale(h));
+    }
+    Some(TracePixels {
+        width: rgba.width(),
+        height: rgba.height(),
+        rgba: rgba.into_raw(),
+    })
+}
+
+/// `bytes` decoded to straight RGBA, within the import limits.
+fn decode_rgba(mime: ImageMime, bytes: &[u8]) -> Option<image::RgbaImage> {
     let format = match mime {
         ImageMime::Png => image::ImageFormat::Png,
         ImageMime::Jpeg => image::ImageFormat::Jpeg,
@@ -134,7 +170,11 @@ fn decode(mime: ImageMime, bytes: &[u8]) -> Option<Pixmap> {
     limits.max_image_height = Some(MAX_SIDE);
     limits.max_alloc = Some(MAX_ALLOC);
     reader.limits(limits);
-    let rgba = reader.decode().ok()?.into_rgba8();
+    Some(reader.decode().ok()?.into_rgba8())
+}
+
+fn decode(mime: ImageMime, bytes: &[u8]) -> Option<Pixmap> {
+    let rgba = decode_rgba(mime, bytes)?;
     let size = IntSize::from_wh(rgba.width(), rgba.height())?;
     let mut data = rgba.into_raw();
     for px in data.as_chunks_mut::<4>().0 {
@@ -187,6 +227,22 @@ mod tests {
             "{} KB jpeg: decode {miss:?}, hit {hit:?}, same bytes elsewhere {moved:?}",
             bytes.len() / 1024
         );
+    }
+
+    #[test]
+    fn traced_pixels_are_scaled_down_to_the_trace_side() {
+        let p = trace_pixels(ImageMime::Jpeg, &photo()).expect("decodes");
+        assert_eq!((p.width, p.height), (TRACE_SIDE, 666));
+        assert_eq!(p.rgba.len(), 1000 * 666 * 4);
+        let small = rgba_png(3, 2, vec![9; 24]).expect("encodes");
+        let p = trace_pixels(ImageMime::Png, &small).expect("decodes");
+        assert_eq!((p.width, p.height, p.rgba), (3, 2, vec![9; 24]));
+    }
+
+    #[test]
+    fn an_image_that_does_not_decode_gives_no_trace_pixels() {
+        assert_eq!(trace_pixels(ImageMime::Png, b"not a png"), None);
+        assert_eq!(trace_pixels(ImageMime::Jpeg, &[]), None);
     }
 
     #[test]

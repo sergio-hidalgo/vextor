@@ -99,6 +99,8 @@ pub struct VextorApp {
     shape_prompt: Option<crate::shape_ops::ShapeOp>,
     /// Offset Path… or Simplify…, while open (spec 11).
     path_dialog: Option<crate::path_dialog::PathDialog>,
+    /// Image to Vector…, while open (spec 13b).
+    trace_dialog: Option<crate::trace_dialog::TraceDialog>,
 }
 
 impl VextorApp {
@@ -151,6 +153,7 @@ impl VextorApp {
             outline_prompt: None,
             shape_prompt: None,
             path_dialog: None,
+            trace_dialog: None,
         }
     }
 
@@ -327,6 +330,7 @@ impl eframe::App for VextorApp {
             || self.outline_prompt.is_some()
             || self.shape_prompt.is_some()
             || self.path_dialog.is_some()
+            || self.trace_dialog.is_some()
             || self.export_dialog.is_some();
         self.paint_escape(&ctx);
         // While a shape is drawn, keys belong to it (arrows, Esc).

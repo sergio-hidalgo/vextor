@@ -15,6 +15,7 @@ mod files;
 mod fonts;
 mod icon;
 mod icons;
+mod image_trace;
 mod import;
 mod layers;
 mod new_doc;
@@ -39,6 +40,7 @@ mod text_edit;
 mod text_tool;
 mod theme;
 mod thumbnails;
+mod trace_dialog;
 mod view;
 mod wordmark;
 
