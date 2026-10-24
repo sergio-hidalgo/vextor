@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Vextor.app (spec 13c). scripts/bundle-macos.sh fills in the version. -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>Vextor</string>
+	<key>CFBundleDisplayName</key>
+	<string>Vextor</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.sergio-hidalgo.vextor</string>
+	<key>CFBundleExecutable</key>
+	<string>vextor</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__VERSION__</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Vextor Document</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>io.github.sergio-hidalgo.vextor.document</string>
+			</array>
+			<key>CFBundleTypeIconFile</key>
+			<string>Document</string>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>io.github.sergio-hidalgo.vextor.document</string>
+			<key>UTTypeDescription</key>
+			<string>Vextor Document</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.content</string>
+			</array>
+			<key>UTTypeIconFile</key>
+			<string>Document</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>vxtr</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>

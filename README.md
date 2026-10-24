@@ -53,6 +53,25 @@ cargo +nightly fuzz run svg_import -- -max_total_time=600 -rss_limit_mb=2048 -ti
 cargo +nightly fuzz run vxtr_load  -- -max_total_time=600 -rss_limit_mb=2048 -timeout=10
 ```
 
+### macOS app and document icon
+
+```sh
+scripts/bundle-macos.sh             # builds target/bundle/Vextor.app
+scripts/bundle-macos.sh --install   # ... copies it to ~/Applications
+```
+
+The app declares the `.vxtr` file type ("Vextor Document"), so once it
+is installed Finder shows saved documents with Vextor's document icon
+(`crates/vextor-app/assets/document-icon.svg`) and the app with its icon.
+macOS keeps the icons it has already shown in caches, so refresh them
+once after installing: `killall iconservicesagent Dock Finder`. If a
+`.vxtr` file still shows the old icon, clear the system's icon store with
+`sudo rm -rf /Library/Caches/com.apple.iconservices.store` and restart
+the Mac. The bundle's app icon is `icon.svg` full bleed (square to the
+edges), which macOS rounds to its own shape. The build is signed ad hoc, for your own Mac only;
+double-clicking a document starts Vextor but does not open it yet
+(open the file with File ▸ Open…).
+
 SVG export and import are checked with `insta` snapshots in
 `crates/vextor-svg/tests/snapshots/`; after a deliberate output change,
 review each changed file (`cargo insta review`, or `INSTA_UPDATE=always`
