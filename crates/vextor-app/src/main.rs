@@ -2,6 +2,8 @@
 
 mod app;
 mod artboard;
+#[cfg(test)]
+mod bundle_icons;
 mod canvas;
 mod code_panel;
 mod convert_path;
