@@ -1,4 +1,4 @@
-//! Reading and writing `.vxtr` files (older `.vextor` ones still open), the app-data folder and the
+//! Reading and writing `.vxtr` files, the app-data folder and the
 //! recent-files list. The bytes themselves are defined by
 //! [`vextor_core::to_bytes`] / [`vextor_core::from_bytes`].
 
@@ -13,18 +13,11 @@ use vextor_core::{Document, FormatError, MAX_FILE_BYTES, from_bytes, to_bytes};
 /// File extension of documents, without the dot.
 pub const EXTENSION: &str = "vxtr";
 
-/// The extension documents had before; such files still open, and keep it
-/// when saved or renamed.
-pub const LEGACY_EXTENSION: &str = "vextor";
-
-/// Every extension File ▸ Open offers.
-pub const OPEN_EXTENSIONS: [&str; 2] = [EXTENSION, LEGACY_EXTENSION];
-
-/// True when `path` ends in a document extension (any letter case).
+/// True when `path` ends in the document extension (any letter case).
 pub fn has_document_extension(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
-        .is_some_and(|e| OPEN_EXTENSIONS.iter().any(|x| e.eq_ignore_ascii_case(x)))
+        .is_some_and(|e| e.eq_ignore_ascii_case(EXTENSION))
 }
 
 /// Most entries in File ▸ Open Recent.
@@ -123,8 +116,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     result
 }
 
-/// `path` with the `.vxtr` extension added when it has none or another
-/// (a typed `.vextor` is kept).
+/// `path` with the `.vxtr` extension added when it has none or another.
 pub fn with_extension(path: PathBuf) -> PathBuf {
     if has_document_extension(&path) {
         path
@@ -150,7 +142,7 @@ pub const MAX_NAME_CHARS: usize = 64;
 
 /// `input` (typed on a tab) as a document name, which is also a file name
 /// without its extension: control characters removed, trimmed, a typed
-/// `.vxtr` or `.vextor` dropped, cut to [`MAX_NAME_CHARS`].
+/// `.vxtr` dropped, cut to [`MAX_NAME_CHARS`].
 ///
 /// # Errors
 /// Why the name can't be used: empty, hidden (leading dot), or holding a
@@ -158,12 +150,9 @@ pub const MAX_NAME_CHARS: usize = 64;
 pub fn clean_name(input: &str) -> Result<String, &'static str> {
     let cleaned: String = input.chars().filter(|c| !c.is_control()).collect();
     let mut name = cleaned.trim();
-    for ext in OPEN_EXTENSIONS {
-        let suffix = format!(".{ext}");
-        if name.len() > suffix.len() && name.to_lowercase().ends_with(&suffix) {
-            name = name[..name.len() - suffix.len()].trim_end();
-            break;
-        }
+    let suffix = format!(".{EXTENSION}");
+    if name.len() > suffix.len() && name.to_lowercase().ends_with(&suffix) {
+        name = name[..name.len() - suffix.len()].trim_end();
     }
     if name.is_empty() {
         return Err("A name can't be empty.");
@@ -178,22 +167,14 @@ pub fn clean_name(input: &str) -> Result<String, &'static str> {
     Ok(cut.trim_end().to_owned())
 }
 
-/// Renames the document file `from` to `<name>` plus its own extension
-/// (`.vxtr`, or `.vextor` for an older file) in the same folder and
-/// returns the new path. Never replaces another file: a name already
+/// Renames the document file `from` to `<name>.vxtr` in the same folder
+/// and returns the new path. Never replaces another file: a name already
 /// taken is refused. Changing only the letter case is allowed.
 ///
 /// # Errors
 /// The name is taken, or the OS refused the rename (the file is unchanged).
 pub fn rename_document(from: &Path, name: &str) -> io::Result<PathBuf> {
-    let ext = from
-        .extension()
-        .filter(|_| has_document_extension(from))
-        .map_or_else(
-            || EXTENSION.to_owned(),
-            |e| e.to_string_lossy().into_owned(),
-        );
-    let to = from.with_file_name(format!("{name}.{ext}"));
+    let to = from.with_file_name(format!("{name}.{EXTENSION}"));
     if to == from {
         return Ok(to);
     }
@@ -337,15 +318,15 @@ mod tests {
             clean_name("  pricing\t card \n").as_deref(),
             Ok("pricing card")
         );
-        assert_eq!(clean_name("card.vextor").as_deref(), Ok("card"));
-        assert_eq!(clean_name("card.VEXTOR ").as_deref(), Ok("card"));
+        assert_eq!(clean_name("card.vxtr").as_deref(), Ok("card"));
+        assert_eq!(clean_name("card.VXTR ").as_deref(), Ok("card"));
         assert_eq!(
             clean_name(&"x".repeat(80)).map(|n| n.len()),
             Ok(MAX_NAME_CHARS)
         );
         assert!(clean_name("   ").is_err());
         assert!(
-            clean_name(".vextor").is_err(),
+            clean_name(".vxtr").is_err(),
             "only the extension is left as a dot name"
         );
         assert!(clean_name(".hidden").is_err());
@@ -357,42 +338,30 @@ mod tests {
     #[test]
     fn renaming_moves_the_file_and_keeps_its_content() {
         let dir = TestDir::new();
-        let from = dir.path().join("card.vextor");
+        let from = dir.path().join("card.vxtr");
         fs::write(&from, b"content").expect("writes");
         let to = rename_document(&from, "pricing").expect("renames");
-        assert_eq!(to, dir.path().join("pricing.vextor"));
-        assert_eq!(files_in(dir.path()), ["pricing.vextor"]);
+        assert_eq!(to, dir.path().join("pricing.vxtr"));
+        assert_eq!(files_in(dir.path()), ["pricing.vxtr"]);
         assert_eq!(fs::read(&to).expect("reads"), b"content");
         assert_eq!(rename_document(&to, "pricing").expect("same name"), to);
     }
 
     #[test]
-    fn renaming_a_new_file_keeps_vxtr_and_an_old_one_keeps_vextor() {
-        let dir = TestDir::new();
-        let new = dir.path().join("card.vxtr");
-        fs::write(&new, b"x").expect("writes");
-        let to = rename_document(&new, "pricing").expect("renames");
-        assert_eq!(to, dir.path().join("pricing.vxtr"));
-        let old = dir.path().join("icon.vextor");
-        fs::write(&old, b"x").expect("writes");
-        let to = rename_document(&old, "logo").expect("renames");
-        assert_eq!(to, dir.path().join("logo.vextor"));
-    }
-
-    #[test]
-    fn both_extensions_count_as_documents_and_typed_ones_are_dropped() {
+    fn only_vxtr_counts_as_a_document_and_a_typed_one_is_dropped() {
         assert!(has_document_extension(Path::new("/a/b.vxtr")));
-        assert!(has_document_extension(Path::new("/a/b.VEXTOR")));
+        assert!(has_document_extension(Path::new("/a/b.VXTR")));
+        assert!(!has_document_extension(Path::new("/a/b.vextor")));
         assert!(!has_document_extension(Path::new("/a/b.svg")));
         assert_eq!(clean_name("card.vxtr").as_deref(), Ok("card"));
-        assert_eq!(clean_name("card.vextor").as_deref(), Ok("card"));
+        assert_eq!(clean_name("card.vextor").as_deref(), Ok("card.vextor"));
     }
 
     #[test]
     fn renaming_never_replaces_another_file() {
         let dir = TestDir::new();
-        let from = dir.path().join("card.vextor");
-        let other = dir.path().join("pricing.vextor");
+        let from = dir.path().join("card.vxtr");
+        let other = dir.path().join("pricing.vxtr");
         fs::write(&from, b"card").expect("writes");
         fs::write(&other, b"pricing").expect("writes");
         let e = rename_document(&from, "pricing").expect_err("refused");
@@ -404,10 +373,10 @@ mod tests {
     #[test]
     fn renaming_can_change_only_the_letter_case() {
         let dir = TestDir::new();
-        let from = dir.path().join("card.vextor");
+        let from = dir.path().join("card.vxtr");
         fs::write(&from, b"card").expect("writes");
         let to = rename_document(&from, "Card").expect("renames");
-        assert_eq!(files_in(dir.path()), ["Card.vextor"]);
+        assert_eq!(files_in(dir.path()), ["Card.vxtr"]);
         assert_eq!(fs::read(&to).expect("reads"), b"card");
     }
 
@@ -423,7 +392,7 @@ mod tests {
     #[test]
     fn every_sample_document_round_trips_through_disk() {
         let dir = TestDir::new();
-        let path = dir.path().join("doc.vextor");
+        let path = dir.path().join("doc.vxtr");
         for doc in [
             Document::new("empty"),
             fixtures::basic_shapes(),
@@ -439,22 +408,22 @@ mod tests {
     #[test]
     fn atomic_write_replaces_the_file_and_leaves_no_temp_file() {
         let dir = TestDir::new();
-        let path = dir.path().join("a.vextor");
+        let path = dir.path().join("a.vxtr");
         write_atomic(&path, b"old").expect("writes");
         write_atomic(&path, b"new").expect("writes");
         assert_eq!(fs::read(&path).expect("reads"), b"new");
-        assert_eq!(files_in(dir.path()), ["a.vextor"]);
+        assert_eq!(files_in(dir.path()), ["a.vxtr"]);
     }
 
     #[test]
     fn failed_atomic_write_keeps_the_old_file() {
         let dir = TestDir::new();
-        let path = dir.path().join("a.vextor");
+        let path = dir.path().join("a.vxtr");
         write_atomic(&path, b"old").expect("writes");
         // A folder where the temp file should go makes the write fail.
         let blocker = dir
             .path()
-            .join(format!(".a.vextor.{}.tmp", std::process::id()));
+            .join(format!(".a.vxtr.{}.tmp", std::process::id()));
         fs::create_dir(&blocker).expect("creates");
         assert!(write_atomic(&path, b"new").is_err());
         assert_eq!(fs::read(&path).expect("reads"), b"old");
@@ -463,7 +432,7 @@ mod tests {
     #[test]
     fn file_over_50_mb_is_refused_before_reading() {
         let dir = TestDir::new();
-        let path = dir.path().join("big.vextor");
+        let path = dir.path().join("big.vxtr");
         // Sparse: 60 MB long, nothing written, so the test stays fast.
         File::create(&path)
             .and_then(|f| f.set_len(60 * 1024 * 1024))
@@ -482,7 +451,7 @@ mod tests {
     #[test]
     fn truncated_and_unknown_version_files_fail_with_a_message() {
         let dir = TestDir::new();
-        let path = dir.path().join("doc.vextor");
+        let path = dir.path().join("doc.vxtr");
         write_document(&path, &fixtures::basic_shapes()).expect("saves");
         let bytes = fs::read(&path).expect("reads");
 
@@ -491,22 +460,22 @@ mod tests {
         assert_eq!(err.to_string(), "the file is incomplete (it was cut off)");
 
         let newer = String::from_utf8(bytes).expect("utf-8").replacen(
-            "\"format_version\": 2",
             "\"format_version\": 3",
+            "\"format_version\": 4",
             1,
         );
         fs::write(&path, newer).expect("writes");
         let err = read_document(&path).expect_err("refused");
         assert_eq!(
             err.to_string(),
-            "the file uses format version 3; this Vextor reads versions 1 to 2"
+            "the file uses format version 4; this Vextor reads versions 1 to 3"
         );
     }
 
     #[test]
     fn missing_file_is_an_io_error() {
         let dir = TestDir::new();
-        let err = read_document(&dir.path().join("nope.vextor")).expect_err("missing");
+        let err = read_document(&dir.path().join("nope.vxtr")).expect_err("missing");
         assert!(matches!(err, FileError::Io(_)));
     }
 
@@ -522,7 +491,7 @@ mod tests {
         );
         assert_eq!(
             with_extension(PathBuf::from("/x/icon.vextor")),
-            PathBuf::from("/x/icon.vextor")
+            PathBuf::from("/x/icon.vextor.vxtr")
         );
         assert_eq!(
             with_extension(PathBuf::from("/x/icon.svg")),
@@ -534,28 +503,25 @@ mod tests {
     fn recent_files_keep_order_without_duplicates_and_cap_at_ten() {
         let mut r = RecentFiles::default();
         for i in 0..12 {
-            r.push(PathBuf::from(format!("/f{i}.vextor")));
+            r.push(PathBuf::from(format!("/f{i}.vxtr")));
         }
-        r.push(PathBuf::from("/f5.vextor"));
+        r.push(PathBuf::from("/f5.vxtr"));
         assert_eq!(r.paths().len(), MAX_RECENT);
-        assert_eq!(r.paths()[0], PathBuf::from("/f5.vextor"));
-        assert_eq!(r.paths()[1], PathBuf::from("/f11.vextor"));
+        assert_eq!(r.paths()[0], PathBuf::from("/f5.vxtr"));
+        assert_eq!(r.paths()[1], PathBuf::from("/f11.vxtr"));
         assert_eq!(
-            r.paths()
-                .iter()
-                .filter(|p| p.ends_with("f5.vextor"))
-                .count(),
+            r.paths().iter().filter(|p| p.ends_with("f5.vxtr")).count(),
             1
         );
-        r.remove(Path::new("/f5.vextor"));
-        assert_eq!(r.paths()[0], PathBuf::from("/f11.vextor"));
+        r.remove(Path::new("/f5.vxtr"));
+        assert_eq!(r.paths()[0], PathBuf::from("/f11.vxtr"));
     }
 
     #[test]
     fn recent_files_survive_a_restart_and_ignore_junk() {
         let dir = TestDir::new();
         let mut r = RecentFiles::default();
-        r.push(PathBuf::from("/a.vextor"));
+        r.push(PathBuf::from("/a.vxtr"));
         r.save(dir.path()).expect("saves");
         assert_eq!(RecentFiles::load(dir.path()), r);
 

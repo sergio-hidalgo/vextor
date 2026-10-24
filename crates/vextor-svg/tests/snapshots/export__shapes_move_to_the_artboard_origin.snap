@@ -1,0 +1,14 @@
+---
+source: crates/vextor-svg/tests/export.rs
+expression: shapes().svg()
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60">
+  <rect width="20" height="10" fill="#f00"/>
+  <rect x="30" width="20" height="10" rx="3" fill="#00f"/>
+  <circle cx="70" cy="10" r="8"/>
+  <ellipse cx="100" cy="10" rx="10" ry="5.5"/>
+  <line y1="30" x2="40" y2="30" stroke="#000" stroke-width="2"/>
+  <path d="M60 30l8.66 5V45L60 50l-8.66-5V35z"/>
+  <path d="M90 30l2.94 5.95 6.57.96-4.75 4.64 1.12 6.54L90 45l-5.88 3.09 1.12-6.54-4.75-4.64 6.57-.96z"/>
+  <path d="M0 45H20V55H0z" fill-rule="evenodd"/>
+</svg>

@@ -1,0 +1,21 @@
+---
+source: crates/vextor-svg/tests/export.rs
+expression: "format!(\"{readable}\\n{none}\\n{unique}\")"
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20">
+  <rect id="dot" width="10" height="10" fill="#f00"/>
+  <rect id="dot-2" x="12" width="10" height="10" fill="#f00"/>
+  <rect id="id-24-px" x="24" width="10" height="10" fill="#00f"/>
+</svg>
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20">
+  <rect width="10" height="10" fill="#f00"/>
+  <rect x="12" width="10" height="10" fill="#f00"/>
+  <rect x="24" width="10" height="10" fill="#00f"/>
+</svg>
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20">
+  <rect id="vx-5206-dot" width="10" height="10" fill="#f00"/>
+  <rect id="vx-5206-dot-2" x="12" width="10" height="10" fill="#f00"/>
+  <rect id="vx-5206-id-24-px" x="24" width="10" height="10" fill="#00f"/>
+</svg>

@@ -130,7 +130,7 @@ pub fn inspector_and_layers(
 
 /// A panel's title (Inspector, Layers), in the title yellow so it reads
 /// above its sections, as "New document" does on the start screen.
-fn panel_title(ui: &mut egui::Ui, title: &str) {
+pub(crate) fn panel_title(ui: &mut egui::Ui, title: &str) {
     ui.label(
         egui::RichText::new(title)
             .strong()
@@ -390,12 +390,6 @@ fn field(
 }
 
 /// Code (bottom).
-pub fn code(ui: &mut egui::Ui) {
-    ui.add_space(4.0);
-    ui.strong("Code");
-    ui.weak("The SVG of the artboard will appear here.");
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

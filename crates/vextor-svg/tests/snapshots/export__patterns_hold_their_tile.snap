@@ -1,0 +1,12 @@
+---
+source: crates/vextor-svg/tests/export.rs
+expression: d.svg()
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <defs>
+    <pattern id="pattern-1" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(90)">
+      <circle cx="2" cy="2" r="1" fill="#f00"/>
+    </pattern>
+  </defs>
+  <rect width="40" height="40" fill="url(#pattern-1)"/>
+</svg>

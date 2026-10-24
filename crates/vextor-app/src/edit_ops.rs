@@ -95,17 +95,25 @@ pub fn can(s: &Session) -> Can {
     }
 }
 
-/// Copies the selection to the internal clipboard. Returns the SVG for the
-/// system clipboard, or `None` when nothing visible was copied.
+/// Copies the selection to the internal clipboard. Returns its SVG for
+/// the system clipboard, or `None` when nothing visible was copied.
 pub fn copy(s: &mut Session) -> Option<String> {
     let sel = s.selected();
     if sel.is_empty() {
         return None;
     }
     let payload = s.doc.copy(&sel).ok()?;
-    let svg = vextor_svg::clipboard_svg(&payload, &s.fonts);
     s.editor.clipboard = Some(payload);
-    svg
+    copy_as(s, vextor_svg::Format::Svg)
+}
+
+/// Edit ▸ Copy As (spec 12): the selection's code in `format`, written
+/// with the document's export options, for the system clipboard only.
+/// `None` when nothing visible is selected.
+pub fn copy_as(s: &Session, format: vextor_svg::Format) -> Option<String> {
+    let sel = s.selected();
+    let scope = vextor_svg::Scope::Selection(&sel);
+    vextor_svg::export(&s.doc, &s.fonts, scope, format, &s.doc.export).map(|e| e.code)
 }
 
 /// Copies, then deletes the selection.

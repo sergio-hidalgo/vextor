@@ -17,7 +17,7 @@ use crate::error::CoreError;
 use crate::ids::{NodeId, ResourceId};
 use crate::node::Node;
 use crate::resource::Resource;
-use crate::settings::GridSettings;
+use crate::settings::{GridSettings, SvgExportOptions};
 
 impl Document {
     /// Applies one command and returns its undo record.
@@ -70,6 +70,7 @@ impl Document {
             layers: targets.layers.as_ref().map(|_| self.layers.clone()),
             artboards: targets.artboards.as_ref().map(|_| self.artboards.clone()),
             grid: targets.grid.as_ref().map(|_| self.grid.clone()),
+            export: targets.export.as_ref().map(|_| self.export.clone()),
             color_format: targets.color_format.map(|_| self.color_format),
             name: targets.name.as_ref().map(|_| self.name.clone()),
         }
@@ -159,6 +160,10 @@ fn run(tx: &mut Tx<'_>, cmd: Command) -> Result<(), CoreError> {
         }
         C::SetGrid(grid) => {
             *tx.grid_mut() = grid;
+            Ok(())
+        }
+        C::SetExport(options) => {
+            *tx.export_mut() = options;
             Ok(())
         }
         C::Batch { commands, .. } => {
@@ -292,5 +297,12 @@ impl Tx<'_> {
             self.before.grid = Some(self.doc.grid.clone());
         }
         &mut self.doc.grid
+    }
+
+    fn export_mut(&mut self) -> &mut SvgExportOptions {
+        if self.before.export.is_none() {
+            self.before.export = Some(self.doc.export.clone());
+        }
+        &mut self.doc.export
     }
 }

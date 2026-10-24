@@ -242,6 +242,29 @@ pub(crate) fn dialog_of_width<T>(
         })
 }
 
+/// `add`'s content centred in the row, whatever its width: the width it
+/// took last frame (kept under `id_salt`) sets the space before it.
+/// Returns what `add` returned and the content's width.
+pub(crate) fn centered<R>(
+    ui: &mut egui::Ui,
+    id_salt: &str,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> (R, f32) {
+    let id = ui.scope_id().with(id_salt);
+    let last = ui.data(|d| d.get_temp::<f32>(id));
+    let pad = ((ui.available_width() - last.unwrap_or(0.0)) / 2.0).max(0.0);
+    let row = ui.horizontal(|ui| {
+        ui.add_space(pad);
+        ui.scope(add)
+    });
+    let width = row.inner.response.rect.width();
+    if last.is_none_or(|w| (w - width).abs() > 0.5) {
+        ui.data_mut(|d| d.insert_temp(id, width));
+        ui.ctx().request_repaint();
+    }
+    (row.inner.inner, width)
+}
+
 /// Heading and wrapped text, both centred.
 pub(crate) fn body(ui: &mut egui::Ui, heading: &str, text: &str) {
     ui.add_space(4.0);
@@ -416,6 +439,28 @@ mod tests {
         assert!(
             (rect.center() - Pos2::new(640.0, 400.0)).length() < 1.0,
             "{rect:?}"
+        );
+    }
+
+    #[test]
+    fn centred_content_sits_in_the_middle_once_measured() {
+        let ctx = egui::Context::default();
+        let mut rect = Rect::NOTHING;
+        for _ in 0..2 {
+            let input = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(400.0, 300.0))),
+                ..Default::default()
+            };
+            let mut output = ctx.run_ui(input, |ui| {
+                let (r, _) = centered(ui, "row", |ui| ui.button("A fairly long label").rect);
+                rect = r;
+            });
+            output.textures_delta.clear();
+        }
+        let middle = ctx.content_rect().center().x;
+        assert!(
+            (rect.center().x - middle).abs() < 2.0,
+            "{rect:?} vs {middle}"
         );
     }
 }

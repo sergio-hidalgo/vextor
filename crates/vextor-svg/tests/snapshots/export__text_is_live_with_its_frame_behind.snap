@@ -1,0 +1,10 @@
+---
+source: crates/vextor-svg/tests/export.rs
+expression: text_doc(label()).svg()
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80">
+  <g id="cta">
+    <rect x="4" y="2" width="70" height="59.2" rx="6" fill="#1e90ff"/>
+    <text font-family="'Noto Sans', sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#fff"><tspan x="39" y="27.78">Buy</tspan><tspan x="39" y="49.38">now</tspan></text>
+  </g>
+</svg>

@@ -21,7 +21,7 @@ impl VextorApp {
     pub(super) fn open_dialog(&mut self) {
         let dialog = rfd::FileDialog::new()
             .set_title("Open")
-            .add_filter("Vextor document", &files::OPEN_EXTENSIONS);
+            .add_filter("Vextor document", &[files::EXTENSION]);
         if let Some(path) = self.in_current_folder(dialog).pick_file() {
             self.open_path(path);
         }
@@ -259,7 +259,7 @@ impl VextorApp {
     /// "Convert with the fallback font?", "Save changes?" and the recovery
     /// prompt, one at a time.
     pub(super) fn prompts(&mut self, ctx: &egui::Context) {
-        if self.path_prompts(ctx) {
+        if self.path_prompts(ctx) || self.export_prompt(ctx) {
             return;
         }
         if let Some(missing) = &self.outline_prompt {

@@ -10,6 +10,17 @@ publish.workspace = true
 vextor-core.workspace = true
 vextor-geom.workspace = true
 kurbo.workspace = true
+base64.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+insta.workspace = true
+# The 1 000-node benchmark document (`fixtures::many_nodes`).
+vextor-render.workspace = true
+
+[[bench]]
+name = "export"
+harness = false
 
 [lints]
 workspace = true

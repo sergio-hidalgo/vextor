@@ -8,7 +8,7 @@ use crate::editor::Selection;
 use crate::ids::{NodeId, ResourceId};
 use crate::node::Node;
 use crate::resource::Resource;
-use crate::settings::GridSettings;
+use crate::settings::{GridSettings, SvgExportOptions};
 
 /// One undo step: what every touched part looked like before and after.
 #[derive(Clone, Debug, PartialEq)]
@@ -30,6 +30,7 @@ pub struct Patch {
     pub layers: Option<Vec<NodeId>>,
     pub artboards: Option<Vec<Artboard>>,
     pub grid: Option<GridSettings>,
+    pub export: Option<SvgExportOptions>,
     pub color_format: Option<ColorFormat>,
     /// The document's name.
     pub name: Option<String>,
@@ -44,6 +45,7 @@ impl Patch {
             && self.layers.is_some() == other.layers.is_some()
             && self.artboards.is_some() == other.artboards.is_some()
             && self.grid.is_some() == other.grid.is_some()
+            && self.export.is_some() == other.export.is_some()
             && self.color_format.is_some() == other.color_format.is_some()
             && self.name.is_some() == other.name.is_some()
     }
@@ -59,6 +61,7 @@ impl Patch {
         self.layers = self.layers.take().or(other.layers);
         self.artboards = self.artboards.take().or(other.artboards);
         self.grid = self.grid.take().or(other.grid);
+        self.export = self.export.take().or(other.export);
         self.color_format = self.color_format.or(other.color_format);
         self.name = self.name.take().or(other.name);
     }
@@ -70,6 +73,7 @@ impl Patch {
         self.layers = other.layers.or(self.layers.take());
         self.artboards = other.artboards.or(self.artboards.take());
         self.grid = other.grid.or(self.grid.take());
+        self.export = other.export.or(self.export.take());
         self.color_format = other.color_format.or(self.color_format);
         self.name = other.name.or(self.name.take());
     }
@@ -106,6 +110,9 @@ impl Document {
         }
         if let Some(grid) = &patch.grid {
             self.grid = grid.clone();
+        }
+        if let Some(export) = &patch.export {
+            self.export = export.clone();
         }
         if let Some(format) = patch.color_format {
             self.color_format = format;

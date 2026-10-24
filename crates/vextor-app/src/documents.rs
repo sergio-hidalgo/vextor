@@ -298,13 +298,13 @@ mod tests {
     #[test]
     fn opening_an_open_path_finds_its_tab() {
         let (mut d, _) = three();
-        let path = std::env::temp_dir().join("vextor-05f-not-there.vextor");
+        let path = std::env::temp_dir().join("vextor-05f-not-there.vxtr");
         let id = d.add(
             Session::opened(new_document("x", 1.0, 1.0), path.clone()),
             None,
         );
         assert_eq!(d.find_path(&path), Some(id));
-        assert_eq!(d.find_path(&path.with_file_name("other.vextor")), None);
+        assert_eq!(d.find_path(&path.with_file_name("other.vxtr")), None);
     }
 
     #[test]

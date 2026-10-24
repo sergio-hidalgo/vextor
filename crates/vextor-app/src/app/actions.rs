@@ -26,6 +26,11 @@ pub(super) enum Action {
     ClearRecent,
     Save,
     SaveAs,
+    /// File ▸ Export… (spec 12): the export dialog.
+    Export,
+    /// The canvas context menu's Export Selection…: the dialog set to the
+    /// selection as SVG.
+    ExportSelection,
     /// File ▸ Close: the active document.
     Close,
     /// A tab's close button.
@@ -52,6 +57,8 @@ pub(super) enum Action {
     AddArtboard,
     Cut,
     Copy,
+    /// Edit ▸ Copy As (spec 12): the selection's code, system clipboard only.
+    CopyAs(vextor_svg::Format),
     Paste,
     PasteInPlace,
     Duplicate,
@@ -167,6 +174,13 @@ impl VextorApp {
                 self.system_clipboard = edit_ops::copy(s);
                 Ok(())
             }
+            Action::CopyAs(format) => match edit_ops::copy_as(s, *format) {
+                Some(code) => {
+                    self.system_clipboard = Some(code);
+                    Ok(())
+                }
+                None => Err("Select a visible object to copy its code".to_owned()),
+            },
             Action::Paste => edit_ops::paste(s, false),
             Action::PasteInPlace => edit_ops::paste(s, true),
             Action::Duplicate => edit_ops::duplicate(s),

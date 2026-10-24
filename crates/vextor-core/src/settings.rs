@@ -40,11 +40,16 @@ pub struct SvgExportOptions {
     pub precision: u8,
     pub styling: Styling,
     pub ids: IdMode,
-    /// `viewBox` only, no `width`/`height`.
+    /// `viewBox` only, no `width`/`height`. Default on.
     pub responsive: bool,
+    /// One line, no indentation.
     pub minify: bool,
     /// Map the dominant solid colour to `currentColor`.
     pub current_color: bool,
+    /// Text as `<path>` outlines instead of live `<text>`, so the page
+    /// needs no font (spec 12). Absent in files saved before it: off.
+    #[serde(default)]
+    pub text_as_outlines: bool,
 }
 
 /// Where paint is written in the SVG.
@@ -101,9 +106,10 @@ impl Default for SvgExportOptions {
             precision: 2,
             styling: Styling::Attributes,
             ids: IdMode::Readable,
-            responsive: false,
+            responsive: true,
             minify: false,
             current_color: false,
+            text_as_outlines: false,
         }
     }
 }

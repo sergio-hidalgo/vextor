@@ -35,7 +35,13 @@ All four checks must pass before a change is merged.
 ```sh
 cargo bench -p vextor-render     # canvas render timings (criterion), typing in long text
 cargo bench -p vextor-geom       # hit-testing, drag-frame and text layout timings
+cargo bench -p vextor-svg        # SVG export of 1 000 objects (budget 20 ms)
 ```
+
+SVG export is checked with `insta` snapshots in
+`crates/vextor-svg/tests/snapshots/`; after a deliberate output change,
+review each changed file (`cargo insta review`, or `INSTA_UPDATE=always`
+and read the diff) before committing.
 
 Text tests use the bundled Noto Sans fonts in
 `crates/vextor-geom/tests/fixtures/fonts/` (SIL OFL 1.1, see the README
@@ -228,8 +234,10 @@ active for the next path.
 ### Path operations
 
 Inspector ▸ Path Operations (Union, Subtract, Intersect, Exclude, after
-Align), Object ▸ Path Operations and the keys below work on the selected
-objects. Each is one undo step; when a result would
+Align), Object ▸ Path Operations, the keys below, and — with two or more
+objects selected — the canvas right-click menu (Union, Subtract,
+Intersect, Exclude, Divide, under Group / Ungroup; right-clicking a group
+shows Group / Ungroup too) work on the selected objects. Each is one undo step; when a result would
 be empty (two shapes that do not touch, intersected) nothing changes and
 the message bar says why. Results stay curves: a circle cut by a square
 keeps its arcs.
@@ -271,18 +279,35 @@ Vextor starts; until then text is placed but not drawn.
 A label emptied when editing ends is removed. A document keeps a font's
 name even when this computer does not have it: the inspector says
 "Font missing: X — showing Y", and converting such a label to outlines asks
-first, since the outlines would take the shape of the stand-in font. Copy
-writes labels into the clipboard SVG as live `<text>` (one `<tspan>` per
-line, the frame as a `<rect>`), so a web page needs the same font
-installed or loaded; convert to outlines for a font-free shape.
+first, since the outlines would take the shape of the stand-in font.
+Exported code writes labels as live `<text>` (one `<tspan>` per line, the
+frame as a `<rect>`), so a web page needs the same font installed or
+loaded; turn on the export option "Text as outlines" (or convert to
+outlines) for a font-free shape.
 
 Align lines up two or more objects with each other, or one object with its
 artboard (Object ▸ Align ▸ Align to Artboard forces the artboard).
 Distribute needs three or more. Hidden and locked objects cannot be
-selected. Copy also puts the selection on the system clipboard as SVG
-(shapes, groups, text, solid colours, strokes and clips; gradients are
-written as their first colour, patterns as no paint, and images are left
-out until full export arrives).
+selected. Copy also puts the selection on the system clipboard as SVG,
+written like any export (see Code and export).
+
+### Code and export
+
+| Action                     | How                                                        |
+| :------------------------- | :--------------------------------------------------------- |
+| See the code               | the Code panel at the bottom (View ▸ Code Panel shows or hides it): the live code of the current artboard (the one picked in Inspector ▸ Artboards, else the first) or of the selection. Selected objects are highlighted in it, and it scrolls to them |
+| Pick a format              | the panel's menu: SVG, Inline HTML (no `xmlns`, `role="img"`, `aria-label` from the artboard name), JSX (a React component named after the artboard, `{...props}` on the `<svg>`), CSS data URI (`url("data:image/svg+xml,…")` for `background` or `mask`) |
+| Copy it                    | the panel's Copy button; or Edit ▸ Copy As ▸ SVG (`⇧⌘C`) / Inline HTML / JSX / CSS data URI for the selection |
+| Options                    | the panel's Options menu, or File ▸ Export…: decimals (0–6, default 2), ids (from names / unique `vx-…` prefixed / only where needed: none on objects, numbered ones on gradients, patterns and clips so `url(#…)` still finds them), styling (attributes / `<style>` classes), responsive (no `width`/`height`, default on), main colour as `currentColor`, text as outlines, minify. Saved with the document, not undo steps |
+| Export files               | File ▸ Export… (`⇧⌘E`), or right-click a selection ▸ Export Selection… (opens on Selection, SVG): the artboard, the selection or all artboards (one file each, named after the artboard, into a folder you pick; same-named files there are replaced), as SVG or PNG 1× / 2× / 3× (`name.png`, `name@2x.png`…) |
+
+The output is minimal and the same every time: shortest path data,
+default values left out, `<defs>` in order of first use, and an artboard's
+content moved to its top-left corner. Hidden objects, and objects lying
+on another artboard, are left out; a layer becomes a `<g>` only when it
+has an opacity or a clip. Document text is always escaped, and nothing
+executable is ever written. PNGs are drawn by the canvas renderer, so
+they look exactly like the canvas.
 
 Ctrl replaces ⌘ on Windows and Linux.
 
@@ -301,8 +326,9 @@ colours from the palette in `crates/vextor-app/src/theme.rs`.
 
 ## Files, autosave and recovery
 
-Documents are saved as `.vxtr` files (files from earlier versions, `.vextor`, still open and keep their name when saved or renamed; JSON, `format_version: 2`, which
-added text; version-1 files still open and are saved as version 2;
+Documents are saved as `.vxtr` files (JSON, `format_version: 3`; version 2
+added text, version 3 the "Text as outlines" export option; version-1 and
+version-2 files still open and are saved as version 3;
 embedded images as base64; fonts are never embedded, only their names). Saving writes a temporary file next to the
 document and renames it into place, so a crash never leaves a half-written
 file. The title bar shows `•` while there are unsaved changes, and closing
@@ -337,7 +363,7 @@ VEXTOR_DEBUG_MENU=1 cargo run -p vextor-app --release
 | :-------------- | :--------------------------------------------------------- |
 | `vextor-core`   | document model, commands, undo history, `.vxtr` bytes (no UI, no file I/O) |
 | `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, path editing (segment hit-tests, split, bend, joins), text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`), snapping, where a gradient lands on an object, path operations (booleans on polygons via `i_overlay`, curves recovered from the inputs; offset, outline stroke and simplify via `kurbo`) |
-| `vextor-svg`    | SVG export and import                                      |
+| `vextor-svg`    | SVG / HTML / JSX / CSS export (import: spec 13)            |
 | `vextor-render` | rasterising documents for the canvas (`tiny-skia`: solid colours, gradients, patterns, dashes, clips, opacity), sample documents |
 | `vextor-app`    | the desktop app (`eframe`/`egui`), file dialogs (`rfd`), autosave |
 

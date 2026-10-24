@@ -1,0 +1,28 @@
+---
+source: crates/vextor-svg/tests/export.rs
+expression: d.svg()
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40">
+  <defs>
+    <linearGradient id="gradient-1" x1="40" y1="0" x2="60" y2="20" gradientUnits="userSpaceOnUse" spreadMethod="reflect">
+      <stop stop-color="#f00"/>
+      <stop offset=".5" stop-color="#00f" stop-opacity=".502"/>
+      <stop offset="1"/>
+    </linearGradient>
+    <linearGradient id="gradient-2">
+      <stop stop-color="#f00"/>
+      <stop offset=".5" stop-color="#00f" stop-opacity=".502"/>
+      <stop offset="1"/>
+    </linearGradient>
+    <radialGradient id="sunset-glow" fx=".3" fy=".3" spreadMethod="repeat">
+      <stop stop-color="#f00"/>
+      <stop offset=".5" stop-color="#00f" stop-opacity=".502"/>
+      <stop offset="1"/>
+    </radialGradient>
+  </defs>
+  <rect width="20" height="20" fill="url(#gradient-1)"/>
+  <rect x="30" width="20" height="20" fill="url(#gradient-2)"/>
+  <rect x="60" width="20" height="20" fill="url(#sunset-glow)"/>
+  <rect x="30" y="25" width="20" height="10" fill="none" stroke="url(#gradient-2)" stroke-width="2"/>
+  <rect width="20" height="10" transform="translate(0 25)" fill="url(#gradient-1)"/>
+</svg>

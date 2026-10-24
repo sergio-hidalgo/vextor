@@ -9,7 +9,7 @@ use common::{
 };
 use vextor_core::{
     Artboard, Command, CoreError, Geometry, GridSettings, NodeId, NodeKind, NodeType, Paint, Path,
-    PathNode, PathNodeRef, Rgba, Shape, Style, SubPath, Transform, Vec2,
+    PathNode, PathNodeRef, Rgba, Shape, Style, SubPath, SvgExportOptions, Transform, Vec2,
 };
 
 fn at(fx: &Fx, subpath: usize, index: usize) -> PathNodeRef {
@@ -1010,6 +1010,26 @@ fn set_grid() {
         Command::SetGrid(GridSettings {
             size: 0.0,
             ..GridSettings::default()
+        }),
+    );
+}
+
+#[test]
+fn set_export() {
+    let fx = fixture();
+    let export = SvgExportOptions {
+        precision: 3,
+        text_as_outlines: true,
+        ..SvgExportOptions::default()
+    };
+    check(&fx.doc, Command::SetExport(export.clone()), |d| {
+        d.export = export;
+    });
+    rejects(
+        &fx.doc,
+        Command::SetExport(SvgExportOptions {
+            precision: 7,
+            ..SvgExportOptions::default()
         }),
     );
 }

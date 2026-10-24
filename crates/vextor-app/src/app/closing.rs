@@ -101,7 +101,7 @@ mod tests {
     fn save(d: &mut Documents, id: DocId) -> bool {
         d.activate(id);
         let s = d.session_mut().expect("open");
-        s.mark_saved(std::env::temp_dir().join("saved.vextor"));
+        s.mark_saved(std::env::temp_dir().join("saved.vxtr"));
         true
     }
 

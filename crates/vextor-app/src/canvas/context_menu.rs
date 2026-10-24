@@ -1,6 +1,9 @@
 //! The canvas context menu: the path commands (spec 07) while a path is
 //! selected, and the arrange commands (spec 08c) after a right-click on an
-//! object, which selects it first when it was not selected.
+//! object, which selects it first when it was not selected. With several
+//! objects selected, or a group, Group / Ungroup come first; with several,
+//! the path operations that combine them (spec 11) follow; any selection
+//! can be exported (spec 12).
 
 use eframe::egui;
 use vextor_core::ToolId;
@@ -10,7 +13,18 @@ use super::{Canvas, nodes, to_point};
 use crate::edit_ops;
 use crate::select::PICK_TOLERANCE;
 use crate::session::Session;
+use crate::shape_ops::ShapeOp;
 use crate::view;
+
+/// What the menu asks the app to do; the app runs it like the same menu
+/// item elsewhere.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MenuRequest {
+    /// A path operation (spec 11), as from Object ▸ Path Operations.
+    Shape(ShapeOp),
+    /// File ▸ Export… set to the selection as SVG (spec 12).
+    ExportSelection,
+}
 
 impl Canvas {
     /// Handles a right-click and shows the menu while it is open. Returns
@@ -31,19 +45,113 @@ impl Canvas {
         if !paths && !self.menu_on_object {
             return None;
         }
+        let (grouping, several) = menu_sections(session, self.menu_on_object);
         let mut message = None;
+        let mut request = None;
         response.context_menu(|ui| {
+            if grouping {
+                message = group_items(ui, session);
+                if several {
+                    request = combine_items(ui, session).map(MenuRequest::Shape);
+                }
+                ui.separator();
+            }
             if paths {
-                message = nodes::path_menu_items(ui, session);
+                message = nodes::path_menu_items(ui, session).or(message.take());
             }
             message = arrange_items(ui, session).or(message.take());
             if self.menu_on_object {
                 ui.separator();
                 message = clip_items(ui, session).or(message.take());
+                ui.separator();
+                if ui.button("Export Selection…").clicked() {
+                    request = Some(MenuRequest::ExportSelection);
+                    ui.close();
+                }
             }
         });
+        if request.is_some() {
+            self.request = request;
+        }
         message
     }
+
+    /// What the context menu asked for since the last call.
+    pub fn take_request(&mut self) -> Option<MenuRequest> {
+        self.request.take()
+    }
+}
+
+/// An edit run from a menu item.
+type EditRun = fn(&mut Session) -> Result<(), String>;
+
+/// Group and Ungroup, disabled with the reason.
+fn group_items(ui: &mut egui::Ui, session: &mut Session) -> Option<String> {
+    let can = edit_ops::can(session);
+    let items: [(&str, &str, bool, &str, EditRun); 2] = [
+        (
+            "Group",
+            "⌘G",
+            can.group,
+            "Select objects in the same group or layer",
+            edit_ops::group,
+        ),
+        (
+            "Ungroup",
+            "⇧⌘G",
+            can.ungroup,
+            "Select a group",
+            edit_ops::ungroup,
+        ),
+    ];
+    let mut message = None;
+    for (text, keys, enabled, why, run) in items {
+        let button = egui::Button::new(text).shortcut_text(keys);
+        if ui
+            .add_enabled(enabled, button)
+            .on_disabled_hover_text(why)
+            .clicked()
+        {
+            message = run(session).err();
+            ui.close();
+        }
+    }
+    message
+}
+
+/// Union, Subtract, Intersect, Exclude and Divide, disabled with the
+/// reason. Returns the one clicked: the app runs it, as from the Object
+/// menu.
+fn combine_items(ui: &mut egui::Ui, session: &Session) -> Option<ShapeOp> {
+    ui.separator();
+    let mut picked = None;
+    for op in ShapeOp::COMBINE {
+        let keys = match op {
+            ShapeOp::Union => "⌥⌘U",
+            ShapeOp::Subtract => "⌥⌘S",
+            ShapeOp::Intersect => "⌥⌘I",
+            ShapeOp::Exclude => "⌥⌘E",
+            _ => "",
+        };
+        let button = egui::Button::new(op.title()).shortcut_text(keys);
+        if ui
+            .add_enabled(op.can(session), button)
+            .on_disabled_hover_text(op.why())
+            .clicked()
+        {
+            picked = Some(op);
+            ui.close();
+        }
+    }
+    picked
+}
+
+/// Which object sections the menu shows: Group / Ungroup (several
+/// objects, or a group), and the combining path operations (several).
+fn menu_sections(session: &Session, on_object: bool) -> (bool, bool) {
+    let several = on_object && session.selected().len() >= 2;
+    let grouping = several || (on_object && edit_ops::can(session).ungroup);
+    (grouping, several)
 }
 
 /// A right-click at `p` (document space): with the Select tool, an object
@@ -182,6 +290,48 @@ mod tests {
         h.run(&mut s, right_click_at(Pos2::new(25.0, 5.0)));
         assert_eq!(s.selected(), vec![a]);
         assert!(!h.canvas.menu_on_object);
+    }
+
+    #[test]
+    fn two_selected_shapes_offer_group_and_every_combining_operation() {
+        let (mut s, [a, b]) = two_rects();
+        s.select(vec![a, b]);
+        let mut h = Harness::new();
+        h.run(&mut s, right_click_at(Pos2::new(5.0, 5.0)));
+        assert!(h.canvas.menu_on_object);
+        assert_eq!(menu_sections(&s, true), (true, true));
+        assert!(edit_ops::can(&s).group, "Group is enabled");
+        for op in ShapeOp::COMBINE {
+            assert!(op.can(&s), "{} is enabled", op.title());
+        }
+        // A picked operation is handed to the app once.
+        h.canvas.request = Some(MenuRequest::Shape(ShapeOp::Union));
+        assert_eq!(
+            h.canvas.take_request(),
+            Some(MenuRequest::Shape(ShapeOp::Union))
+        );
+        assert_eq!(h.canvas.take_request(), None);
+    }
+
+    #[test]
+    fn a_right_clicked_group_offers_ungroup() {
+        let (mut s, [a, b]) = two_rects();
+        s.select(vec![a, b]);
+        edit_ops::group(&mut s).expect("groups");
+        let group = s.selected()[0];
+        s.select(Vec::new());
+        let mut h = Harness::new();
+        h.run(&mut s, right_click_at(Pos2::new(5.0, 5.0)));
+        assert_eq!(s.selected(), vec![group], "the group is picked whole");
+        assert!(h.canvas.menu_on_object);
+        assert_eq!(
+            menu_sections(&s, true),
+            (true, false),
+            "Group / Ungroup show, the path operations need several objects"
+        );
+        assert!(edit_ops::can(&s).ungroup, "Ungroup is enabled");
+        edit_ops::ungroup(&mut s).expect("ungroups");
+        assert!(!s.doc.nodes.contains_key(&group));
     }
 
     #[test]
