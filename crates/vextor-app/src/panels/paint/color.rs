@@ -208,7 +208,7 @@ fn hex_error(ui: &mut egui::Ui, key: egui::Id) {
 /// (click on the canvas; `Esc` or a second click here cancels).
 fn eyedropper(ui: &mut egui::Ui, s: &mut Session, key: egui::Id, size: egui::Vec2) {
     let armed = s.eyedropper == Some(key.value());
-    let tip = "Pick a colour from the canvas (Esc cancels)";
+    let tip = "Pick a colour from the canvas";
     if icons::quiet_button(ui, Icon::Eyedropper, size, armed, true, tip, "").clicked() {
         s.eyedropper = (!armed).then_some(key.value());
     }
@@ -266,7 +266,7 @@ fn swatches(
     ui.horizontal_top(|ui| {
         let can = library.can_add(kind, color);
         let why = "This colour is in this swatch list already (or there are 256 swatches)";
-        let tip = "Add this colour to swatches (kept for every document)";
+        let tip = "Add to swatches";
         // Only as wide as the icon, so the `+` starts where the labels do.
         let add = icons::tight_button(ui, Icon::Add, can, tip, why);
         if add.clicked() {

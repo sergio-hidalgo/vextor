@@ -327,12 +327,7 @@ fn name_row(ui: &mut egui::Ui, s: &Session, target: Target, id: ResourceId) -> O
             ui.data_mut(|d| d.remove::<String>(key));
         }
     });
-    let users = paint_edit::users(&s.doc, id);
-    let tip = match users {
-        0 => format!("Delete this {word}"),
-        1 => format!("Delete this {word}; the object painted with it loses this paint"),
-        n => format!("Delete this {word}; the {n} objects painted with it lose this paint"),
-    };
+    let tip = format!("Delete {word}");
     let deleted = row.put(ui, bin, |ui| {
         icons::quiet_button(ui, Icon::Delete, bin.size(), false, true, &tip, "").clicked()
     });

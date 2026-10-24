@@ -216,9 +216,10 @@ fn a_right_angle_corner_rounds_from_its_widget() {
         "outside: none"
     );
     assert!(node_corner(&sp, 0).is_none(), "an open end");
+    // spec 11: a corner next to a curve rounds too.
     let mut curvy = elbow();
     curvy.nodes[0].handle_out = Some(v(10.0, 10.0));
-    assert!(node_corner(&curvy, 1).is_none(), "next to a curve");
+    assert!(node_corner(&curvy, 1).is_some(), "next to a curve");
 }
 
 fn arb_node() -> impl Strategy<Value = PathNode> {

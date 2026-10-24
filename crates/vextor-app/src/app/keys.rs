@@ -5,6 +5,7 @@ use vextor_core::{Arrange, ToolId};
 
 use super::{Action, VextorApp};
 use crate::path_ops::PathAction;
+use crate::shape_ops::ShapeOp;
 
 pub(super) const NEW: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::N);
 pub(super) const OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
@@ -72,6 +73,12 @@ pub(super) const ZOOM_TOOL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::
 pub(super) const JOIN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::J);
 pub(super) const TOGGLE_SEGMENT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::C);
 pub(super) const ADD_NODE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::Plus);
+// Path operations (spec 11): ⌥⌘ + letter.
+pub(super) const CMD_ALT: Modifiers = Modifiers::COMMAND.plus(Modifiers::ALT);
+pub(super) const UNION: KeyboardShortcut = KeyboardShortcut::new(CMD_ALT, Key::U);
+pub(super) const SUBTRACT: KeyboardShortcut = KeyboardShortcut::new(CMD_ALT, Key::S);
+pub(super) const INTERSECT: KeyboardShortcut = KeyboardShortcut::new(CMD_ALT, Key::I);
+pub(super) const EXCLUDE: KeyboardShortcut = KeyboardShortcut::new(CMD_ALT, Key::E);
 /// The shape tools' keys, in `ToolId::SHAPES` order.
 pub(super) const SHAPE_TOOLS: [(KeyboardShortcut, ToolId); 5] = [
     (KeyboardShortcut::new(Modifiers::NONE, Key::R), ToolId::Rect),
@@ -96,8 +103,15 @@ impl VextorApp {
     /// Object keys work only while the canvas shows (`editing`), and are
     /// left to a text field that has the focus.
     pub(super) fn shortcuts(ctx: &egui::Context, editing: bool) -> Vec<Action> {
-        let mut actions = Self::document_shortcuts(ctx);
-        if !editing || ctx.egui_wants_keyboard_input() {
+        let edit_keys = editing && !ctx.egui_wants_keyboard_input();
+        // ⌥⌘ letters go first: egui's ⌘S would also take ⌥⌘S.
+        let mut actions = if edit_keys {
+            Self::path_op_shortcuts(ctx)
+        } else {
+            Vec::new()
+        };
+        actions.extend(Self::document_shortcuts(ctx));
+        if !edit_keys {
             return actions;
         }
         ctx.input_mut(|i| {
@@ -157,6 +171,47 @@ impl VextorApp {
                     }
                 }
             }
+        });
+        actions
+    }
+
+    /// The path operation keys (⌥⌘U / S / I / E). The letter is read from
+    /// the physical key too: on macOS Option can turn it into another
+    /// character.
+    fn path_op_shortcuts(ctx: &egui::Context) -> Vec<Action> {
+        let keys = [
+            (UNION, ShapeOp::Union),
+            (SUBTRACT, ShapeOp::Subtract),
+            (INTERSECT, ShapeOp::Intersect),
+            (EXCLUDE, ShapeOp::Exclude),
+        ];
+        let mut actions = Vec::new();
+        ctx.input_mut(|i| {
+            i.events.retain(|event| {
+                let egui::Event::Key {
+                    key,
+                    physical_key,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } = event
+                else {
+                    return true;
+                };
+                if !(modifiers.command && modifiers.alt) || modifiers.shift {
+                    return true;
+                }
+                let hit = keys.iter().find(|(shortcut, _)| {
+                    *key == shortcut.logical_key || *physical_key == Some(shortcut.logical_key)
+                });
+                match hit {
+                    Some((_, op)) => {
+                        actions.push(Action::Shape(*op));
+                        false
+                    }
+                    None => true,
+                }
+            });
         });
         actions
     }
@@ -324,6 +379,47 @@ mod tests {
         assert_eq!(picked, want);
         assert_eq!(actions(Key::P, CMD_SHIFT), vec![Action::ConvertToPath]);
         assert_eq!(actions(Key::S, Modifiers::COMMAND), vec![Action::Save]);
+    }
+
+    #[test]
+    fn option_command_letters_run_path_operations_not_save() {
+        assert_eq!(
+            actions(Key::S, CMD_ALT),
+            vec![Action::Shape(ShapeOp::Subtract)]
+        );
+        assert_eq!(
+            actions(Key::U, CMD_ALT),
+            vec![Action::Shape(ShapeOp::Union)]
+        );
+        assert_eq!(
+            actions(Key::I, CMD_ALT),
+            vec![Action::Shape(ShapeOp::Intersect)]
+        );
+        assert_eq!(
+            actions(Key::E, CMD_ALT),
+            vec![Action::Shape(ShapeOp::Exclude)]
+        );
+        assert_eq!(actions(Key::S, Modifiers::COMMAND), vec![Action::Save]);
+    }
+
+    #[test]
+    fn path_operation_keys_follow_the_physical_key() {
+        // Option turned the letter into another key: the physical key counts.
+        let ctx = egui::Context::default();
+        let raw = egui::RawInput {
+            events: vec![egui::Event::Key {
+                key: Key::Num0,
+                physical_key: Some(Key::U),
+                pressed: true,
+                repeat: false,
+                modifiers: CMD_ALT,
+            }],
+            ..Default::default()
+        };
+        ctx.begin_pass(raw);
+        let out = VextorApp::shortcuts(&ctx, true);
+        ctx.end_pass().textures_delta.clear();
+        assert_eq!(out, vec![Action::Shape(ShapeOp::Union)]);
     }
 
     #[test]

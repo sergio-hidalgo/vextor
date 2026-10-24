@@ -105,7 +105,7 @@ pub(super) fn list_section(
                                 Icon::MoveDown,
                                 false,
                                 i + 1 < count,
-                                "Move down (later in export order)",
+                                "Move down",
                                 last,
                             )
                             .clicked()
@@ -113,15 +113,8 @@ pub(super) fn list_section(
                                 artboard::reorder(s, id, false);
                             }
                             let first = "Already the first";
-                            if icons::button(
-                                ui,
-                                Icon::MoveUp,
-                                false,
-                                i > 0,
-                                "Move up (earlier in export order)",
-                                first,
-                            )
-                            .clicked()
+                            if icons::button(ui, Icon::MoveUp, false, i > 0, "Move up", first)
+                                .clicked()
                             {
                                 artboard::reorder(s, id, true);
                             }

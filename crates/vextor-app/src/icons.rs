@@ -8,6 +8,7 @@ use crate::theme;
 
 mod arrange;
 mod buttons;
+mod combine;
 mod layers;
 mod paint;
 mod path;
@@ -64,6 +65,13 @@ pub enum Icon {
     PathJoin,
     PathSplit,
     PathReverse,
+    /// Path operations (spec 11): two overlapping circles, the result
+    /// filled (both; the back one less the front; the overlap; all but
+    /// the overlap).
+    Union,
+    Subtract,
+    Intersect,
+    Exclude,
     /// The tools strip (spec 07): Select (a solid arrow), Nodes (a hollow
     /// arrow with a node), Pen (a nib), Text, and the shapes.
     ToolSelect,
@@ -274,6 +282,9 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
         | Icon::Layer
         | Icon::Image
         | Icon::Duplicate => pen.layers_icon(icon),
+        Icon::Union | Icon::Subtract | Icon::Intersect | Icon::Exclude => {
+            pen.combine_icon(icon);
+        }
         _ => pen.path_icon(icon),
     }
 }

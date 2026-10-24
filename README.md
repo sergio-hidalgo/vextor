@@ -7,7 +7,8 @@ SVG, HTML or JSX out of them.
 **Status:** the editor window, canvas, document model and `.vxtr`
 files are in place. You can create, open and save documents, draw
 rectangles, ellipses, polygons, stars and lines, select and transform
-objects, add text labels, draw paths with the pen and edit their nodes.
+objects, add text labels, draw paths with the pen and edit their nodes,
+and combine shapes with path operations (union, subtract, offset…).
 
 ## Requirements
 
@@ -213,7 +214,7 @@ shapes are never converted behind your back: Object ▸ Convert to Path
 | Node type                     | double-click a node: corner → smooth → symmetric → corner (sharp, no handles); or the Corner / Smooth / Symmetric icons in Inspector ▸ Node |
 | Segments                      | click one to select it; `C` toggles straight ↔ curve; drag a segment to bend it through the pointer |
 | Delete nodes                  | `⌫`: the path stays joined around them; deleting the last ones deletes the path |
-| Round a corner node           | select corner nodes between straight segments and drag the dot inside one: every selected corner rounds; or Inspector ▸ Node ▸ Corner radius |
+| Round a corner node           | select corner nodes and drag the dot inside one: every selected corner rounds, between straight segments or next to curves (the curve is cut back along its length); or Inspector ▸ Node ▸ Corner radius |
 | Close, open, join, split, reverse | Object ▸ Path, right-click on the canvas, or the icon buttons in Inspector ▸ Path (hover for the name) |
 | Exact node position, handles  | Inspector ▸ Node: X and Y side by side, then the In and Out handles side by side, each with its size and angle |
 | Align / distribute nodes      | with nodes selected, Inspector ▸ Align or Object ▸ Align / Distribute: the same six alignments line the nodes up with each other (one node, or Align to Artboard: with the artboard); Distribute spaces three or more evenly. Handles move with their nodes |
@@ -223,6 +224,33 @@ Each drawn path, drag, key press or inspector change is one undo step.
 A new path takes the last style given to a shape, with a 1 px black
 stroke when that style has none, so open segments show. The pen stays
 active for the next path.
+
+### Path operations
+
+Inspector ▸ Path Operations (Union, Subtract, Intersect, Exclude, after
+Align), Object ▸ Path Operations and the keys below work on the selected
+objects. Each is one undo step; when a result would
+be empty (two shapes that do not touch, intersected) nothing changes and
+the message bar says why. Results stay curves: a circle cut by a square
+keeps its arcs.
+
+| Do this                    | How                                                         |
+| :------------------------- | :---------------------------------------------------------- |
+| Union                      | `⌥⌘U`: one shape covering all the selected objects          |
+| Subtract                   | `⌥⌘S`: the objects above cut out of the bottom one          |
+| Intersect                  | `⌥⌘I`: only where all of them overlap                       |
+| Exclude                    | `⌥⌘E`: only where an odd number of them overlap             |
+| Divide                     | a group with one piece per region, each painted like the topmost object over it |
+| Offset path                | Object ▸ Path Operations ▸ Offset Path…: distance (negative insets), joins, miter limit; the canvas shows the result as you type, OK keeps it, Cancel / `Esc` takes it back |
+| Outline stroke             | the stroke becomes a filled shape in the stroke's paint (caps, joins and dashes as drawn); a filled shape becomes a group of its fill and the outlined stroke |
+| Simplify                   | Object ▸ Path Operations ▸ Simplify… (paths only): a tolerance in px; fewer nodes, the same look, shown live with the node count |
+| Compound path              | Make Compound Path: the selected shapes become one even-odd path, so overlaps make holes; Release Compound Path splits a path into one path per part |
+| Fill rule                  | Inspector ▸ Path ▸ Fill rule: Non-zero (overlaps stay filled) or Even-odd (overlaps make holes) |
+
+The result takes the bottom object's place, style, name and opacity.
+Groups take part as everything they show; open paths count as closed.
+Text takes part as outlines: Vextor asks first, then converts and
+combines in the same undo step. Images cannot take part.
 
 ### Text
 
@@ -308,7 +336,7 @@ VEXTOR_DEBUG_MENU=1 cargo run -p vextor-app --release
 | Crate           | Holds                                                      |
 | :-------------- | :--------------------------------------------------------- |
 | `vextor-core`   | document model, commands, undo history, `.vxtr` bytes (no UI, no file I/O) |
-| `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, path editing (segment hit-tests, split, bend, joins), text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`), snapping, where a gradient lands on an object; later booleans |
+| `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, path editing (segment hit-tests, split, bend, joins), text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`), snapping, where a gradient lands on an object, path operations (booleans on polygons via `i_overlay`, curves recovered from the inputs; offset, outline stroke and simplify via `kurbo`) |
 | `vextor-svg`    | SVG export and import                                      |
 | `vextor-render` | rasterising documents for the canvas (`tiny-skia`: solid colours, gradients, patterns, dashes, clips, opacity), sample documents |
 | `vextor-app`    | the desktop app (`eframe`/`egui`), file dialogs (`rfd`), autosave |

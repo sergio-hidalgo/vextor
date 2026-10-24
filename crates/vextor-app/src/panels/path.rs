@@ -6,13 +6,14 @@
 //! drag on a field is one undo step.
 
 use eframe::egui;
-use vextor_core::{NodeType, PathNodeRef, Side};
+use vextor_core::{FillRule, NodeId, NodeType, PathNodeRef, Side};
 use vextor_geom::node_corner;
 
 use super::{FIELD_SIZE, Label};
 use crate::icons::{self, Icon};
 use crate::path_ops::{self, PathAction};
 use crate::session::Session;
+use crate::shape_ops;
 
 /// Largest length or radius the fields accept, in px.
 const MAX_LENGTH: f64 = 10_000.0;
@@ -77,13 +78,54 @@ pub fn sections(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
             ui.spacing_mut().item_spacing.x = 2.0;
             for a in PathAction::STRUCTURE {
                 let icon = action_icon(a);
-                if icons::button(ui, icon, false, a.can(s), a.title(), a.why()).clicked() {
+                let tip = match a.keys() {
+                    "" => a.title().to_owned(),
+                    keys => format!("{} ({keys})", a.title()),
+                };
+                if icons::button(ui, icon, false, a.can(s), &tip, a.why()).clicked() {
                     ran = a.run(s).err();
                 }
             }
         });
+        if let Some(id) = path_ops::edited(s)
+            && let Some(rule) = s.path_of(id).map(|p| p.fill_rule)
+        {
+            ran = fill_rule_row(ui, s, id, rule).or(ran.take());
+        }
     });
     message.or(ran)
+}
+
+/// The fill rule of path `id` (spec 11): Non-zero or Even-odd, where
+/// overlapping parts of a compound path make holes. Returns a message when
+/// the change was refused.
+fn fill_rule_row(ui: &mut egui::Ui, s: &mut Session, id: NodeId, rule: FillRule) -> Option<String> {
+    let mut picked = None;
+    ui.horizontal(|ui| {
+        ui.label("Fill rule");
+        let choices = [
+            (
+                FillRule::NonZero,
+                "Non-zero",
+                "Overlapping parts stay filled",
+            ),
+            (
+                FillRule::EvenOdd,
+                "Even-odd",
+                "Overlapping parts make holes",
+            ),
+        ];
+        for (r, text, tooltip) in choices {
+            if ui
+                .selectable_label(rule == r, text)
+                .on_hover_text(tooltip)
+                .clicked()
+            {
+                picked = Some(r);
+            }
+        }
+    });
+    picked.and_then(|r| shape_ops::set_fill_rule(s, id, r).err())
 }
 
 /// X and Y side by side; the type as three icon buttons; the In and Out

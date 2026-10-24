@@ -259,6 +259,9 @@ impl VextorApp {
     /// "Convert with the fallback font?", "Save changes?" and the recovery
     /// prompt, one at a time.
     pub(super) fn prompts(&mut self, ctx: &egui::Context) {
+        if self.path_prompts(ctx) {
+            return;
+        }
         if let Some(missing) = &self.outline_prompt {
             let answer = prompts::outline_missing_font(
                 ctx,
@@ -305,5 +308,39 @@ impl VextorApp {
             }
             Some(RecoverAnswer::Discard) => self.orphans.remove(0).discard(),
         }
+    }
+
+    /// The path operations' dialog or text prompt (spec 11), when one is
+    /// open. Returns true when one was shown.
+    fn path_prompts(&mut self, ctx: &egui::Context) -> bool {
+        if let Some(dialog) = &mut self.path_dialog {
+            if let Some(s) = self.docs.session_mut() {
+                if dialog.show(ctx, self.canvas_rect, s) {
+                    self.path_dialog = None;
+                }
+            } else {
+                self.path_dialog = None;
+            }
+            return true;
+        }
+        let Some(op) = self.shape_prompt else {
+            return false;
+        };
+        let missing = self
+            .docs
+            .session()
+            .and_then(crate::outline_text::missing_font);
+        if let Some(go) =
+            crate::path_dialog::outlines_first(ctx, self.canvas_rect, op, missing.as_ref())
+        {
+            self.shape_prompt = None;
+            if go
+                && let Some(s) = self.docs.session_mut()
+                && let Err(e) = op.run(s)
+            {
+                self.message = Some(e);
+            }
+        }
+        true
     }
 }

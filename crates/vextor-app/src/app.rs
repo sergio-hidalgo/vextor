@@ -6,6 +6,7 @@ mod file_flow;
 mod keys;
 mod menus;
 mod paint;
+mod shape_menu;
 mod view_menu;
 
 use std::path::PathBuf;
@@ -76,6 +77,11 @@ pub struct VextorApp {
     /// Waiting on "Convert with the fallback font?" (a selected text's
     /// font is missing).
     outline_prompt: Option<vextor_geom::MissingFont>,
+    /// Waiting on "Convert text to outlines first?" before this path
+    /// operation (spec 11).
+    shape_prompt: Option<crate::shape_ops::ShapeOp>,
+    /// Offset Path… or Simplify…, while open (spec 11).
+    path_dialog: Option<crate::path_dialog::PathDialog>,
 }
 
 impl VextorApp {
@@ -121,6 +127,8 @@ impl VextorApp {
             system_clipboard: None,
             fonts,
             outline_prompt: None,
+            shape_prompt: None,
+            path_dialog: None,
         }
     }
 
@@ -312,8 +320,11 @@ impl eframe::App for VextorApp {
             }
         }
         self.handle_close(&ctx);
-        let prompt_open =
-            self.confirm.is_some() || !self.orphans.is_empty() || self.outline_prompt.is_some();
+        let prompt_open = self.confirm.is_some()
+            || !self.orphans.is_empty()
+            || self.outline_prompt.is_some()
+            || self.shape_prompt.is_some()
+            || self.path_dialog.is_some();
         self.paint_escape(&ctx);
         // While a shape is drawn, keys belong to it (arrows, Esc).
         if !prompt_open && !self.canvas.is_drawing() {

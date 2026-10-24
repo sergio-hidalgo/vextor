@@ -26,6 +26,8 @@ pub enum PanelAction {
     Flip {
         horizontal: bool,
     },
+    /// Inspector ▸ Path Operations (spec 11), like Object ▸ Path Operations.
+    Shape(crate::shape_ops::ShapeOp),
 }
 
 /// The six align buttons: action, icon, tooltip.
@@ -84,16 +86,8 @@ fn align_buttons(
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         for (horizontal, icon, tip) in [
-            (
-                true,
-                Icon::DistributeH,
-                "Distribute horizontally: equal gaps side by side",
-            ),
-            (
-                false,
-                Icon::DistributeV,
-                "Distribute vertically: equal gaps one above the other",
-            ),
+            (true, Icon::DistributeH, "Distribute horizontally"),
+            (false, Icon::DistributeV, "Distribute vertically"),
         ] {
             if icons::button(ui, icon, false, can.distribute, tip, three).clicked() {
                 out.push(PanelAction::Distribute { horizontal });
@@ -143,7 +137,7 @@ fn group_buttons(ui: &mut egui::Ui, can: Can, out: &mut Vec<PanelAction>) {
             Icon::Group,
             false,
             can.group,
-            "Group (⌘G): make the selected objects one object",
+            "Group (⌘G)",
             "Select objects in the same group or layer",
         );
         if group.clicked() {
@@ -154,7 +148,7 @@ fn group_buttons(ui: &mut egui::Ui, can: Can, out: &mut Vec<PanelAction>) {
             Icon::Ungroup,
             false,
             can.ungroup,
-            "Ungroup (⇧⌘G): free the objects inside the selected groups",
+            "Ungroup (⇧⌘G)",
             "Select a group",
         );
         if ungroup.clicked() {

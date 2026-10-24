@@ -169,6 +169,9 @@ impl VextorApp {
         }
         let session = self.docs.session().filter(|_| self.picker.is_none());
         ui.menu_button("Path", |ui| path_menu(ui, session, actions));
+        ui.menu_button("Path Operations", |ui| {
+            super::shape_menu::shape_menu(ui, session, actions);
+        });
         ui.separator();
         ui.add_enabled_ui(can.edit, |ui| {
             ui.menu_button("Arrange", |ui| arrange_menu(ui, can, actions));
@@ -360,7 +363,7 @@ fn path_menu(ui: &mut egui::Ui, session: Option<&Session>, actions: &mut Vec<Act
 }
 
 /// A menu item that says why it is disabled when it is.
-fn why_item(
+pub(super) fn why_item(
     ui: &mut egui::Ui,
     enabled: bool,
     text: &str,

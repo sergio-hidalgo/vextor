@@ -99,7 +99,7 @@ fn toolbar(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
                         (
                             Icon::Delete,
                             !last,
-                            "Delete layer and its contents",
+                            "Delete layer",
                             "The last layer cannot be deleted",
                         ),
                     ];
