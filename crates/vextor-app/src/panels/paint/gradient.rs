@@ -305,16 +305,7 @@ fn stop_fields(
     let can = g.stops.len() > 2;
     let why = "A gradient keeps at least two stops";
     let removed = row.put(ui, bin, |ui| {
-        icons::quiet_button(
-            ui,
-            Icon::Delete,
-            bin.size(),
-            false,
-            can,
-            "Remove this stop",
-            why,
-        )
-        .clicked()
+        icons::quiet_button(ui, Icon::Delete, bin.size(), false, can, "Remove stop", why).clicked()
     });
     if removed && let Some(edited) = paint_edit::remove_stop(g, selected) {
         out = Some((edited, selected.saturating_sub(1)));

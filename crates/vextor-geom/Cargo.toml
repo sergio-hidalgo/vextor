@@ -12,6 +12,7 @@ kurbo.workspace = true
 fontdb.workspace = true
 harfrust.workspace = true
 skrifa.workspace = true
+i_overlay.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
@@ -30,4 +31,8 @@ harness = false
 
 [[bench]]
 name = "snap"
+harness = false
+
+[[bench]]
+name = "boolean"
 harness = false

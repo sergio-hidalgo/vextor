@@ -3,7 +3,9 @@
 
 mod convert;
 mod draw;
+mod fillet;
 mod hit;
+mod ops;
 mod paint;
 mod path_edit;
 mod resize;
@@ -21,6 +23,7 @@ pub use hit::{
     bounds, from_affine, overlaps, pick, selectable, to_affine, touching, union_bounds,
     visual_bounds,
 };
+pub use ops::{Area, BooleanOp, divide, offset, outline_stroke, result_path, simplify};
 pub use paint::{PaintPart, gradient_space, paint_box};
 pub use path_edit::{
     NodeCorner, SegmentHit, bend, constrain_angle, constrain_vector, from_point, from_vec,

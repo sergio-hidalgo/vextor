@@ -187,7 +187,7 @@ fn path_corner_radius_on_straight_corners() {
 }
 
 #[test]
-fn path_corner_radius_is_ignored_next_to_curves() {
+fn path_corner_radius_rounds_next_to_curves_too() {
     let mut p = square_path(2.0);
     p.subpaths[0].nodes[1].handle_in = Some(Vec2::new(-3.0, -2.0));
     let curves = path_to_bezpath(&p)
@@ -195,9 +195,90 @@ fn path_corner_radius_is_ignored_next_to_curves() {
         .iter()
         .filter(|e| matches!(e, PathEl::CurveTo(..)))
         .count();
-    // segment 0→1 is curved, so nodes 0 and 1 stay sharp; nodes 2 and 3
-    // are rounded: 1 curved segment + 2 fillets.
-    assert_eq!(curves, 3);
+    // spec 11: the curved segment 0→1 is cut back at both ends, so every
+    // node is rounded: 1 curved segment + 4 fillets.
+    assert_eq!(curves, 5);
+}
+
+/// A "D": a straight base from (0, 0) to (40, 0) and a curve back over
+/// the top, meeting the base square at both ends; every node rounded.
+fn d_shape(radius: f64) -> Path {
+    let node = |x, y, h_in: Option<Vec2>, h_out: Option<Vec2>| PathNode {
+        handle_in: h_in,
+        handle_out: h_out,
+        corner_radius: radius,
+        ..PathNode::corner(x, y)
+    };
+    Path {
+        subpaths: vec![SubPath {
+            nodes: vec![
+                node(0.0, 0.0, Some(Vec2::new(0.0, -22.0)), None),
+                node(40.0, 0.0, None, Some(Vec2::new(0.0, -22.0))),
+            ],
+            closed: true,
+        }],
+        fill_rule: FillRule::NonZero,
+    }
+}
+
+#[test]
+fn a_corner_between_a_line_and_a_curve_is_cut_back_along_both() {
+    let sharp = path_to_bezpath(&d_shape(0.0));
+    let round = path_to_bezpath(&d_shape(5.0));
+    assert!(
+        round.area().abs() < sharp.area().abs(),
+        "the corners are cut off"
+    );
+    assert!(
+        sharp.area().abs() - round.area().abs() < 2.0 * 25.0,
+        "by little"
+    );
+    let els = round.elements();
+    // Starts after the fillet at node 0, on the base, 5 px in (90°).
+    let PathEl::MoveTo(start) = els[0] else {
+        panic!("{els:?}");
+    };
+    assert_close(start.x, 5.0, 1e-6);
+    assert_close(start.y, 0.0, 1e-9);
+    // Every join is smooth: each fillet leaves along where it arrives.
+    let segs: Vec<kurbo::PathSeg> = round.segments().collect();
+    for w in segs.windows(2) {
+        let out = w[0].as_cubic().map(|c| c.p3 - c.p2);
+        let inn = w[1].as_cubic().map(|c| c.p1 - c.p0);
+        let (Some(a), Some(b)) = (out, inn) else {
+            continue;
+        };
+        if a.hypot() > 1e-9 && b.hypot() > 1e-9 {
+            assert!(a.normalize().cross(b.normalize()).abs() < 1e-3, "{w:?}");
+        }
+    }
+}
+
+trait AsCubic {
+    fn as_cubic(&self) -> Option<kurbo::CubicBez>;
+}
+
+impl AsCubic for kurbo::PathSeg {
+    fn as_cubic(&self) -> Option<kurbo::CubicBez> {
+        match *self {
+            kurbo::PathSeg::Cubic(c) => Some(c),
+            kurbo::PathSeg::Line(l) => Some(kurbo::CubicBez::new(
+                l.p0,
+                l.p0.lerp(l.p1, 1.0 / 3.0),
+                l.p0.lerp(l.p1, 2.0 / 3.0),
+                l.p1,
+            )),
+            kurbo::PathSeg::Quad(_) => None,
+        }
+    }
+}
+
+#[test]
+fn nodes_between_a_line_and_a_curve_get_the_corner_widget() {
+    let d = d_shape(0.0);
+    let corner = vextor_geom::node_corner(&d.subpaths[0], 1).expect("a corner");
+    assert_close(corner.half_angle, PI / 4.0, 1e-9);
+    assert!(corner.max_radius > 5.0, "{corner:?}");
 }
 
 #[test]

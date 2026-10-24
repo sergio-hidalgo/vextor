@@ -10,8 +10,10 @@ use super::VextorApp;
 use crate::documents::DocId;
 use crate::edit_ops;
 use crate::panels;
+use crate::path_dialog::PathDialog;
 use crate::path_ops::{self, PathAction};
 use crate::session::Session;
+use crate::shape_ops::ShapeOp;
 use crate::snap_settings::SnapOption;
 use crate::tabs::TabAction;
 
@@ -80,6 +82,8 @@ pub(super) enum Action {
     MakePattern,
     /// A path command (spec 07).
     Path(PathAction),
+    /// A path operation (spec 11).
+    Shape(ShapeOp),
 }
 
 impl From<panels::PanelAction> for Action {
@@ -93,6 +97,7 @@ impl From<panels::PanelAction> for Action {
             panels::PanelAction::Ungroup => Self::Ungroup,
             panels::PanelAction::AddArtboard => Self::AddArtboard,
             panels::PanelAction::Flip { horizontal } => Self::Flip { horizontal },
+            panels::PanelAction::Shape(op) => Self::Shape(op),
         }
     }
 }
@@ -206,6 +211,17 @@ impl VextorApp {
                 None => crate::outline_text::convert(s),
             },
             Action::ConvertToPath => crate::convert_path::convert(s),
+            // Offset and Simplify ask for settings, previewed live; text
+            // takes part only once the user agrees to outline it.
+            Action::Shape(op) if op.can(s) && op.has_dialog() => {
+                self.path_dialog = PathDialog::new(*op);
+                Ok(())
+            }
+            Action::Shape(op) if op.can(s) && op.needs_outlines(s) => {
+                self.shape_prompt = Some(*op);
+                Ok(())
+            }
+            Action::Shape(op) => op.run(s),
             Action::MakePattern => crate::paint_edit::make_pattern(s),
             _ => Ok(()),
         };

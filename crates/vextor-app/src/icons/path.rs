@@ -1,6 +1,7 @@
 //! The node type, handle and path command icons (spec 07), on the same
 //! 16 × 16 grid as the others: a node is a small filled square, a handle
-//! a thin line ending in a dot.
+//! a thin line ending in a dot. The path operation icons (spec 11) are in
+//! `combine.rs`.
 
 use eframe::egui::{self, Pos2, Stroke};
 

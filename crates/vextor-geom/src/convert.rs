@@ -5,8 +5,10 @@
 
 use std::f64::consts::{FRAC_PI_2, PI};
 
-use kurbo::{BezPath, PathEl, Point, Vec2};
+use kurbo::{BezPath, ParamCurve, PathEl, PathSeg, Point, Vec2};
 use vextor_core::{CornerRadii, EPS, FillRule, Geometry, Path, PathNode, SubPath};
+
+use crate::fillet::{Fillet, drawn_segment, fillet, node_fillet};
 
 /// Handle length of a quarter-circle cubic, per unit radius.
 const KAPPA: f64 = 0.552_284_749_830_793_6;
@@ -153,46 +155,6 @@ fn regular_vertices(center: Point, count: u32, radius: impl Fn(u32) -> f64) -> V
         .collect()
 }
 
-/// A rounded corner at a vertex between straight edges to `prev` and `next`:
-/// the curve runs from `a` (on the edge to `prev`) to `b` (on the edge to
-/// `next`).
-#[derive(Clone, Copy)]
-struct Fillet {
-    a: Point,
-    c1: Point,
-    c2: Point,
-    b: Point,
-}
-
-/// The fillet of radius `radius` at `v`, shrunk so it uses at most half of
-/// each edge; `None` when there is nothing to round.
-fn fillet(prev: Point, vertex: Point, next: Point, radius: f64) -> Option<Fillet> {
-    if radius <= EPS {
-        return None;
-    }
-    let (d1, d2) = (prev - vertex, next - vertex);
-    let (l1, l2) = (d1.hypot(), d2.hypot());
-    if l1 <= EPS || l2 <= EPS {
-        return None;
-    }
-    let (u1, u2) = (d1 / l1, d2 / l2);
-    let angle = u1.dot(u2).clamp(-1.0, 1.0).acos(); // interior angle at the vertex
-    if angle <= EPS || PI - angle <= EPS {
-        return None; // folded back or straight through
-    }
-    let half_tan = (angle / 2.0).tan();
-    let tangent = (radius / half_tan).min(l1.min(l2) / 2.0);
-    let fitted = tangent * half_tan;
-    let k = 4.0 / 3.0 * ((PI - angle) / 4.0).tan() * fitted;
-    let (a, b) = (vertex + u1 * tangent, vertex + u2 * tangent);
-    Some(Fillet {
-        a,
-        c1: a - u1 * k,
-        c2: b - u2 * k,
-        b,
-    })
-}
-
 fn rounded_polygon(verts: &[Point], radius: f64) -> BezPath {
     let n = verts.len();
     let fillets: Vec<Option<Fillet>> = (0..n)
@@ -218,8 +180,8 @@ fn rounded_polygon(verts: &[Point], radius: f64) -> BezPath {
     path
 }
 
-/// A model path as a Bézier path; node corner radii are rounded where both
-/// adjacent segments are straight (ignored next to curves).
+/// A model path as a Bézier path, node corner radii rounded (between
+/// straight segments exactly, next to curves by cutting them back).
 #[must_use]
 pub fn path_to_bezpath(path: &Path) -> BezPath {
     let mut out = BezPath::new();
@@ -236,38 +198,29 @@ fn subpath_to_bezpath(sp: &SubPath, out: &mut BezPath) {
         return;
     }
     let anchor = |i: usize| to_kurbo(nodes[i].anchor);
-    let straight =
-        |i: usize, j: usize| nodes[i].handle_out.is_none() && nodes[j].handle_in.is_none();
-    let fillets: Vec<Option<Fillet>> = (0..n)
-        .map(|i| {
-            let has_neighbours = sp.closed || (i > 0 && i + 1 < n);
-            if !has_neighbours || n < 3 {
-                return None;
-            }
-            let (p, q) = ((i + n - 1) % n, (i + 1) % n);
-            if !(straight(p, i) && straight(i, q)) {
-                return None;
-            }
-            fillet(anchor(p), anchor(i), anchor(q), nodes[i].corner_radius)
-        })
-        .collect();
+    let fillets: Vec<Option<Fillet>> = (0..n).map(|i| node_fillet(sp, i)).collect();
 
     out.move_to(fillets[0].map_or(anchor(0), |f| f.b));
     for s in 0..sp.segment_count() {
         let (i, j) = (s, (s + 1) % n);
-        if straight(i, j) {
+        let end = fillets[j].map_or(anchor(j), |f| f.a);
+        if let Some(PathSeg::Cubic(c)) = drawn_segment(sp, s) {
+            let (t0, t1) = (
+                fillets[i].map_or(0.0, |f| f.t_out),
+                fillets[j].map_or(1.0, |f| f.t_in),
+            );
+            // Uncut, the handles go out exactly as stored.
+            let c = if t0 <= 0.0 && t1 >= 1.0 {
+                c
+            } else {
+                c.subsegment(t0..t1)
+            };
+            out.curve_to(c.p1, c.p2, end);
+        } else {
             let closing_plain = sp.closed && j == 0 && fillets[0].is_none();
             if !closing_plain {
-                out.line_to(fillets[j].map_or(anchor(j), |f| f.a));
+                out.line_to(end);
             }
-        } else {
-            let h_out = nodes[i]
-                .handle_out
-                .map_or(Vec2::ZERO, |v| Vec2::new(v.x, v.y));
-            let h_in = nodes[j]
-                .handle_in
-                .map_or(Vec2::ZERO, |v| Vec2::new(v.x, v.y));
-            out.curve_to(anchor(i) + h_out, anchor(j) + h_in, anchor(j));
         }
         if let Some(f) = fillets[j] {
             out.curve_to(f.c1, f.c2, f.b);

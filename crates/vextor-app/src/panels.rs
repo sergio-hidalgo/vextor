@@ -39,6 +39,7 @@ const LAYERS_HEIGHT: f32 = 220.0;
 
 mod arrange;
 mod artboard;
+mod combine;
 mod fonts;
 mod layers;
 mod paint;
@@ -186,6 +187,7 @@ fn inspector_sections(
             to_artboard,
             &mut actions,
         );
+        combine::inspector_section(ui, s, &mut actions);
         arrange::arrange_section(ui, can, &mut actions);
         arrange::group_section(ui, can, &mut actions);
         message
@@ -286,8 +288,8 @@ fn flip_buttons(ui: &mut egui::Ui, enabled: bool, actions: &mut Vec<PanelAction>
         ui.spacing_mut().item_spacing.x = gap;
         // Right to left: vertical sits last, so horizontal reads first.
         for (icon, horizontal, tip) in [
-            (Icon::FlipVertical, false, "Flip vertically"),
-            (Icon::FlipHorizontal, true, "Flip horizontally"),
+            (Icon::FlipVertical, false, "Flip Vertical"),
+            (Icon::FlipHorizontal, true, "Flip Horizontal"),
         ] {
             let why = "Select an object first";
             if icons::quiet_button(ui, icon, button, false, enabled, tip, why).clicked() {

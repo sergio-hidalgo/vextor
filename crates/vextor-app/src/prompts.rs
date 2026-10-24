@@ -12,7 +12,7 @@ const DIALOG_MARGIN: egui::Margin = egui::Margin::symmetric(28, 18);
 
 /// Width and height of every dialog button, so a row of them centres
 /// exactly.
-const BUTTON_SIZE: Vec2 = Vec2::new(96.0, 28.0);
+pub(crate) const BUTTON_SIZE: Vec2 = Vec2::new(96.0, 28.0);
 
 /// The answer to "Save changes?".
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -103,13 +103,13 @@ pub fn outline_missing_font(
 
 /// Width of the shape size dialog's content, in points: one row of
 /// label and field, as wide as its two buttons.
-const SHAPE_DIALOG_WIDTH: f32 = BUTTON_SIZE.x * 2.0 + 8.0;
+pub(crate) const SHAPE_DIALOG_WIDTH: f32 = BUTTON_SIZE.x * 2.0 + 8.0;
 /// Width of the label column of the shape size dialog, in points: the
 /// same as one button, so labels line up with Create and fields with
 /// Cancel.
 const SHAPE_LABEL_WIDTH: f32 = BUTTON_SIZE.x;
 /// Size of every field in every shape size dialog, in points.
-const SHAPE_FIELD_SIZE: Vec2 = Vec2::new(BUTTON_SIZE.x, 24.0);
+pub(crate) const SHAPE_FIELD_SIZE: Vec2 = Vec2::new(BUTTON_SIZE.x, 24.0);
 /// Largest size the shape dialog accepts, in px (the largest artboard).
 const MAX_SHAPE_SIZE: f64 = 10_000.0;
 
@@ -174,7 +174,7 @@ pub fn shape_size(
 
 /// One centred row of the shape size dialog: `label` in its column, then
 /// the field `add` draws.
-fn field_row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
+pub(crate) fn field_row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     let gap = ui.spacing().item_spacing.x;
     let row = SHAPE_LABEL_WIDTH + gap + SHAPE_FIELD_SIZE.x;
     ui.horizontal(|ui| {
@@ -211,7 +211,7 @@ fn count_row(ui: &mut egui::Ui, label: &str, value: &mut u32, max: u32) {
 
 /// A modal of fixed width whose centre is the centre of `canvas`, with its
 /// content centred.
-fn dialog<T>(
+pub(crate) fn dialog<T>(
     ctx: &egui::Context,
     id: &str,
     canvas: Rect,
@@ -221,7 +221,7 @@ fn dialog<T>(
 }
 
 /// [`dialog`] with content `width` points wide.
-fn dialog_of_width<T>(
+pub(crate) fn dialog_of_width<T>(
     ctx: &egui::Context,
     id: &str,
     canvas: Rect,
@@ -243,7 +243,7 @@ fn dialog_of_width<T>(
 }
 
 /// Heading and wrapped text, both centred.
-fn body(ui: &mut egui::Ui, heading: &str, text: &str) {
+pub(crate) fn body(ui: &mut egui::Ui, heading: &str, text: &str) {
     ui.add_space(4.0);
     ui.heading(heading);
     ui.add_space(4.0);
@@ -253,7 +253,7 @@ fn body(ui: &mut egui::Ui, heading: &str, text: &str) {
 
 /// One row of equal-width buttons, centred. Returns the answer of the
 /// button clicked this frame.
-fn buttons<T: Copy>(ui: &mut egui::Ui, choices: &[(&str, T)]) -> Option<T> {
+pub(crate) fn buttons<T: Copy>(ui: &mut egui::Ui, choices: &[(&str, T)]) -> Option<T> {
     let spacing = ui.spacing().item_spacing.x;
     #[allow(clippy::cast_precision_loss)]
     let count = choices.len() as f32;

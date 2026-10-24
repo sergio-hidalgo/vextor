@@ -6,12 +6,11 @@
 //! Paths are in their shape's local space; hit-tests take the shape's
 //! world affine and a point in document space.
 
-use std::f64::consts::PI;
-
 use kurbo::{Affine, CubicBez, Line, ParamCurve, ParamCurveNearest, Point, Vec2};
 use vextor_core::{EPS, NodeType, Path, PathNode, SubPath};
 
 use crate::convert::to_kurbo;
+use crate::fillet::node_angle;
 
 /// Accuracy of the nearest-point search on a segment, in document px.
 const NEAREST_ACCURACY: f64 = 1e-3;
@@ -301,53 +300,32 @@ pub fn join_open(mut first: SubPath, mut second: SubPath) -> SubPath {
     first
 }
 
-/// A node that can be rounded: an interior node between two straight
-/// segments, with a real angle between them (local space).
+/// A node that can be rounded: an interior node with a real angle between
+/// its segments, straight or curved (local space).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NodeCorner {
     pub vertex: Point,
-    /// Unit vector from the vertex into the corner, halving its angle.
+    /// Unit vector from the vertex into the corner, halving its angle
+    /// (between the segments' tangents at the vertex).
     pub bisector: Vec2,
     /// Half the angle between the two segments, in radians.
     pub half_angle: f64,
     /// The largest radius that fits (the fillet uses at most half of
-    /// each segment).
+    /// each segment, measured along it).
     pub max_radius: f64,
 }
 
 /// The corner at node `index`, when it can be rounded.
 #[must_use]
 pub fn node_corner(sp: &SubPath, index: usize) -> Option<NodeCorner> {
-    let n = sp.nodes.len();
-    let interior = sp.closed || (index > 0 && index + 1 < n);
-    if n < 3 || index >= n || !interior {
-        return None;
-    }
-    let p = (index + n - 1) % n;
-    if !is_straight(sp, p) || !is_straight(sp, index) {
-        return None;
-    }
-    let vertex = to_kurbo(sp.nodes[index].anchor);
-    let (d1, d2) = (
-        to_kurbo(sp.nodes[p].anchor) - vertex,
-        to_kurbo(sp.nodes[next(sp, index)].anchor) - vertex,
-    );
-    let (l1, l2) = (d1.hypot(), d2.hypot());
-    if l1 <= EPS || l2 <= EPS {
-        return None;
-    }
-    let (u1, u2) = (d1 / l1, d2 / l2);
-    let angle = u1.dot(u2).clamp(-1.0, 1.0).acos();
-    if angle <= EPS || PI - angle <= EPS {
-        return None;
-    }
-    let sum = u1 + u2;
-    let half_angle = angle / 2.0;
+    let c = node_angle(sp, index)?;
+    let sum = c.u_in + c.u_out;
+    let half_angle = c.angle / 2.0;
     Some(NodeCorner {
-        vertex,
+        vertex: to_kurbo(sp.nodes[index].anchor),
         bisector: sum / sum.hypot(),
         half_angle,
-        max_radius: l1.min(l2) / 2.0 * half_angle.tan(),
+        max_radius: c.len_in.min(c.len_out) / 2.0 * half_angle.tan(),
     })
 }
 

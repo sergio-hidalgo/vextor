@@ -49,6 +49,18 @@ impl PathAction {
         }
     }
 
+    /// Its keys, for tooltips ("" when it has none).
+    #[must_use]
+    pub fn keys(self) -> &'static str {
+        match self {
+            Self::Join => "⌘J",
+            Self::ToggleSegment => "C",
+            Self::AddNode => "+",
+            Self::DeleteNodes => "⌫",
+            _ => "",
+        }
+    }
+
     /// What it needs, shown while it is disabled.
     #[must_use]
     pub fn why(self) -> &'static str {
