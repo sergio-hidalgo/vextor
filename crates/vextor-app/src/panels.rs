@@ -41,6 +41,7 @@ mod arrange;
 mod artboard;
 mod combine;
 mod fonts;
+mod image;
 mod layers;
 mod paint;
 mod path;
@@ -259,6 +260,7 @@ fn inspector(ui: &mut egui::Ui, s: &mut Session, actions: &mut Vec<PanelAction>)
                 ui.end_row();
             });
     });
+    image::section(ui, s, actions);
     let shape_message = shape::section(ui, s);
     let text_message = text::section(ui, s).or(shape_message);
     let text_message = paint::sections(ui, s).or(text_message);

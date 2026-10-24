@@ -4048,6 +4048,7 @@ dependencies = [
  "arboard",
  "directories",
  "eframe",
+ "insta",
  "kurbo",
  "resvg",
  "rfd",

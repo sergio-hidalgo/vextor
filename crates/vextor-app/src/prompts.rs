@@ -277,6 +277,15 @@ pub(crate) fn body(ui: &mut egui::Ui, heading: &str, text: &str) {
 /// One row of equal-width buttons, centred. Returns the answer of the
 /// button clicked this frame.
 pub(crate) fn buttons<T: Copy>(ui: &mut egui::Ui, choices: &[(&str, T)]) -> Option<T> {
+    let all: Vec<(&str, T, bool)> = choices.iter().map(|&(l, v)| (l, v, true)).collect();
+    buttons_enabled(ui, &all)
+}
+
+/// [`buttons`], each enabled or not.
+pub(crate) fn buttons_enabled<T: Copy>(
+    ui: &mut egui::Ui,
+    choices: &[(&str, T, bool)],
+) -> Option<T> {
     let spacing = ui.spacing().item_spacing.x;
     #[allow(clippy::cast_precision_loss)]
     let count = choices.len() as f32;
@@ -284,9 +293,9 @@ pub(crate) fn buttons<T: Copy>(ui: &mut egui::Ui, choices: &[(&str, T)]) -> Opti
     let mut answer = None;
     ui.horizontal(|ui| {
         ui.add_space(((ui.available_width() - row) / 2.0).max(0.0));
-        for (label, value) in choices {
+        for (label, value, enabled) in choices {
             if ui
-                .add(egui::Button::new(*label).min_size(BUTTON_SIZE))
+                .add_enabled(*enabled, egui::Button::new(*label).min_size(BUTTON_SIZE))
                 .clicked()
             {
                 answer = Some(*value);

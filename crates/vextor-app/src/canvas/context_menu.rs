@@ -24,6 +24,8 @@ pub enum MenuRequest {
     Shape(ShapeOp),
     /// File ▸ Export… set to the selection as SVG (spec 12).
     ExportSelection,
+    /// Object ▸ Image to Vector… (spec 13b), on an image.
+    ImageToVector,
 }
 
 impl Canvas {
@@ -64,6 +66,12 @@ impl Canvas {
                 ui.separator();
                 message = clip_items(ui, session).or(message.take());
                 ui.separator();
+                if crate::image_trace::traceable(session).is_ok()
+                    && ui.button("Image to Vector…").clicked()
+                {
+                    request = Some(MenuRequest::ImageToVector);
+                    ui.close();
+                }
                 if ui.button("Export Selection…").clicked() {
                     request = Some(MenuRequest::ExportSelection);
                     ui.close();

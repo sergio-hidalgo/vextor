@@ -9,9 +9,9 @@ files are in place. You can create, open and save documents, draw
 rectangles, ellipses, polygons, stars and lines, select and transform
 objects, add text labels, draw paths with the pen and edit their nodes,
 combine shapes with path operations (union, subtract, offset…), copy
-the code out, and bring SVGs and PNG / JPEG / WebP images in. Next:
-turning a placed image into vector shapes (black and white, 3 or 6
-colours) to draw over.
+the code out, bring SVGs and PNG / JPEG / WebP images in, and turn a
+placed image into vector shapes (black and white, 3 or 6 colours, or
+outlines only) to draw over or keep.
 
 ## Requirements
 
@@ -350,6 +350,34 @@ objects, nested too deeply, or with images over 16 384 × 16 384 pixels are
 refused with a one-line message. An SVG Vextor exported imports back to
 the same objects, so exporting it again gives the same code.
 
+### Image to vector
+
+| To                         | Do                                                                   |
+| :------------------------- | :------------------------------------------------------------------- |
+| Turn an image into shapes  | select one image, then Object ▸ Image to Vector…, the image's right-click menu, or Inspector ▸ Image ▸ Image to Vector… |
+| Pick what you get          | **Black and white**: black shapes where the image is dark, white left empty. **3 colours** / **6 colours**: the image's main colours; in 3 colours, thin lines and small enclosed spots darker than what is around them (a ring round a nose, a patch inside an ear) are drawn in the darkest colour, while shading keeps its colour. **Outlines only**: black lines along every edge between the image's 6 main colours, each edge once, no fill; the line width follows the image's size (restyle them in the Inspector) |
+| Compare with the image     | **Keep the image** (on by default) leaves the image under the shapes, hidden; show it again from Layers |
+| Keep or drop the result    | the canvas shows the real result while the dialog is open; OK keeps it as one undo step ("Image to vector"), Cancel or `Esc` takes it back |
+
+The result is a group named after the image ("Traced image" when it has
+none) in the image's place, with the same position, size and rotation:
+one shape per piece (each separate area of a colour, with its holes),
+filled, no stroke, named by its colour. Ungroup, and every piece can be
+selected and moved on its own. The biggest colour is at the bottom; each
+colour reaches 2 px under the pieces above it, so no gaps show between
+colours, and stays whole under what it encloses (a face under its eyes),
+so moving a piece away shows nothing hidden beneath it. Colours are
+real colours of the image (the most common one in each area), not mixes.
+Black and white decides what is dark on the image as seen on a white
+page, so a cut-out drawing on a transparent background traces like the
+same drawing on white. Transparent pixels are never traced, and specks smaller than about 0.05 % of the
+image are merged away. Big images are traced at 1 000 pixels on their
+longer side, off the UI thread ("Tracing…"); a 4 000 × 3 000 photo takes
+well under a second. A result with more than 2 000 shapes or 20 000
+nodes is refused ("Too detailed for vector shapes: try fewer colours").
+The same image and mode always give the same shapes. Tracing works on a
+copy: changing the image later does not change the shapes.
+
 Ctrl replaces ⌘ on Windows and Linux.
 
 The app icon comes from `crates/vextor-app/assets/icon.svg` and the
@@ -404,9 +432,9 @@ VEXTOR_DEBUG_MENU=1 cargo run -p vextor-app --release
 | Crate           | Holds                                                      |
 | :-------------- | :--------------------------------------------------------- |
 | `vextor-core`   | document model, commands, undo history, `.vxtr` bytes (no UI, no file I/O) |
-| `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, path editing (segment hit-tests, split, bend, joins), text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`), snapping, where a gradient lands on an object, path operations (booleans on polygons via `i_overlay`, curves recovered from the inputs; offset, outline stroke and simplify via `kurbo`) |
+| `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, path editing (segment hit-tests, split, bend, joins), text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`), snapping, where a gradient lands on an object, path operations (booleans on polygons via `i_overlay`, curves recovered from the inputs; offset, outline stroke and simplify via `kurbo`), image tracing (Otsu threshold or k-means colours, pixel-edge outlines, corner detection and curve fitting) |
 | `vextor-svg`    | SVG / HTML / JSX / CSS export; SVG import (`usvg`, external resources off, XML bounded before parsing) and PNG / JPEG / WebP import (format and size from the header, `imagesize`) |
-| `vextor-render` | rasterising documents for the canvas (`tiny-skia`: solid colours, gradients, patterns, dashes, clips, opacity; images decoded by `image` with size limits), sample documents |
+| `vextor-render` | rasterising documents for the canvas (`tiny-skia`: solid colours, gradients, patterns, dashes, clips, opacity; images decoded by `image` with size limits, and scaled down for tracing), sample documents |
 | `vextor-app`    | the desktop app (`eframe`/`egui`), file dialogs (`rfd`), autosave |
 
 Dependencies point downwards only: `app → svg/render → geom → core`.

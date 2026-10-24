@@ -28,6 +28,8 @@ pub enum PanelAction {
     },
     /// Inspector ▸ Path Operations (spec 11), like Object ▸ Path Operations.
     Shape(crate::shape_ops::ShapeOp),
+    /// Inspector ▸ Image (spec 13b), like Object ▸ Image to Vector….
+    ImageToVector,
 }
 
 /// The six align buttons: action, icon, tooltip.

@@ -1,0 +1,12 @@
+---
+source: crates/vextor-app/src/image_trace/tests.rs
+assertion_line: 505
+expression: svg
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160.72 165.64">
+  <g id="traced-image">
+    <path id="outlines" d="M77.09.5c18.16-1.54 59.19 9.02 67.51 55.92 4.66 26.28-12.5 67.44-57.83 73.48-29.92 3.99-68.15-19.57-71.3-60.67C13.69 45.97 29.41 4.55 77.09.5z" fill="none" stroke="#000" stroke-width=".72" stroke-linecap="round" stroke-linejoin="round"/>
+    <path id="outlines-2" d="M78.09 25.5c5.61-.88 33.82 1.99 40.77 30.42 4.73 19.29-4.54 42.8-32.07 48.53-14.61 3.04-41.69-4.54-46.13-35.7-1.93-13.54 7.43-28.47 13.16-33.27 8.38-7.03 15.37-8.57 24.27-9.98z" fill="none" stroke="#000" stroke-width=".72" stroke-linecap="round" stroke-linejoin="round"/>
+    <path id="outlines-3" d="M.36 145.28h160v20H.36z" fill="none" stroke="#000" stroke-width=".72" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
