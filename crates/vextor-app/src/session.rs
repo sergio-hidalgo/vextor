@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use vextor_core::{
     Command, CoreError, Document, EditorState, Geometry, GridSettings, History, NodeId, NodeKind,
-    Path, PathNode, PathNodeRef, Rgba, Selection, Shape, Style,
+    Path, PathNode, PathNodeRef, Rgba, Selection, Shape, Style, SvgExportOptions,
 };
 use vextor_geom::Fonts;
 
@@ -178,6 +178,17 @@ impl Session {
     /// change. Returns false when `grid` is invalid or the same.
     pub fn set_grid(&mut self, grid: GridSettings) -> bool {
         if grid == self.doc.grid || self.doc.apply(Command::SetGrid(grid)).is_err() {
+            return false;
+        }
+        self.revision += 1;
+        true
+    }
+
+    /// Sets the SVG export options (spec 12). Like the grid: saved with the
+    /// document, not an undo step. Returns false when `export` is invalid
+    /// or the same.
+    pub fn set_export(&mut self, export: SvgExportOptions) -> bool {
+        if export == self.doc.export || self.doc.apply(Command::SetExport(export)).is_err() {
             return false;
         }
         self.revision += 1;
@@ -496,24 +507,24 @@ mod tests {
         s.apply(nudge(&s, 10.0)).expect("valid command");
         assert!(s.is_dirty());
         assert_eq!(s.title(), "icon • — Vextor");
-        s.mark_saved(PathBuf::from("/tmp/button.vextor"));
+        s.mark_saved(PathBuf::from("/tmp/button.vxtr"));
         assert!(!s.is_dirty());
-        assert_eq!(s.title(), "button.vextor — Vextor");
-        assert_eq!(s.path(), Some(std::path::Path::new("/tmp/button.vextor")));
+        assert_eq!(s.title(), "button.vxtr — Vextor");
+        assert_eq!(s.path(), Some(std::path::Path::new("/tmp/button.vxtr")));
     }
 
     #[test]
     fn undo_after_a_save_is_an_unsaved_change() {
         let mut s = Session::new(Document::new("t"));
         s.apply(nudge(&s, 10.0)).expect("valid command");
-        s.mark_saved(PathBuf::from("/tmp/t.vextor"));
+        s.mark_saved(PathBuf::from("/tmp/t.vxtr"));
         s.undo();
         assert!(s.is_dirty());
     }
 
     #[test]
     fn failed_command_keeps_the_document_clean() {
-        let mut s = Session::opened(Document::new("t"), PathBuf::from("/tmp/t.vextor"));
+        let mut s = Session::opened(Document::new("t"), PathBuf::from("/tmp/t.vxtr"));
         let bad = Command::SetTransform {
             ids: vec![s.doc.layers[0]],
             transform: Transform([f64::NAN, 0.0, 0.0, 1.0, 0.0, 0.0]),
@@ -524,9 +535,9 @@ mod tests {
 
     #[test]
     fn a_recovered_document_is_dirty_and_keeps_its_file() {
-        let s = Session::recovered(Document::new("t"), Some(PathBuf::from("/tmp/a.vextor")));
+        let s = Session::recovered(Document::new("t"), Some(PathBuf::from("/tmp/a.vxtr")));
         assert!(s.is_dirty());
-        assert_eq!(s.title(), "a.vextor • — Vextor");
+        assert_eq!(s.title(), "a.vxtr • — Vextor");
         let s = Session::recovered(Document::new("t"), None);
         assert_eq!(s.path(), None);
         assert!(s.is_dirty());

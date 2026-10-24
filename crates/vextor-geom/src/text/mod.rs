@@ -3,6 +3,7 @@
 
 mod fonts;
 mod layout;
+mod shape;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};

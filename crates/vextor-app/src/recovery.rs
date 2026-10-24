@@ -48,8 +48,6 @@ pub struct Recovery {
 pub struct Orphan {
     dir: PathBuf,
     id: String,
-    /// The copy's extension: `vxtr`, or `vextor` from an older version.
-    ext: String,
     /// The file the document was opened from or saved to, if any.
     pub original: Option<PathBuf>,
 }
@@ -175,7 +173,7 @@ impl Orphan {
     /// # Errors
     /// I/O errors and refused content.
     pub fn load(&self) -> Result<Document, FileError> {
-        read_document(&self.dir.join(format!("{}.{}", self.id, self.ext)))
+        read_document(&self.dir.join(format!("{}.{}", self.id, files::EXTENSION)))
     }
 
     /// What the recovery prompt calls this document.
@@ -187,7 +185,7 @@ impl Orphan {
 
     /// Deletes the orphan's files.
     pub fn discard(&self) {
-        for ext in [self.ext.as_str(), "path", "lock"] {
+        for ext in [files::EXTENSION, "path", "lock"] {
             let _ = remove_if_present(&self.dir.join(format!("{}.{ext}", self.id)));
         }
     }
@@ -208,17 +206,15 @@ fn find_orphans(dir: &Path) -> Vec<Orphan> {
         };
         let ext = path.extension().and_then(|e| e.to_str());
         if ext == Some("lock") {
-            let has_copy = files::OPEN_EXTENSIONS
-                .iter()
-                .any(|e| dir.join(format!("{id}.{e}")).exists());
+            let has_copy = dir.join(format!("{id}.{}", files::EXTENSION)).exists();
             if !has_copy && owner_gone(&path) {
                 stale_locks.push(path);
             }
             continue;
         }
-        let Some(ext) = ext.filter(|e| files::OPEN_EXTENSIONS.contains(e)) else {
+        if ext != Some(files::EXTENSION) {
             continue;
-        };
+        }
         if !owner_gone(&dir.join(format!("{id}.lock"))) {
             continue;
         }
@@ -234,7 +230,6 @@ fn find_orphans(dir: &Path) -> Vec<Orphan> {
             Orphan {
                 dir: dir.to_path_buf(),
                 id,
-                ext: ext.to_owned(),
                 original,
             },
         ));
@@ -302,7 +297,7 @@ mod tests {
     fn killing_the_app_mid_edit_offers_recovery_on_relaunch() {
         let dir = TestDir::new();
         let doc = fixtures::basic_shapes();
-        let original = dir.path().join("icon.vextor");
+        let original = dir.path().join("icon.vxtr");
         let (mut first, orphans) = Recovery::start(dir.path(), Instant::now()).expect("starts");
         assert!(orphans.is_empty());
         first
@@ -313,27 +308,19 @@ mod tests {
         let (_second, orphans) = Recovery::start(dir.path(), Instant::now()).expect("starts");
         assert_eq!(orphans.len(), 1);
         assert_eq!(orphans[0].original.as_deref(), Some(original.as_path()));
-        assert_eq!(orphans[0].name(), "icon.vextor");
+        assert_eq!(orphans[0].name(), "icon.vxtr");
         assert_eq!(orphans[0].load().expect("loads"), doc);
     }
 
     #[test]
-    fn autosaves_are_vxtr_and_an_older_vextor_copy_is_still_offered() {
+    fn autosaves_are_vxtr() {
         let dir = TestDir::new();
-        let doc = fixtures::basic_shapes();
         let (mut first, _) = Recovery::start(dir.path(), Instant::now()).expect("starts");
-        first.write(&doc, None, 1, Instant::now()).expect("writes");
+        first
+            .write(&fixtures::basic_shapes(), None, 1, Instant::now())
+            .expect("writes");
         let copy = first.doc_path();
         assert_eq!(copy.extension().and_then(|e| e.to_str()), Some("vxtr"));
-        crash(first);
-        // As an older version left it.
-        fs::rename(&copy, copy.with_extension("vextor")).expect("renames");
-
-        let (_second, orphans) = Recovery::start(dir.path(), Instant::now()).expect("starts");
-        assert_eq!(orphans.len(), 1);
-        assert_eq!(orphans[0].load().expect("loads"), doc);
-        orphans[0].discard();
-        assert!(!copy.with_extension("vextor").exists());
     }
 
     #[test]

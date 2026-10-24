@@ -216,7 +216,7 @@ mod tests {
     fn a_rename_starts_from_the_name_without_the_extension() {
         let unsaved = Session::new(new_document("card", 1.0, 1.0));
         assert_eq!(editable_name(&unsaved), "Untitled");
-        let path = std::env::temp_dir().join("pricing.vextor");
+        let path = std::env::temp_dir().join("pricing.vxtr");
         let saved = Session::opened(new_document("card", 1.0, 1.0), path);
         assert_eq!(editable_name(&saved), "pricing");
     }

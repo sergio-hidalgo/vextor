@@ -2,9 +2,12 @@
 
 mod actions;
 mod closing;
+mod export_flow;
 mod file_flow;
 mod keys;
+mod layout;
 mod menus;
+mod object_menu;
 mod paint;
 mod shape_menu;
 mod view_menu;
@@ -17,16 +20,18 @@ use eframe::egui;
 use self::actions::Action;
 use self::closing::{Next, Pending};
 use crate::canvas::Canvas;
+use crate::code_panel::CodePanel;
 use crate::documents::{DocId, Documents};
+use crate::export_dialog::ExportDialog;
 use crate::files::{self, RecentFiles};
 use crate::fonts::SystemFonts;
-use crate::new_doc::{Outcome, Picker};
+use crate::new_doc::Picker;
+use crate::prompts;
 use crate::recovery::{Orphan, Recovery};
 use crate::session::Session;
 use crate::swatch_library::Swatches;
 use crate::tabs;
 use crate::theme;
-use crate::{panels, prompts};
 
 /// Where quitting stands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -50,6 +55,12 @@ pub struct VextorApp {
     /// The tab strip's state (a rename in progress).
     tab_strip: tabs::Strip,
     show_code: bool,
+    /// The bottom code panel (spec 12).
+    code_panel: CodePanel,
+    /// File ▸ Export…, while open (spec 12).
+    export_dialog: Option<ExportDialog>,
+    /// The choices the export dialog opens with: the last ones used.
+    last_export: ExportDialog,
     title: String,
     /// Vextor's own folder; `None` turns off recent files and autosave.
     data_dir: Option<PathBuf>,
@@ -113,6 +124,9 @@ impl VextorApp {
             canvas: Canvas::default(),
             tab_strip: tabs::Strip::default(),
             show_code: true,
+            code_panel: CodePanel::default(),
+            export_dialog: None,
+            last_export: ExportDialog::default(),
             title: String::new(),
             data_dir,
             recent,
@@ -201,6 +215,11 @@ impl VextorApp {
             Action::SaveAs => {
                 self.save_as();
             }
+            Action::Export => self.open_export(self.last_export),
+            Action::ExportSelection => self.open_export(ExportDialog {
+                what: crate::export::What::Selection,
+                kind: crate::export::Kind::Svg,
+            }),
             // Over an open document, ⌘W closes the new-document picker.
             Action::Close if self.picker.is_some() && !self.docs.is_empty() => {
                 self.picker = None;
@@ -274,40 +293,6 @@ impl VextorApp {
             self.title = title;
         }
     }
-
-    /// The tab strip, then the start screen or the active document.
-    /// Returns what the tabs or the start screen asked for, in order.
-    fn central(&mut self, ui: &mut egui::Ui) -> Vec<Action> {
-        let mut actions = Vec::new();
-        if !self.docs.is_empty() {
-            egui::Panel::top("tabs").show(ui, |ui| {
-                let clicked = self.tab_strip.ui(ui, &self.docs);
-                actions.extend(clicked.into_iter().map(Action::from));
-            });
-        }
-        self.canvas_rect = ui.available_rect_before_wrap();
-        if self.docs.is_empty() && self.picker.is_none() {
-            self.picker = Some(Picker::default());
-        }
-        if let Some(picker) = &mut self.picker {
-            let fonts = self.fonts.current();
-            match picker.ui(ui, !self.docs.is_empty(), self.recent.paths(), fonts.db()) {
-                Outcome::Open => {}
-                Outcome::Cancel => self.picker = None,
-                Outcome::Create(doc) if picker.adding => self.add_artboard(&doc),
-                Outcome::Create(doc) => {
-                    self.open(Session::new(*doc));
-                }
-                Outcome::Browse => actions.push(Action::Open),
-                Outcome::OpenRecent(path) => actions.push(Action::OpenRecent(path)),
-            }
-        } else if let Some(tab) = self.docs.active_mut()
-            && let Some(e) = self.canvas.ui(ui, tab.id, &mut tab.session)
-        {
-            self.message = Some(e);
-        }
-        actions
-    }
 }
 
 impl eframe::App for VextorApp {
@@ -324,7 +309,8 @@ impl eframe::App for VextorApp {
             || !self.orphans.is_empty()
             || self.outline_prompt.is_some()
             || self.shape_prompt.is_some()
-            || self.path_dialog.is_some();
+            || self.path_dialog.is_some()
+            || self.export_dialog.is_some();
         self.paint_escape(&ctx);
         // While a shape is drawn, keys belong to it (arrows, Esc).
         if !prompt_open && !self.canvas.is_drawing() {
@@ -342,49 +328,9 @@ impl eframe::App for VextorApp {
             }
         });
         prompts::message_bar(ui, &mut self.message);
-        egui::Panel::bottom("code")
-            .resizable(true)
-            .default_size(140.0)
-            .show_collapsible(ui, &mut self.show_code, panels::code);
-        egui::Panel::left("tools")
-            .resizable(false)
-            .exact_size(48.0)
-            .show(ui, |ui| {
-                let active = self
-                    .docs
-                    .session()
-                    .filter(|_| self.picker.is_none())
-                    .map(|s| s.editor.tool);
-                if let Some(tool) = panels::tools(ui, active) {
-                    self.run(Action::Tool(tool));
-                }
-            });
-        egui::Panel::right("inspector")
-            .resizable(true)
-            .default_size(280.0)
-            .show(ui, |ui| {
-                // Working in the inspector ends a text edit first, so the
-                // edit stays one undo step and the fields apply to it.
-                if ui.input(|i| i.pointer.primary_pressed()) && ui.ui_contains_pointer() {
-                    self.finish_text();
-                }
-                let tab = self.docs.active_mut().filter(|_| self.picker.is_none());
-                // Each document gets its own widget ids, so a field being
-                // typed in never carries its draft into another document.
-                let id = tab.as_ref().map(|t| t.id);
-                let session = tab.map(|t| &mut t.session);
-                let (message, clicked) = ui
-                    .push_id(id, |ui| {
-                        panels::inspector_and_layers(ui, session, &mut self.align_to_artboard)
-                    })
-                    .inner;
-                if let Some(e) = message {
-                    self.message = Some(e);
-                }
-                for action in clicked {
-                    self.run(Action::from(action));
-                }
-            });
+        self.code_panel_ui(ui);
+        self.tools_panel(ui);
+        self.inspector_panel(ui);
         let actions = egui::CentralPanel::no_frame()
             .show(ui, |ui| self.central(ui))
             .inner;

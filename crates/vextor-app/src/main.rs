@@ -3,11 +3,14 @@
 mod app;
 mod artboard;
 mod canvas;
+mod code_panel;
 mod convert_path;
 mod corners;
 mod debug;
 mod documents;
 mod edit_ops;
+mod export;
+mod export_dialog;
 mod files;
 mod fonts;
 mod icon;

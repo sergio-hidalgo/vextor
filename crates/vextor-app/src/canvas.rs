@@ -23,7 +23,7 @@ use crate::view;
 use self::document::Shown;
 
 mod artboard_label;
-mod context_menu;
+pub mod context_menu;
 mod document;
 mod drag_layers;
 mod eyedropper;
@@ -86,6 +86,9 @@ pub struct Canvas {
     pub hide_smart_guides: bool,
     /// The last right-click landed on an object (spec 08c).
     menu_on_object: bool,
+    /// What the context menu asked the app to do: a path operation (which
+    /// may ask about text first, or open a dialog) or Export Selection….
+    request: Option<context_menu::MenuRequest>,
     /// A gradient handle being dragged (spec 09).
     gradient_drag: Option<gradient_handles::GradientDrag>,
     /// The gradient handle under the pointer (or dragged) this frame: its

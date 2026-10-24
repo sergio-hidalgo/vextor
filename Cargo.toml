@@ -23,6 +23,8 @@ harfrust = "0.12.0"
 # Booleans (spec 11 spike): robust polygon overlay; curves are recovered
 # from the inputs afterwards (`vextor-geom` `ops`).
 i_overlay = { version = "9.1.0", default-features = false }
+# SVG export snapshots (spec 12): one reviewed file per feature.
+insta = "1.49.0"
 kurbo = "0.13.1"
 proptest = "1.12.0"
 rfd = "0.17.2"

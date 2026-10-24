@@ -1,4 +1,4 @@
-//! `.vextor` bytes: round trips and refused files (`security-check` §2).
+//! `.vxtr` bytes: round trips and refused files (`security-check` §2).
 
 mod common;
 
@@ -8,8 +8,8 @@ use vextor_core::{
     Point, Rgba, TextAlign, from_bytes, to_bytes,
 };
 
-const MINIMAL_V1: &str = include_str!("fixtures/minimal_v1.vextor");
-const LABEL_V2: &str = include_str!("fixtures/label_v2.vextor");
+const MINIMAL_V1: &str = include_str!("fixtures/minimal_v1.vxtr");
+const LABEL_V2: &str = include_str!("fixtures/label_v2.vxtr");
 
 fn round_trip(doc: &Document) {
     let bytes = to_bytes(doc).expect("encodes");
@@ -219,7 +219,7 @@ fn error_messages_read_as_sentences() {
     );
     assert_eq!(
         FormatError::UnknownVersion(7).to_string(),
-        "the file uses format version 7; this Vextor reads versions 1 to 2"
+        "the file uses format version 7; this Vextor reads versions 1 to 3"
     );
 }
 

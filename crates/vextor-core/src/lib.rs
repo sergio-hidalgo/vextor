@@ -2,7 +2,7 @@
 //! commands that edit them and the undo history.
 //!
 //! Knows nothing about UI, rendering, file I/O or SVG (see the `rust-core`
-//! skill); [`from_bytes`] / [`to_bytes`] define the `.vextor` bytes the app
+//! skill); [`from_bytes`] / [`to_bytes`] define the `.vxtr` bytes the app
 //! reads and writes.
 
 mod apply;

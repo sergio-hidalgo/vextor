@@ -1,4 +1,4 @@
-//! The document: everything saved in a `.vextor` file.
+//! The document: everything saved in a `.vxtr` file.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -13,8 +13,8 @@ use crate::resource::Resource;
 use crate::settings::{GridSettings, SvgExportOptions};
 use crate::style::Swatch;
 
-/// Current `.vextor` file format version.
-pub const FORMAT_VERSION: u32 = 2;
+/// Current `.vxtr` file format version.
+pub const FORMAT_VERSION: u32 = 3;
 
 /// A vextor document. Edited only through [`crate::Command`]s
 /// ([`Document::apply`]) so every change is undoable.
@@ -23,7 +23,7 @@ pub const FORMAT_VERSION: u32 = 2;
 /// allocator, because ids are never reused.
 #[derive(Clone, Debug, Deserialize)]
 pub struct Document {
-    /// `.vextor` file format, [`FORMAT_VERSION`].
+    /// `.vxtr` file format, [`FORMAT_VERSION`].
     pub format_version: u32,
     pub name: String,
     /// How colours are written when saved; hex unless the user asks for

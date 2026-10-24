@@ -263,17 +263,24 @@ fn a_line_of_text_matches_resvg() {
     assert!(share <= 0.002, "{:.3} % of pixels differ", share * 100.0);
 }
 
-/// The clipboard SVG of a framed, centred two-line label, rendered by
-/// resvg with the same font, looks like the canvas: `<text>`, `<tspan>`
+/// The exported SVG of a selected framed, centred two-line label, rendered
+/// by resvg with the same font, looks like the canvas: `<text>`, `<tspan>`
 /// baselines and `text-anchor` land where Vextor draws the glyphs.
 #[test]
-fn clipboard_svg_text_renders_like_the_canvas() {
+fn copied_svg_text_renders_like_the_canvas() {
     let fonts = fonts();
     let d = doc(vec![at(NodeId(100), NodeKind::Text(label()), 20.0, 20.0)]);
-    let payload = d.copy(&[NodeId(100)]).expect("copies");
-    let svg = vextor_svg::clipboard_svg(&payload, &fonts).expect("visible");
+    let svg = vextor_svg::export(
+        &d,
+        &fonts,
+        vextor_svg::Scope::Selection(&[NodeId(100)]),
+        vextor_svg::Format::Svg,
+        &d.export,
+    )
+    .expect("visible")
+    .code;
 
-    let b = vextor_geom::bounds(&d, &fonts, NodeId(100)).expect("visible");
+    let b = vextor_geom::visual_bounds(&d, &fonts, NodeId(100)).expect("visible");
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let (w, h) = (
         (b.width() * ZOOM).ceil() as u32,

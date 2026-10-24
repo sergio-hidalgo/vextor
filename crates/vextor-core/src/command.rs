@@ -7,7 +7,7 @@ use crate::math::{Transform, Vec2};
 use crate::node::{Geometry, Node};
 use crate::path::{NodeType, Path, PathNode, PathNodeRef};
 use crate::resource::Resource;
-use crate::settings::GridSettings;
+use crate::settings::{GridSettings, SvgExportOptions};
 use crate::style::Style;
 use crate::text::{FontSpec, TextAlign, TextFrame};
 
@@ -195,6 +195,8 @@ pub enum Command {
     /// Refused when empty or only whitespace.
     SetName(String),
     SetGrid(GridSettings),
+    /// The document's SVG export options (spec 12).
+    SetExport(SvgExportOptions),
     /// How colours are written when the document is saved.
     SetColorFormat(ColorFormat),
 
@@ -244,6 +246,7 @@ impl Command {
             Self::SetArtboards(_) => "Edit artboards",
             Self::SetName(_) => "Rename document",
             Self::SetGrid(_) => "Edit grid",
+            Self::SetExport(_) => "Edit export options",
             Self::SetColorFormat(_) => "Change colour format",
             Self::Batch { label, .. } => label,
         }

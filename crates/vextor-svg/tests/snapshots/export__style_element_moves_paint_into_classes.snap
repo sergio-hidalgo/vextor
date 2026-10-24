@@ -1,0 +1,10 @@
+---
+source: crates/vextor-svg/tests/export.rs
+expression: d.svg()
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20">
+  <style>.vx-5206-s1{fill:#f00}.vx-5206-s2{fill:#00f}</style>
+  <rect id="vx-5206-dot" class="vx-5206-s1" width="10" height="10"/>
+  <rect id="vx-5206-dot-2" class="vx-5206-s1" x="12" width="10" height="10"/>
+  <rect id="vx-5206-id-24-px" class="vx-5206-s2" x="24" width="10" height="10"/>
+</svg>

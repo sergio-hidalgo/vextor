@@ -61,6 +61,9 @@ pub(super) const FRONT: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key:
 pub(super) const BACK: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::ArrowDown);
 
 pub(super) const OUTLINE_TEXT: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::O);
+// Spec 12: Copy As SVG (system clipboard only) and File ▸ Export….
+pub(super) const COPY_AS_SVG: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::C);
+pub(super) const EXPORT: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::E);
 pub(super) const CONVERT_TO_PATH: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::P);
 
 // Tools: plain letters (every layout has them).
@@ -126,6 +129,8 @@ impl VextorApp {
                 }
             }
             let keys = [
+                (COPY_AS_SVG, Action::CopyAs(vextor_svg::Format::Svg)),
+                (EXPORT, Action::Export),
                 (OUTLINE_TEXT, Action::OutlineText),
                 (JOIN, Action::Path(PathAction::Join)),
                 (TOGGLE_SEGMENT, Action::Path(PathAction::ToggleSegment)),
@@ -420,6 +425,24 @@ mod tests {
         let out = VextorApp::shortcuts(&ctx, true);
         ctx.end_pass().textures_delta.clear();
         assert_eq!(out, vec![Action::Shape(ShapeOp::Union)]);
+    }
+
+    #[test]
+    fn shift_command_c_copies_svg_and_shift_command_e_exports() {
+        assert_eq!(
+            actions(Key::C, CMD_SHIFT),
+            vec![Action::CopyAs(vextor_svg::Format::Svg)]
+        );
+        assert_eq!(actions(Key::E, CMD_SHIFT), vec![Action::Export]);
+        assert_eq!(
+            actions(Key::E, CMD_ALT),
+            vec![Action::Shape(ShapeOp::Exclude)],
+            "⌥⌘E still excludes"
+        );
+        assert_eq!(
+            actions(Key::E, Modifiers::NONE),
+            vec![Action::Tool(ToolId::Ellipse)]
+        );
     }
 
     #[test]

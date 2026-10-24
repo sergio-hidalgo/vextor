@@ -1,0 +1,21 @@
+---
+source: crates/vextor-svg/tests/export.rs
+expression: "format!(\"{html}\\n{jsx}\\n{css}\")"
+---
+<svg viewBox="0 0 24 24" role="img" aria-label="icon-24">
+  <style>.s1{fill:none;stroke:currentColor;stroke-width:2}.s2{font-family:'Noto Sans', sans-serif;font-size:16px}</style>
+  <rect class="s1" x="2" y="2" width="20" height="20" rx="4"/>
+  <text class="s2"><tspan x="4" y="19.81">{x}</tspan></text>
+</svg>
+
+export function Icon24(props) {
+  return (
+    <svg viewBox="0 0 24 24" {...props}>
+      <style>{`.s1{fill:none;stroke:currentColor;stroke-width:2}.s2{font-family:'Noto Sans', sans-serif;font-size:16px}`}</style>
+      <rect className="s1" x="2" y="2" width="20" height="20" rx="4"/>
+      <text className="s2"><tspan x="4" y="19.81">&#123;x&#125;</tspan></text>
+    </svg>
+  );
+}
+
+url("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2024%2024%22%3E%3Cstyle%3E.s1%7Bfill:none;stroke:currentColor;stroke-width:2%7D.s2%7Bfont-family:'Noto%20Sans',%20sans-serif;font-size:16px%7D%3C/style%3E%3Crect%20class=%22s1%22%20x=%222%22%20y=%222%22%20width=%2220%22%20height=%2220%22%20rx=%224%22/%3E%3Ctext%20class=%22s2%22%3E%3Ctspan%20x=%224%22%20y=%2219.81%22%3E%7Bx%7D%3C/tspan%3E%3C/text%3E%3C/svg%3E")

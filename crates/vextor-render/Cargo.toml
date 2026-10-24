@@ -11,13 +11,15 @@ vextor-core.workspace = true
 vextor-geom.workspace = true
 kurbo.workspace = true
 thiserror.workspace = true
-tiny-skia.workspace = true
+# `png-format`: PNG export of artboards (spec 12); `png` is already in the
+# tree through resvg.
+tiny-skia = { workspace = true, features = ["png-format"] }
 
 [dev-dependencies]
 criterion.workspace = true
 # `text`: the text reference renders (tests only; fonts loaded explicitly).
 resvg = { workspace = true, features = ["text"] }
-# The clipboard SVG renders like the canvas (text placement end to end).
+# Exported SVG renders like the canvas (spec 12 render comparison).
 vextor-svg.workspace = true
 
 [[bench]]
