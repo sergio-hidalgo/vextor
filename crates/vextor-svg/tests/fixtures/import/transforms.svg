@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect transform="translate(10 10)" width="10" height="10" fill="#a00"/>
+  <rect transform="rotate(20 50 50)" x="40" y="40" width="20" height="20" fill="#0a0"/>
+  <rect transform="scale(2 1)" x="5" y="70" width="10" height="10" fill="#00a"/>
+  <rect transform="matrix(1 0 .5 1 0 0)" x="60" y="5" width="10" height="10" fill="#aa0"/>
+  <g transform="translate(70 70) scale(-1 1)"><path d="M0 0 L10 0 L5 10 Z" fill="#0aa"/></g>
+</svg>

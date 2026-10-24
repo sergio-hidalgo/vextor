@@ -21,14 +21,27 @@ impl VextorApp {
     pub(super) fn open_dialog(&mut self) {
         let dialog = rfd::FileDialog::new()
             .set_title("Open")
-            .add_filter("Vextor document", &[files::EXTENSION]);
+            .add_filter(
+                "Vextor document, SVG or image",
+                &[files::EXTENSION, "svg", "png", "jpg", "jpeg", "webp"],
+            )
+            .add_filter("Vextor document", &[files::EXTENSION])
+            .add_filter("SVG", &crate::import::SVG_EXTENSIONS)
+            .add_filter("PNG, JPEG or WebP", &crate::import::IMAGE_EXTENSIONS);
         if let Some(path) = self.in_current_folder(dialog).pick_file() {
             self.open_path(path);
         }
     }
 
     /// Opens `path` in a new tab, or switches to its tab when it is open.
+    /// An SVG or image opens as a new untitled document (spec 13).
     pub(super) fn open_path(&mut self, path: PathBuf) {
+        use crate::import::FileKind;
+        let kind = FileKind::of(&path);
+        if matches!(kind, FileKind::Svg | FileKind::Image) {
+            self.open_as_document(path, kind);
+            return;
+        }
         if let Some(id) = self.docs.find_path(&path) {
             self.activate(id);
             self.recent.push(path);

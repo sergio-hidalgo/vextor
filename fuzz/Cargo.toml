@@ -1,0 +1,36 @@
+# Fuzz targets (spec 13): `cargo +nightly fuzz run <target>` from this
+# folder. Outside the main workspace: it needs nightly and libFuzzer.
+[package]
+name = "vextor-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4.10"
+vextor-core = { path = "../crates/vextor-core" }
+vextor-geom = { path = "../crates/vextor-geom" }
+vextor-svg = { path = "../crates/vextor-svg" }
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "svg_import"
+path = "fuzz_targets/svg_import.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "vxtr_load"
+path = "fuzz_targets/vxtr_load.rs"
+test = false
+doc = false
+bench = false
+
+[profile.release]
+debug = 1

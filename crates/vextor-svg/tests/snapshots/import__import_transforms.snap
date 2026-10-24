@@ -1,0 +1,11 @@
+---
+source: crates/vextor-svg/tests/import.rs
+expression: code
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path d="M10 10H20V20H10z" fill="#a00"/>
+  <path d="M40 40H60V60H40z" transform="rotate(20 50 50)" fill="#0a0"/>
+  <path d="M5 70H15V80H5z" transform="scale(2 1)" fill="#00a"/>
+  <path d="M60 5H70V15H60z" transform="matrix(1 0 .5 1 0 0)" fill="#aa0"/>
+  <path d="M0 0H10L5 10z" transform="matrix(-1 0 0 1 70 70)" fill="#0aa"/>
+</svg>

@@ -1861,10 +1861,23 @@ checksum = "85ab80394333c02fe689eaf900ab500fbd0c2213da414687ebf995a65d5a6104"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
+ "image-webp",
  "moxcms",
  "num-traits",
  "png",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
+]
+
+[[package]]
+name = "image-webp"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "525e9ff3e1a4be2fbea1fdf0e98686a6d98b4d8f937e1bf7402245af1909e8c3"
+dependencies = [
+ "byteorder-lite",
+ "quick-error 2.0.1",
 ]
 
 [[package]]
@@ -4032,6 +4045,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "vextor-app"
 version = "0.1.0"
 dependencies = [
+ "arboard",
  "directories",
  "eframe",
  "kurbo",
@@ -4076,6 +4090,7 @@ name = "vextor-render"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "image",
  "kurbo",
  "resvg",
  "thiserror 2.0.21",
@@ -4091,8 +4106,11 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "criterion",
+ "imagesize",
  "insta",
  "kurbo",
+ "thiserror 2.0.21",
+ "usvg",
  "vextor-core",
  "vextor-geom",
  "vextor-render",

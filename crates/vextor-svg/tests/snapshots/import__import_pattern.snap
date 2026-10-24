@@ -1,0 +1,17 @@
+---
+source: crates/vextor-svg/tests/import.rs
+expression: code
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <pattern id="dots" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <path d="M0 0H10V10H0z" fill="#eef"/>
+      <path d="M7 5c0 1.1-.9 2-2 2S3 6.1 3 5s.9-2 2-2 2 .9 2 2z" fill="#33f"/>
+    </pattern>
+    <pattern id="stripes" width="8" height="8" patternUnits="userSpaceOnUse">
+      <path d="M0 0H4V8H0z" fill="url(#dots)"/>
+    </pattern>
+  </defs>
+  <path d="M0 0H100V50H0z" fill="url(#dots)"/>
+  <path d="M0 50H100v50H0z" fill="url(#stripes)" stroke="url(#dots)" stroke-width="3"/>
+</svg>

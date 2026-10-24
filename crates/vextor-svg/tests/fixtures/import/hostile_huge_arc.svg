@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" viewBox="0 0 120 80">
+  <rect id="plain" x="4" y="4" wix="10" ry="5" fill="rgb(128, 0, 128)"/>
+  <line x1="4" y0="30" x2="40" y2="30" stroke="black" stroke-width="2"/>
+  <polygon po0ints="50,40 60,24 70,40" fill="#ff0"/>
+  <polyline points="80,24 90,40-100,24" fill="none" stroke="#333"/>
+  <path id="arcs" d="M4 60 a10 1099999999999999999999999999999999999999999999999100 70 110 50 S 115 70 118 60" fill="none" stroke="red"/>
+</svg>

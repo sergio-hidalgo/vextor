@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 10 10">
+  <image width="10" height="10" href="file:///etc/passwd"/>
+  <image width="10" height="10" xlink:href="../../../../../../../../etc/hosts"/>
+  <image width="10" height="10" href="https://example.com/track.png"/>
+  <use href="other.svg#icon"/>
+  <rect width="5" height="5" fill="url(https://example.com/paint.svg#g)"/>
+  <style>@import url("https://example.com/x.css");</style>
+  <script>alert(1)</script>
+  <foreignObject width="10" height="10"><div xmlns="http://www.w3.org/1999/xhtml" onclick="alert(2)">x</div></foreignObject>
+  <a href="javascript:alert(3)"><rect x="5" y="5" width="5" height="5" onclick="alert(4)"/></a>
+</svg>

@@ -1,4 +1,4 @@
-//! Vextor SVG writer (spec 12) and, later, reader. Output rules live in
+//! Vextor SVG writer (spec 12) and reader (spec 13). Output rules live in
 //! the `svg-output` skill.
 //!
 //! [`export`] writes an artboard or a selection as an SVG file, inline
@@ -10,6 +10,7 @@ mod element;
 mod escape;
 mod formats;
 mod ids;
+mod import;
 mod number;
 mod path_data;
 mod writer;
@@ -21,6 +22,10 @@ use vextor_geom::{Fonts, visual_bounds};
 
 pub use element::Spans;
 pub use ids::slug;
+pub use import::{
+    Dropped, ImportError, Imported, MAX_IMAGE_SIDE, Report, grouped, import_image, import_svg,
+    into_document, looks_like_svg,
+};
 
 use writer::Target;
 

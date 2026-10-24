@@ -11,6 +11,9 @@ vextor-core.workspace = true
 vextor-geom.workspace = true
 kurbo.workspace = true
 base64.workspace = true
+imagesize.workspace = true
+thiserror.workspace = true
+usvg.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

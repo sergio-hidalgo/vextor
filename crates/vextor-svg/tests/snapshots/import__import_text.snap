@@ -1,0 +1,9 @@
+---
+source: crates/vextor-svg/tests/import.rs
+expression: code
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120">
+  <text id="title" font-family="'Noto Sans', sans-serif" font-size="20" font-weight="700" fill="#1e90ff"><tspan x="10" y="30">Buy now</tspan></text>
+  <text font-family="'Noto Sans', sans-serif" font-size="14" letter-spacing="1" text-anchor="middle"><tspan x="120" y="60">Two lines</tspan><tspan x="120" y="78">centred</tspan></text>
+  <text font-family="'Noto Sans', sans-serif" font-size="12" text-anchor="end" fill="none" stroke="#000" stroke-width=".5"><tspan x="230" y="100">Right</tspan></text>
+</svg>

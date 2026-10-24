@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120">
+  <text id="title" x="10" y="30" font-family="Noto Sans, sans-serif" font-size="20" font-weight="700" fill="#1e90ff">Buy now</text>
+  <text x="120" y="60" font-family="'Noto Sans'" font-size="14" text-anchor="middle" letter-spacing="1"><tspan x="120" y="60">Two lines</tspan><tspan x="120" y="78">centred</tspan></text>
+  <text x="230" y="100" font-family="Noto Sans" font-size="12" text-anchor="end" fill="none" stroke="#000" stroke-width=".5">Right</text>
+</svg>

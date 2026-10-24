@@ -4,6 +4,7 @@ mod actions;
 mod closing;
 mod export_flow;
 mod file_flow;
+mod import_flow;
 mod keys;
 mod layout;
 mod menus;
@@ -83,6 +84,11 @@ pub struct VextorApp {
     align_to_artboard: bool,
     /// SVG text to put on the system clipboard this frame.
     system_clipboard: Option<String>,
+    /// The text vextor last put on the system clipboard: ⌘V of that same
+    /// text pastes the internal clipboard instead of importing it.
+    last_copied: Option<String>,
+    /// Imports being parsed (spec 13).
+    imports: Vec<import_flow::Job>,
     /// Fonts for text; the OS fonts arrive from a background thread.
     fonts: SystemFonts,
     /// Waiting on "Convert with the fallback font?" (a selected text's
@@ -139,6 +145,8 @@ impl VextorApp {
             canvas_rect: egui::Rect::NOTHING,
             align_to_artboard: false,
             system_clipboard: None,
+            last_copied: None,
+            imports: Vec::new(),
             fonts,
             outline_prompt: None,
             shape_prompt: None,
@@ -204,6 +212,13 @@ impl VextorApp {
         match action {
             Action::New => self.picker = Some(Picker::default()),
             Action::Open => self.open_dialog(),
+            Action::Import => self.import_dialog(),
+            Action::PasteText(text) => self.paste_text(text),
+            Action::PasteImage {
+                width,
+                height,
+                rgba,
+            } => self.paste_image(width, height, rgba),
             Action::OpenRecent(path) => self.open_path(path),
             Action::ClearRecent => {
                 self.recent.clear();
@@ -305,6 +320,8 @@ impl eframe::App for VextorApp {
             }
         }
         self.handle_close(&ctx);
+        self.poll_imports(&ctx);
+        self.handle_drops(&ctx);
         let prompt_open = self.confirm.is_some()
             || !self.orphans.is_empty()
             || self.outline_prompt.is_some()
@@ -338,9 +355,11 @@ impl eframe::App for VextorApp {
             self.run(action);
         }
 
+        self.drop_hint(&ctx);
         self.prompts(&ctx);
         self.autosave_tick(&ctx);
         if let Some(text) = self.system_clipboard.take() {
+            self.last_copied = Some(text.clone());
             ctx.copy_text(text);
         }
         self.update_title(&ctx);

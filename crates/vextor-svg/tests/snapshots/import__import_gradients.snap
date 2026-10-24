@@ -1,0 +1,38 @@
+---
+source: crates/vextor-svg/tests/import.rs
+expression: code
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+  <defs>
+    <linearGradient id="sky">
+      <stop stop-color="#09f"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".502"/>
+    </linearGradient>
+    <linearGradient id="user" x1="0" y1="50" x2="0" y2="100" gradientUnits="userSpaceOnUse" spreadMethod="reflect">
+      <stop offset=".2" stop-color="#f00"/>
+      <stop offset=".8" stop-color="#00f"/>
+    </linearGradient>
+    <linearGradient id="turned" x1="100" y1="50" x2="128.28" y2="78.28" gradientUnits="userSpaceOnUse">
+      <stop/>
+      <stop offset="1" stop-color="#ff0"/>
+    </linearGradient>
+    <radialGradient id="sun">
+      <stop stop-color="#ff0"/>
+      <stop offset="1" stop-color="#f80"/>
+    </radialGradient>
+    <linearGradient id="href" x2="0" y2="1">
+      <stop stop-color="#09f"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".502"/>
+    </linearGradient>
+    <radialGradient id="focal" cx="40" cy="40" r="30" fx="30" fy="30" gradientUnits="userSpaceOnUse" spreadMethod="repeat">
+      <stop stop-color="#fff" stop-opacity=".502"/>
+      <stop offset="1" stop-opacity=".502"/>
+    </radialGradient>
+  </defs>
+  <path d="M0 0H90V40H0z" fill="url(#sky)"/>
+  <path d="M100 0h90V40H100z" fill="url(#sky)"/>
+  <path d="M0 50H90v50H0z" fill="url(#user)"/>
+  <path d="M100 50h40V90H100z" fill="url(#turned)"/>
+  <path d="M190 70c0 11.05-8.95 20-20 20s-20-8.95-20-20 8.95-20 20-20 20 8.95 20 20z" fill="url(#sun)" stroke="url(#href)" stroke-width="4"/>
+  <path d="M70 40c0 16.57-13.43 30-30 30S10 56.57 10 40 23.43 10 40 10 70 23.43 70 40z" fill="url(#focal)"/>
+</svg>

@@ -8,7 +8,10 @@ SVG, HTML or JSX out of them.
 files are in place. You can create, open and save documents, draw
 rectangles, ellipses, polygons, stars and lines, select and transform
 objects, add text labels, draw paths with the pen and edit their nodes,
-and combine shapes with path operations (union, subtract, offset…).
+combine shapes with path operations (union, subtract, offset…), copy
+the code out, and bring SVGs and PNG / JPEG / WebP images in. Next:
+turning a placed image into vector shapes (black and white, 3 or 6
+colours) to draw over.
 
 ## Requirements
 
@@ -17,6 +20,10 @@ and combine shapes with path operations (union, subtract, offset…).
   automatically on first build.
 - [`cargo-deny`](https://github.com/EmbarkStudios/cargo-deny) for the
   dependency audit: `cargo install cargo-deny --locked`.
+- Only for fuzzing: a nightly toolchain and
+  [`cargo-fuzz`](https://github.com/rust-fuzz/cargo-fuzz)
+  (`rustup toolchain install nightly --profile minimal`,
+  `cargo +nightly install cargo-fuzz --locked`).
 
 ## Build, run, check
 
@@ -38,7 +45,15 @@ cargo bench -p vextor-geom       # hit-testing, drag-frame and text layout timin
 cargo bench -p vextor-svg        # SVG export of 1 000 objects (budget 20 ms)
 ```
 
-SVG export is checked with `insta` snapshots in
+```sh
+# Fuzzing (nightly; `fuzz/` is outside the workspace). Seed the corpus
+# with the test fixtures first, e.g.
+# cp crates/vextor-svg/tests/fixtures/import/*.svg fuzz/corpus/svg_import/
+cargo +nightly fuzz run svg_import -- -max_total_time=600 -rss_limit_mb=2048 -timeout=10
+cargo +nightly fuzz run vxtr_load  -- -max_total_time=600 -rss_limit_mb=2048 -timeout=10
+```
+
+SVG export and import are checked with `insta` snapshots in
 `crates/vextor-svg/tests/snapshots/`; after a deliberate output change,
 review each changed file (`cargo insta review`, or `INSTA_UPDATE=always`
 and read the diff) before committing.
@@ -309,6 +324,32 @@ has an opacity or a clip. Document text is always escaped, and nothing
 executable is ever written. PNGs are drawn by the canvas renderer, so
 they look exactly like the canvas.
 
+### Import
+
+| Action                     | How                                                        |
+| :------------------------- | :--------------------------------------------------------- |
+| Open an SVG or image       | File ▸ Open… (`⌘O`) and pick an `.svg`, `.png`, `.jpg` / `.jpeg` or `.webp`: it opens as a new, untitled document with one artboard the size of the SVG (or of the image, one pixel per px); Save asks for a `.vxtr` name |
+| Import into the document   | File ▸ Import… (`⇧⌘I`): an SVG, PNG, JPEG or WebP lands in the middle of the view, selected, as one undo step ("Import"). Several objects come in as one group named after the file |
+| Drag and drop              | drop SVG or image files on the canvas: they land where you drop them (a `.vxtr` opens in a tab; with no document open, an SVG or image opens as a new document) |
+| Paste SVG or images        | `⌘V` with SVG code on the clipboard (copied from a browser, an icon site, another editor) imports it as objects ("Paste SVG"); with a picture on it (a screenshot, a browser's Copy Image) it lands as an embedded PNG ("Paste image"); with SVG or image files copied in Finder / Explorer, those files are imported. What Vextor copied itself pastes as before, with names and live shapes |
+
+What comes in: groups stay groups (an id becomes the name), every shape
+becomes an editable path, and fills, strokes, dashes, opacity, solid
+colours, `currentColor`, linear and radial gradients, patterns, clips and
+embedded images are kept. Text becomes a text object when it has one
+style, its lines sit one under the other and its font is installed;
+otherwise it comes in as outlines. Images are embedded (PNG, JPEG, WebP
+only), one image pixel per px when dropped on their own. Filters, masks,
+blend modes and external images are left out. When anything was left out
+or changed, one line says what, e.g. "Imported 12 objects. Left out: 2
+filters, 1 mask. 1 text as outlines (font “Inter” is not installed)."
+
+Importing never reads anything but the file itself: links to other files
+or to the web are ignored, and files over 50 MB, with more than 20 000
+objects, nested too deeply, or with images over 16 384 × 16 384 pixels are
+refused with a one-line message. An SVG Vextor exported imports back to
+the same objects, so exporting it again gives the same code.
+
 Ctrl replaces ⌘ on Windows and Linux.
 
 The app icon comes from `crates/vextor-app/assets/icon.svg` and the
@@ -337,7 +378,8 @@ the window, opening a file or starting a new document asks
 
 Opening refuses, with a one-line message, files over 50 MB, files from an
 unknown format version, cut-off or damaged files, and files with more than
-20 000 objects.
+20 000 objects. Opening an `.svg`, `.png`, `.jpg` / `.jpeg` or `.webp` imports it into
+a new document (see Import).
 
 While a document has unsaved changes, Vextor autosaves a copy every
 60 seconds into its own folder (macOS:
@@ -363,8 +405,8 @@ VEXTOR_DEBUG_MENU=1 cargo run -p vextor-app --release
 | :-------------- | :--------------------------------------------------------- |
 | `vextor-core`   | document model, commands, undo history, `.vxtr` bytes (no UI, no file I/O) |
 | `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, path editing (segment hit-tests, split, bend, joins), text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`), snapping, where a gradient lands on an object, path operations (booleans on polygons via `i_overlay`, curves recovered from the inputs; offset, outline stroke and simplify via `kurbo`) |
-| `vextor-svg`    | SVG / HTML / JSX / CSS export (import: spec 13)            |
-| `vextor-render` | rasterising documents for the canvas (`tiny-skia`: solid colours, gradients, patterns, dashes, clips, opacity), sample documents |
+| `vextor-svg`    | SVG / HTML / JSX / CSS export; SVG import (`usvg`, external resources off, XML bounded before parsing) and PNG / JPEG / WebP import (format and size from the header, `imagesize`) |
+| `vextor-render` | rasterising documents for the canvas (`tiny-skia`: solid colours, gradients, patterns, dashes, clips, opacity; images decoded by `image` with size limits), sample documents |
 | `vextor-app`    | the desktop app (`eframe`/`egui`), file dialogs (`rfd`), autosave |
 
 Dependencies point downwards only: `app → svg/render → geom → core`.

@@ -4,9 +4,9 @@
 use eframe::egui::{self, KeyboardShortcut};
 
 use super::keys::{
-    ACTUAL_SIZE, CLOSE, COPY, COPY_AS_SVG, CUT, DELETE, DUPLICATE, EXPORT, FIT, NEW, NEXT_DOC,
-    OPEN, PASTE, PASTE_IN_PLACE, PREV_DOC, REDO, SAVE, SAVE_AS, SELECT_ALL, UNDO, ZOOM_IN,
-    ZOOM_OUT,
+    ACTUAL_SIZE, CLOSE, COPY, COPY_AS_SVG, CUT, DELETE, DUPLICATE, EXPORT, FIT, IMPORT, NEW,
+    NEXT_DOC, OPEN, PASTE, PASTE_IN_PLACE, PREV_DOC, REDO, SAVE, SAVE_AS, SELECT_ALL, UNDO,
+    ZOOM_IN, ZOOM_OUT,
 };
 use super::{Action, VextorApp};
 use crate::session::Session;
@@ -116,6 +116,7 @@ impl VextorApp {
         let items = [
             ("New…", NEW, Action::New, true),
             ("Open…", OPEN, Action::Open, true),
+            ("Import…", IMPORT, Action::Import, true),
         ];
         for (text, shortcut, action, enabled) in items {
             if why_item(ui, enabled, text, shortcut, "") {

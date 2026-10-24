@@ -28,6 +28,8 @@ pub(super) enum Action {
     SaveAs,
     /// File ▸ Export… (spec 12): the export dialog.
     Export,
+    /// File ▸ Import… (spec 13): an SVG or image into the document.
+    Import,
     /// The canvas context menu's Export Selection…: the dialog set to the
     /// selection as SVG.
     ExportSelection,
@@ -60,6 +62,16 @@ pub(super) enum Action {
     /// Edit ▸ Copy As (spec 12): the selection's code, system clipboard only.
     CopyAs(vextor_svg::Format),
     Paste,
+    /// ⌘V with this text on the system clipboard (spec 13): SVG from
+    /// elsewhere is imported, else the internal clipboard is pasted.
+    PasteText(String),
+    /// ⌘V with only a bitmap on the system clipboard (a screenshot, a
+    /// browser's Copy Image): straight RGBA pixels, imported as a PNG.
+    PasteImage {
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    },
     PasteInPlace,
     Duplicate,
     Delete,

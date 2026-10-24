@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# Fuzz targets build with nightly on their own (spec 13).
+exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.1.0"
@@ -14,6 +16,9 @@ vextor-geom = { path = "crates/vextor-geom" }
 vextor-svg = { path = "crates/vextor-svg" }
 vextor-render = { path = "crates/vextor-render" }
 eframe = "0.37.0"
+# Paste (spec 13): the files copied in Finder / Explorer; the version egui
+# already uses, without its image support (egui hands over pasted images).
+arboard = { version = "3.7.0", default-features = false }
 base64 = "0.23.1"
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 directories = "6.0.0"
@@ -23,6 +28,12 @@ harfrust = "0.12.0"
 # Booleans (spec 11 spike): robust polygon overlay; curves are recovered
 # from the inputs afterwards (`vextor-geom` `ops`).
 i_overlay = { version = "9.1.0", default-features = false }
+# Image import (spec 13): sizes read from the file header before decoding;
+# the version usvg uses.
+imagesize = "0.15.0"
+# Canvas images (spec 13): PNG / JPEG / WebP decoding with size limits; the
+# version eframe already pulls in through arboard.
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
 # SVG export snapshots (spec 12): one reviewed file per feature.
 insta = "1.49.0"
 kurbo = "0.13.1"
@@ -31,8 +42,14 @@ rfd = "0.17.2"
 skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
 resvg = { version = "0.48.1", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.154"
+# `float_roundtrip`: numbers load as the nearest f64, so load → save never
+# moves one (found by the `vxtr_load` fuzzer, spec 13).
+serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 thiserror = "2.0.21"
+# SVG import (spec 13): normalises any SVG to groups, paths and paints;
+# `text` keeps <text> as text and gives outlines when it cannot stay text.
+# No system-fonts feature: fonts come from our own `FontDb`.
+usvg = { version = "0.48.1", default-features = false, features = ["text"] }
 tiny-skia = { version = "0.12.0", default-features = false, features = ["std", "simd"] }
 
 [workspace.lints.rust]

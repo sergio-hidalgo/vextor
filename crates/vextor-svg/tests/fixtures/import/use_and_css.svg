@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 64 32">
+  <style>.a { fill: #e91e63 } #b { stroke: #000; stroke-width: 2 } rect { fill-opacity: .9 }</style>
+  <defs>
+    <symbol id="star" viewBox="0 0 10 10"><path d="M5 0 L6 4 L10 4 L7 6 L8 10 L5 7.5 L2 10 L3 6 L0 4 L4 4 Z"/></symbol>
+  </defs>
+  <use xlink:href="#star" x="2" y="2" width="12" height="12" class="a"/>
+  <use href="#star" x="18" y="2" width="12" height="12" fill="#3f51b5"/>
+  <rect id="b" class="a" x="36" y="4" width="20" height="20"/>
+  <circle cx="10" cy="24" r="4" fill="currentColor" color="#4caf50"/>
+</svg>

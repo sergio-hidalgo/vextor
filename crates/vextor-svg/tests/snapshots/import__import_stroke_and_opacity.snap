@@ -1,0 +1,12 @@
+---
+source: crates/vextor-svg/tests/import.rs
+expression: code
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60">
+  <path d="M10 10H50L30 40" fill="none" stroke="#222" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M60 10h40L80 40" fill="none" stroke="#222" stroke-width="4" stroke-linecap="square" stroke-linejoin="bevel"/>
+  <path d="M10 50H110" stroke="#c00" stroke-width="2" stroke-dasharray="6 3 1 3" stroke-dashoffset="2"/>
+  <path d="M60 30H80V50H60z" fill="#0c0" fill-opacity=".251" stroke="#00c" stroke-opacity=".749" stroke-miterlimit="8"/>
+  <path d="M90 30h20V50H90z" opacity=".4" fill="#f0f"/>
+  <path d="M40 30H50V40H40z" fill="#123456" stroke="#0a141e" stroke-width="1.5"/>
+</svg>

@@ -64,6 +64,8 @@ pub(super) const OUTLINE_TEXT: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIF
 // Spec 12: Copy As SVG (system clipboard only) and File ▸ Export….
 pub(super) const COPY_AS_SVG: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::C);
 pub(super) const EXPORT: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::E);
+// Spec 13: File ▸ Import….
+pub(super) const IMPORT: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::I);
 pub(super) const CONVERT_TO_PATH: KeyboardShortcut = KeyboardShortcut::new(CMD_SHIFT, Key::P);
 
 // Tools: plain letters (every layout has them).
@@ -101,6 +103,21 @@ pub(super) const SHAPE_TOOLS: [(KeyboardShortcut, ToolId); 5] = [
 pub(super) const NUDGE: i32 = 1;
 pub(super) const BIG_NUDGE: i32 = 10;
 
+/// A pasted bitmap as an action; `None` for an impossible size.
+fn paste_image(image: &egui::ColorImage) -> Option<Action> {
+    let [w, h] = image.size;
+    let rgba = image
+        .pixels
+        .iter()
+        .flat_map(egui::Color32::to_srgba_unmultiplied)
+        .collect();
+    Some(Action::PasteImage {
+        width: u32::try_from(w).ok()?,
+        height: u32::try_from(h).ok()?,
+        rgba,
+    })
+}
+
 impl VextorApp {
     /// Keyboard shortcuts, most specific first (⇧⌘Z before ⌘Z). Edit and
     /// Object keys work only while the canvas shows (`editing`), and are
@@ -122,9 +139,8 @@ impl VextorApp {
                 match event {
                     egui::Event::Cut => actions.push(Action::Cut),
                     egui::Event::Copy => actions.push(Action::Copy),
-                    egui::Event::Paste(_) | egui::Event::PasteImage(_) => {
-                        actions.push(Action::Paste);
-                    }
+                    egui::Event::Paste(text) => actions.push(Action::PasteText(text.clone())),
+                    egui::Event::PasteImage(image) => actions.extend(paste_image(image)),
                     _ => {}
                 }
             }
@@ -230,6 +246,7 @@ impl VextorApp {
                 (REDO, Action::Redo),
                 (UNDO, Action::Undo),
                 (NEW, Action::New),
+                (IMPORT, Action::Import),
                 (OPEN, Action::Open),
                 (SAVE_AS, Action::SaveAs),
                 (SAVE, Action::Save),
@@ -425,6 +442,49 @@ mod tests {
         let out = VextorApp::shortcuts(&ctx, true);
         ctx.end_pass().textures_delta.clear();
         assert_eq!(out, vec![Action::Shape(ShapeOp::Union)]);
+    }
+
+    #[test]
+    fn shift_command_i_imports_and_option_command_i_still_intersects() {
+        assert_eq!(actions(Key::I, CMD_SHIFT), vec![Action::Import]);
+        assert_eq!(
+            actions(Key::I, CMD_ALT),
+            vec![Action::Shape(ShapeOp::Intersect)]
+        );
+    }
+
+    #[test]
+    fn command_v_carries_the_clipboard_text() {
+        let ctx = egui::Context::default();
+        let raw = egui::RawInput {
+            events: vec![egui::Event::Paste("<svg/>".to_owned())],
+            ..Default::default()
+        };
+        ctx.begin_pass(raw);
+        let out = VextorApp::shortcuts(&ctx, true);
+        ctx.end_pass().textures_delta.clear();
+        assert_eq!(out, vec![Action::PasteText("<svg/>".to_owned())]);
+    }
+
+    #[test]
+    fn command_v_of_a_bitmap_carries_its_pixels() {
+        let ctx = egui::Context::default();
+        let image = egui::ColorImage::from_rgba_unmultiplied([1, 1], &[10, 20, 30, 255]);
+        let raw = egui::RawInput {
+            events: vec![egui::Event::PasteImage(std::sync::Arc::new(image))],
+            ..Default::default()
+        };
+        ctx.begin_pass(raw);
+        let out = VextorApp::shortcuts(&ctx, true);
+        ctx.end_pass().textures_delta.clear();
+        assert_eq!(
+            out,
+            vec![Action::PasteImage {
+                width: 1,
+                height: 1,
+                rgba: vec![10, 20, 30, 255]
+            }]
+        );
     }
 
     #[test]

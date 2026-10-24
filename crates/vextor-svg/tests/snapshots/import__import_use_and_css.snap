@@ -1,0 +1,22 @@
+---
+source: crates/vextor-svg/tests/import.rs
+expression: code
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 32">
+  <defs>
+    <clipPath id="clip-1">
+      <path d="M2 2H14V14H2z"/>
+    </clipPath>
+    <clipPath id="clip-2">
+      <path d="M18 2H30V14H18z"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#clip-1)">
+    <path d="M5 0 6 4h4L7 6l1 4L5 7.5 2 10 3 6 0 4H4z" transform="matrix(1.2 0 0 1.2 2 2)" fill="#e91e63"/>
+  </g>
+  <g clip-path="url(#clip-2)">
+    <path d="M5 0 6 4h4L7 6l1 4L5 7.5 2 10 3 6 0 4H4z" transform="matrix(1.2 0 0 1.2 18 2)" fill="#3f51b5"/>
+  </g>
+  <path id="b" d="M36 4H56V24H36z" fill="#e91e63" fill-opacity=".898" stroke="#000" stroke-width="2"/>
+  <path d="M14 24c0 2.21-1.79 4-4 4s-4-1.79-4-4 1.79-4 4-4 4 1.79 4 4z" fill="#4caf50"/>
+</svg>

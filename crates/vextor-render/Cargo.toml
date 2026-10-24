@@ -11,6 +11,7 @@ vextor-core.workspace = true
 vextor-geom.workspace = true
 kurbo.workspace = true
 thiserror.workspace = true
+image.workspace = true
 # `png-format`: PNG export of artboards (spec 12); `png` is already in the
 # tree through resvg.
 tiny-skia = { workspace = true, features = ["png-format"] }
