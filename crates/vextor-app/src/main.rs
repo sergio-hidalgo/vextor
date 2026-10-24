@@ -15,6 +15,7 @@ mod files;
 mod fonts;
 mod icon;
 mod icons;
+mod import;
 mod layers;
 mod new_doc;
 mod node_tool;

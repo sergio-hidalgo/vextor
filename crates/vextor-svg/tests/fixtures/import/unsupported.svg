@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <filter id="blur"><feGaussianBlur stdDeviation="2"/></filter>
+    <mask id="fade"><rect width="100" height="100" fill="#fff"/></mask>
+  </defs>
+  <rect width="40" height="40" fill="#f00" filter="url(#blur)"/>
+  <rect x="50" width="40" height="40" fill="#0f0" mask="url(#fade)"/>
+  <rect y="50" width="40" height="40" fill="#00f" style="mix-blend-mode: multiply"/>
+  <image x="50" y="50" width="40" height="40" href="photo.png"/>
+  <image x="50" y="50" width="40" height="40" href="https://example.com/a.png"/>
+  <rect x="50" y="50" width="10" height="10" fill="#000" stroke="#fff" paint-order="stroke"/>
+</svg>

@@ -50,7 +50,7 @@ pub fn read_document(path: &Path) -> Result<Document, FileError> {
 
 /// Reads at most [`MAX_FILE_BYTES`] bytes; a bigger file is
 /// [`FormatError::TooLarge`] without reading it.
-fn read_limited(path: &Path) -> Result<Vec<u8>, FileError> {
+pub(crate) fn read_limited(path: &Path) -> Result<Vec<u8>, FileError> {
     let file = File::open(path)?;
     let len = file.metadata()?.len();
     if len > MAX_FILE_BYTES {

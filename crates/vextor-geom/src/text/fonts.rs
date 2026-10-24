@@ -91,6 +91,13 @@ impl FontDb {
         }
     }
 
+    /// The underlying `fontdb` database, for SVG import (spec 13) to lay
+    /// out text it turns into outlines with the same fonts.
+    #[must_use]
+    pub fn database(&self) -> &fontdb::Database {
+        &self.db
+    }
+
     /// True when there is no face to draw with.
     #[must_use]
     pub fn is_empty(&self) -> bool {

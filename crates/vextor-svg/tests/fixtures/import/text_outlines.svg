@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80">
+  <text id="missing" x="10" y="30" font-family="Nope Sans" font-size="20">Missing font</text>
+  <text x="10" y="60" font-family="Noto Sans" font-size="16">Mixed <tspan font-weight="700">styles</tspan></text>
+</svg>

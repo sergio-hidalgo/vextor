@@ -245,3 +245,25 @@ fn names_from_before_spec_10_are_tidied_not_refused() {
         Some(vextor_core::MAX_NODE_NAME_CHARS)
     );
 }
+
+/// Found by the `vxtr_load` fuzzer (spec 13): a number written with more
+/// digits than it needs must load as the nearest f64, or saving it again
+/// moves it by one unit in the last place.
+#[test]
+fn a_loaded_number_saves_and_loads_back_unchanged() {
+    let mut doc = Document::new("floats");
+    let id = doc.alloc_node_id();
+    doc.apply(vextor_core::Command::Insert {
+        parent: Some(doc.layers[0]),
+        index: 0,
+        nodes: vec![shape(id, rect_geom(0.0, 0.0, 1.0, 1.0))],
+    })
+    .expect("inserts");
+    let text = String::from_utf8(to_bytes(&doc).expect("encodes")).expect("utf-8");
+    let width = "\"width\": 1.0";
+    assert!(text.contains(width), "{text}");
+    let text = text.replacen(width, "\"width\": 15.999999635522982", 1);
+    let loaded = from_bytes(text.as_bytes()).expect("loads");
+    let again = from_bytes(&to_bytes(&loaded).expect("encodes")).expect("loads");
+    assert_eq!(loaded, again);
+}

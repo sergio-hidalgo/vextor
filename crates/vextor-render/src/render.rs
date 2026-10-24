@@ -6,8 +6,8 @@ use std::rc::Rc;
 
 use tiny_skia::{Mask, Pixmap, PixmapPaint};
 use vextor_core::{
-    Document, EPS, Geometry, NodeId, NodeKind, Paint, Rect, Resource, ResourceId, Shape, Style,
-    Text, Transform, View,
+    Document, EPS, Geometry, Image, ImageSource, NodeId, NodeKind, Paint, Rect, Resource,
+    ResourceId, Shape, Style, Text, Transform, View,
 };
 use vextor_geom::{Fonts, text_box, to_bezpath};
 
@@ -211,8 +211,7 @@ impl<'a> Scene<'a> {
             }
             NodeKind::Shape(shape) => self.draw_shape(shape, world, target),
             NodeKind::Text(text) => self.draw_text(id, text, world, target),
-            // Embedded images are drawn from a later spec.
-            NodeKind::Image(_) => {}
+            NodeKind::Image(image) => draw_image(image, world, target),
         }
     }
 
@@ -339,6 +338,40 @@ fn apply_clip(doc: &Document, clip: NodeId, container: Transform, layer: &mut Pi
         // A clip that cannot be built hides the content, as SVG does.
         None => layer.fill(tiny_skia::Color::TRANSPARENT),
     }
+}
+
+/// Draws an embedded image stretched over its rect (SVG
+/// `preserveAspectRatio="none"`); nothing when it cannot be decoded.
+fn draw_image(image: &Image, world: Transform, target: &mut Pixmap) {
+    let ImageSource::Embedded { mime, bytes } = &image.source;
+    let r = image.rect;
+    if r.width <= EPS || r.height <= EPS {
+        return;
+    }
+    let Some(pixels) = crate::image::decoded(*mime, bytes) else {
+        return;
+    };
+    let place = Transform([
+        r.width / f64::from(pixels.width()),
+        0.0,
+        0.0,
+        r.height / f64::from(pixels.height()),
+        r.x,
+        r.y,
+    ])
+    .then(world);
+    let paint = PixmapPaint {
+        quality: tiny_skia::FilterQuality::Bicubic,
+        ..PixmapPaint::default()
+    };
+    target.draw_pixmap(
+        0,
+        0,
+        pixels.as_ref().as_ref(),
+        &paint,
+        paint::transform(place),
+        None,
+    );
 }
 
 #[cfg(test)]

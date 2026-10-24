@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+  <defs>
+    <linearGradient id="sky"><stop offset="0" stop-color="#09f"/><stop offset="1" stop-color="#fff" stop-opacity=".5"/></linearGradient>
+    <linearGradient id="user" gradientUnits="userSpaceOnUse" x1="0" y1="50" x2="0" y2="100" spreadMethod="reflect">
+      <stop offset=".2" stop-color="red"/><stop offset=".8" stop-color="blue"/></linearGradient>
+    <linearGradient id="turned" gradientTransform="rotate(45)"><stop stop-color="#000"/><stop offset="1" stop-color="#ff0"/></linearGradient>
+    <radialGradient id="sun"><stop offset="0" stop-color="#ff0"/><stop offset="1" stop-color="#f80"/></radialGradient>
+    <radialGradient id="focal" cx="40" cy="40" r="30" fx="30" fy="30" gradientUnits="userSpaceOnUse" spreadMethod="repeat">
+      <stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient>
+    <linearGradient id="href" href="#sky" x1="0" y1="0" x2="0" y2="1"/>
+  </defs>
+  <rect width="90" height="40" fill="url(#sky)"/>
+  <rect x="100" width="90" height="40" fill="url(#sky)"/>
+  <rect y="50" width="90" height="50" fill="url(#user)"/>
+  <rect x="100" y="50" width="40" height="40" fill="url(#turned)"/>
+  <circle cx="170" cy="70" r="20" fill="url(#sun)" stroke="url(#href)" stroke-width="4"/>
+  <circle cx="40" cy="40" r="30" fill="url(#focal)" fill-opacity=".5"/>
+</svg>
