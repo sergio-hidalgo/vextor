@@ -19,6 +19,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use vextor_core::Document;
 
+use crate::emergency;
 use crate::files::{self, FileError, read_document, write_document};
 
 /// Time between autosaves of a document with unsaved changes.
@@ -41,6 +42,8 @@ pub struct Recovery {
     /// Revision of the document last written; `None` when nothing is on
     /// disk for this run.
     written: Option<u64>,
+    /// Revision and time of the last emergency snapshot (spec 14).
+    kept: Option<(u64, Instant)>,
 }
 
 /// An autosave left behind by a run that did not exit cleanly.
@@ -99,6 +102,7 @@ impl Recovery {
             lock: Some(lock),
             last_write: now,
             written: None,
+            kept: None,
         })
     }
 
@@ -130,19 +134,65 @@ impl Recovery {
         revision: u64,
         now: Instant,
     ) -> Result<(), FileError> {
-        self.last_write = now;
-        write_document(&self.doc_path(), doc)?;
-        match original.and_then(Path::to_str) {
-            Some(p) => files::write_atomic(&self.path_path(), p.as_bytes())?,
-            None => remove_if_present(&self.path_path())?,
-        }
-        self.written = Some(revision);
+        self.job(doc, original, revision, now).run()?;
+        self.written(revision);
         Ok(())
+    }
+
+    /// An autosave of `doc` (at `revision`) to write off the UI thread
+    /// (spec 14); the interval restarts now. Call [`Recovery::written`]
+    /// once it has run.
+    pub fn job(
+        &mut self,
+        doc: &Document,
+        original: Option<&Path>,
+        revision: u64,
+        now: Instant,
+    ) -> AutosaveJob {
+        self.last_write = now;
+        self.make_job(doc, original, revision)
+    }
+
+    fn make_job(&self, doc: &Document, original: Option<&Path>, revision: u64) -> AutosaveJob {
+        AutosaveJob {
+            doc_path: self.doc_path(),
+            path_path: self.path_path(),
+            original: original.map(Path::to_path_buf),
+            doc: doc.clone(),
+            revision,
+        }
+    }
+
+    /// Keeps `doc` (at `revision`, with unsaved changes) for the panic hook
+    /// to write ([`emergency`]): at most every [`emergency::EVERY`], and
+    /// only when it changed.
+    pub fn keep_latest(
+        &mut self,
+        doc: &Document,
+        original: Option<&Path>,
+        revision: u64,
+        now: Instant,
+    ) {
+        if self
+            .kept
+            .is_some_and(|(r, at)| r == revision || now.duration_since(at) < emergency::EVERY)
+        {
+            return;
+        }
+        emergency::keep(&self.id, self.make_job(doc, original, revision));
+        self.kept = Some((revision, now));
+    }
+
+    /// The autosave of `revision` is on disk.
+    pub fn written(&mut self, revision: u64) {
+        self.written = Some(revision);
     }
 
     /// Deletes this slot's copy (after a clean save). The next autosave
     /// waits a full interval.
     pub fn clear(&mut self, now: Instant) {
+        emergency::forget(&self.id);
+        self.kept = None;
         let _ = remove_if_present(&self.doc_path());
         let _ = remove_if_present(&self.path_path());
         self.written = None;
@@ -164,6 +214,30 @@ impl Recovery {
 
     fn path_path(&self) -> PathBuf {
         self.dir.join(format!("{}.path", self.id))
+    }
+}
+
+/// One autosave, ready to write on any thread.
+pub struct AutosaveJob {
+    doc_path: PathBuf,
+    path_path: PathBuf,
+    original: Option<PathBuf>,
+    doc: Document,
+    pub revision: u64,
+}
+
+impl AutosaveJob {
+    /// Writes the copy, replacing the previous one atomically.
+    ///
+    /// # Errors
+    /// I/O or encoding errors; the previous copy is kept.
+    pub fn run(&self) -> Result<(), FileError> {
+        write_document(&self.doc_path, &self.doc)?;
+        match self.original.as_deref().and_then(Path::to_str) {
+            Some(p) => files::write_atomic(&self.path_path, p.as_bytes())?,
+            None => remove_if_present(&self.path_path)?,
+        }
+        Ok(())
     }
 }
 
@@ -310,6 +384,36 @@ mod tests {
         assert_eq!(orphans[0].original.as_deref(), Some(original.as_path()));
         assert_eq!(orphans[0].name(), "icon.vxtr");
         assert_eq!(orphans[0].load().expect("loads"), doc);
+    }
+
+    #[test]
+    fn a_panic_writes_the_latest_unsaved_work_for_the_next_launch() {
+        let dir = TestDir::new();
+        let start = Instant::now();
+        let mut r = Recovery::claim(dir.path(), start).expect("claims");
+        let doc = fixtures::basic_shapes();
+        r.keep_latest(&doc, None, 3, start);
+        // Too soon for another snapshot: the first is kept.
+        r.keep_latest(&Document::new("newer"), None, 4, start);
+        assert!(emergency::write_all() >= 1);
+        crash(r);
+        let orphans = Recovery::orphans(dir.path()).expect("lists");
+        assert_eq!(orphans.len(), 1);
+        assert_eq!(orphans[0].load().expect("loads"), doc);
+    }
+
+    #[test]
+    fn a_clean_save_forgets_the_emergency_snapshot() {
+        let dir = TestDir::new();
+        let now = Instant::now();
+        let mut r = Recovery::claim(dir.path(), now).expect("claims");
+        r.keep_latest(&fixtures::basic_shapes(), None, 1, now);
+        r.clear(now);
+        let _ = emergency::write_all();
+        assert!(
+            !r.doc_path().exists(),
+            "nothing written for a saved document"
+        );
     }
 
     #[test]

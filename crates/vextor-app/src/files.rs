@@ -2,13 +2,16 @@
 //! recent-files list. The bytes themselves are defined by
 //! [`vextor_core::to_bytes`] / [`vextor_core::from_bytes`].
 
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::fs::{self, File};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
+use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use vextor_core::{Document, FormatError, MAX_FILE_BYTES, from_bytes, to_bytes};
+use vextor_core::{Document, FormatError, MAX_FILE_BYTES, from_bytes};
+
+use crate::safe_save::{self, RealDisk};
 
 /// File extension of documents, without the dot.
 pub const EXTENSION: &str = "vxtr";
@@ -30,6 +33,41 @@ pub enum FileError {
     Io(#[from] io::Error),
     #[error("{0}")]
     Format(#[from] FormatError),
+    /// The document breaks an invariant, so it is not written (spec 14).
+    #[error("the document has a problem, so it was not written: {0}")]
+    Invalid(String),
+    /// What was written did not read back the same (spec 14).
+    #[error("the file did not check out after writing ({0}); the old file is unchanged")]
+    Verify(String),
+}
+
+/// The first bytes of a gzip stream: how a compressed `.vxtr` (spec 14)
+/// is told apart from plain JSON.
+const GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
+
+/// `.vxtr` bytes as read from disk, compressed or not, as a document.
+/// Decompression stops at [`MAX_FILE_BYTES`]: a small file that would
+/// unpack to more is refused, not unpacked (a "zip bomb").
+///
+/// # Errors
+/// [`FormatError`] for refused content, I/O errors for a damaged stream.
+pub fn decode(bytes: &[u8]) -> Result<Document, FileError> {
+    if !bytes.starts_with(&GZIP_MAGIC) {
+        return Ok(from_bytes(bytes)?);
+    }
+    let mut json = Vec::new();
+    GzDecoder::new(bytes)
+        .take(MAX_FILE_BYTES + 1)
+        .read_to_end(&mut json)
+        .map_err(|e| match e.kind() {
+            io::ErrorKind::UnexpectedEof => FileError::Format(FormatError::Truncated),
+            _ => FileError::Format(FormatError::NotVextor(e.to_string())),
+        })?;
+    let unpacked = u64::try_from(json.len()).unwrap_or(u64::MAX);
+    if unpacked > MAX_FILE_BYTES {
+        return Err(FormatError::TooLarge(unpacked).into());
+    }
+    Ok(from_bytes(&json)?)
 }
 
 /// The OS folder for Vextor's own files (recent list, autosaves), e.g.
@@ -45,7 +83,7 @@ pub fn app_data_dir() -> Option<PathBuf> {
 /// # Errors
 /// I/O errors, and [`FormatError`] for refused content.
 pub fn read_document(path: &Path) -> Result<Document, FileError> {
-    Ok(from_bytes(&read_limited(path)?)?)
+    decode(&read_limited(path)?)
 }
 
 /// Reads at most [`MAX_FILE_BYTES`] bytes; a bigger file is
@@ -65,55 +103,26 @@ pub(crate) fn read_limited(path: &Path) -> Result<Vec<u8>, FileError> {
     Ok(bytes)
 }
 
-/// Saves `doc` at `path` atomically ([`write_atomic`]).
+/// Saves `doc` at `path` through the checked, atomic save pipeline
+/// ([`safe_save`]).
 ///
 /// # Errors
-/// I/O errors; the file at `path` is then unchanged.
+/// Refused, I/O or check errors; the file at `path` is then unchanged.
 pub fn write_document(path: &Path, doc: &Document) -> Result<(), FileError> {
-    write_atomic(path, &to_bytes(doc)?)?;
-    Ok(())
+    safe_save::save_document(&RealDisk, path, doc)
 }
 
 /// Writes `bytes` to a temporary file in `path`'s folder, flushes it to
-/// disk, then renames it over `path`. A crash at any point leaves either
-/// the old file or the new one, never a half-written file.
+/// disk, reads it back, then renames it over `path`. A crash at any point
+/// leaves either the old file or the new one, never a half-written file.
 ///
 /// # Errors
 /// I/O errors; the temporary file is removed and `path` is unchanged.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let dir = path
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    let name = path
-        .file_name()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no file name"))?;
-    let mut tmp_name = std::ffi::OsString::from(".");
-    tmp_name.push(name);
-    tmp_name.push(format!(".{}.tmp", std::process::id()));
-    let tmp = dir.join(tmp_name);
-
-    let result = (|| {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&tmp)?;
-        file.write_all(bytes)?;
-        file.sync_all()?;
-        drop(file);
-        fs::rename(&tmp, path)?;
-        // Make the rename itself durable where the OS allows syncing a
-        // folder; failure here does not undo the save.
-        if let Ok(d) = File::open(dir) {
-            let _ = d.sync_all();
-        }
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&tmp);
-    }
-    result
+    safe_save::save_bytes(&RealDisk, path, bytes).map_err(|e| match e {
+        FileError::Io(e) => e,
+        other => io::Error::other(other.to_string()),
+    })
 }
 
 /// `path` with the `.vxtr` extension added when it has none or another.
@@ -459,16 +468,22 @@ mod tests {
         let err = read_document(&path).expect_err("refused");
         assert_eq!(err.to_string(), "the file is incomplete (it was cut off)");
 
-        let newer = String::from_utf8(bytes).expect("utf-8").replacen(
-            "\"format_version\": 3",
-            "\"format_version\": 4",
+        let current = vextor_core::FORMAT_VERSION;
+        // An uncompressed file, so the version can be edited as text.
+        let plain = vextor_core::to_bytes(&fixtures::basic_shapes()).expect("encodes");
+        let newer = String::from_utf8(plain).expect("utf-8").replacen(
+            &format!("\"format_version\":{current}"),
+            &format!("\"format_version\":{}", current + 1),
             1,
         );
         fs::write(&path, newer).expect("writes");
         let err = read_document(&path).expect_err("refused");
         assert_eq!(
             err.to_string(),
-            "the file uses format version 4; this Vextor reads versions 1 to 3"
+            format!(
+                "the file uses format version {}; this Vextor reads versions 1 to {current}",
+                current + 1
+            )
         );
     }
 

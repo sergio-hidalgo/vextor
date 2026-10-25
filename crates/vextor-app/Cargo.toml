@@ -15,10 +15,14 @@ arboard.workspace = true
 kurbo.workspace = true
 directories.workspace = true
 eframe.workspace = true
+flate2.workspace = true
 rfd.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+winit.workspace = true
 
 [dev-dependencies]
 # Image to vector snapshots (spec 13b).

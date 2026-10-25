@@ -9,6 +9,8 @@ use crate::ids::ResourceId;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Style {
     pub fill: Paint,
+    /// Left out of saved files when `None` (format version 4).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stroke: Option<Stroke>,
 }
 

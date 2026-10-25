@@ -7,7 +7,7 @@
 
 use kurbo::{Affine, Point, Rect};
 use vextor_core::{Command, Document, NodeId};
-use vextor_geom::{Handle, pick, retarget, rotate, rotation_angle, scale, touching, union_bounds};
+use vextor_geom::{Handle, retarget, rotate, rotation_angle, scale, union_bounds};
 
 use crate::session::Session;
 
@@ -223,7 +223,7 @@ impl SelectTool {
             {
                 return Target::Rotate;
             }
-            if let Some(o) = pick(&s.doc, &s.fonts, p, PICK_TOLERANCE / zoom) {
+            if let Some(o) = s.hit_index().pick(p, PICK_TOLERANCE / zoom) {
                 return Target::Object(o);
             }
             if b.contains(p) {
@@ -231,7 +231,9 @@ impl SelectTool {
             }
             return Target::Empty;
         }
-        pick(&s.doc, &s.fonts, p, PICK_TOLERANCE / zoom).map_or(Target::Empty, Target::Object)
+        s.hit_index()
+            .pick(p, PICK_TOLERANCE / zoom)
+            .map_or(Target::Empty, Target::Object)
     }
 
     /// Primary button pressed at `p`.
@@ -304,7 +306,7 @@ impl SelectTool {
             Drag::Marquee { start, now, base } => {
                 *now = p;
                 let mut sel = base.clone();
-                for id in touching(&s.doc, &s.fonts, Rect::from_points(*start, p)) {
+                for id in s.hit_index().touching(Rect::from_points(*start, p)) {
                     if !sel.contains(&id) {
                         sel.push(id);
                     }

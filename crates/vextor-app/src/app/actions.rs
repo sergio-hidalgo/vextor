@@ -28,6 +28,8 @@ pub(super) enum Action {
     SaveAs,
     /// File ▸ Export… (spec 12): the export dialog.
     Export,
+    /// File ▸ Restore from Backup… (spec 14).
+    RestoreBackup,
     /// File ▸ Import… (spec 13): an SVG or image into the document.
     Import,
     /// The canvas context menu's Export Selection…: the dialog set to the

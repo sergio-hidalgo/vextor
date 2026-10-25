@@ -5,11 +5,19 @@
 //! version, node count and every document invariant are checked, and any
 //! failure is a [`FormatError`], never a panic.
 
-use serde::Deserialize;
+use std::io::Write;
+
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::document::{Document, FORMAT_VERSION};
 use crate::node::NodeKind;
+
+mod shared;
+
+pub(crate) use shared::{Images, get as shared_image, share as share_image};
 
 /// Oldest `.vxtr` format version still read (version 1 had no text).
 pub const MIN_FORMAT_VERSION: u32 = 1;
@@ -42,14 +50,43 @@ pub enum FormatError {
     Encode(String),
 }
 
-/// Serialises `doc` as pretty-printed `.vxtr` JSON.
+/// Serialises `doc` as compact `.vxtr` JSON (spec 14): no indentation,
+/// default fields left out, each distinct embedded image stored once.
+/// Numbers keep their shortest exact form, so nothing is rounded.
 ///
 /// # Errors
 /// [`FormatError::Encode`] if serialisation fails (not expected for a
 /// validated document).
 pub fn to_bytes(doc: &Document) -> Result<Vec<u8>, FormatError> {
-    let mut bytes =
-        serde_json::to_vec_pretty(doc).map_err(|e| FormatError::Encode(e.to_string()))?;
+    let mut bytes = Vec::new();
+    to_writer(&mut bytes, doc)?;
+    Ok(bytes)
+}
+
+/// [`to_bytes`] straight into `w`, without a full-size copy in memory.
+///
+/// # Errors
+/// [`FormatError::Encode`] when serialisation or `w` fails.
+pub fn to_writer<W: Write>(mut w: W, doc: &Document) -> Result<(), FormatError> {
+    let _images = shared::SaveScope::start();
+    serde_json::to_writer(&mut w, doc).map_err(|e| FormatError::Encode(e.to_string()))?;
+    w.write_all(b"\n")
+        .map_err(|e| FormatError::Encode(e.to_string()))
+}
+
+/// [`to_bytes`] indented, for reading and diffing a file by hand.
+///
+/// # Errors
+/// [`FormatError::Encode`] if serialisation fails.
+pub fn to_bytes_pretty(doc: &Document) -> Result<Vec<u8>, FormatError> {
+    let _images = shared::SaveScope::start();
+    let mut bytes = Vec::new();
+    let mut ser = serde_json::Serializer::with_formatter(
+        &mut bytes,
+        serde_json::ser::PrettyFormatter::with_indent(b"  "),
+    );
+    doc.serialize(&mut ser)
+        .map_err(|e| FormatError::Encode(e.to_string()))?;
     bytes.push(b'\n');
     Ok(bytes)
 }
@@ -74,6 +111,13 @@ pub fn from_bytes(bytes: &[u8]) -> Result<Document, FormatError> {
         Some(v) => return Err(FormatError::UnknownVersion(v)),
     };
 
+    let images = probe
+        .images
+        .into_iter()
+        .map(|b| STANDARD.decode(b))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| FormatError::Invalid(format!("a shared image is not base64: {e}")))?;
+    let _images = shared::LoadScope::start(images);
     let mut doc: Document = serde_json::from_slice(bytes).map_err(|e| json_error(&e))?;
     if doc.nodes.len() > MAX_NODES {
         return Err(FormatError::TooManyNodes(doc.nodes.len()));
@@ -98,7 +142,9 @@ pub fn from_bytes(bytes: &[u8]) -> Result<Document, FormatError> {
 ///
 /// 1 → 2: same shape, text objects added. A version-1 file holding text
 /// was not written by Vextor and is refused. 2 → 3: the export options
-/// gained `text_as_outlines` (absent = off).
+/// gained `text_as_outlines` (absent = off). 3 → 4: same model; files are
+/// compact, leave default fields out and store each image once (spec 14),
+/// all read by the same code.
 fn migrate(doc: &mut Document, version: u32) -> Result<(), FormatError> {
     if version < 2
         && doc
@@ -114,10 +160,13 @@ fn migrate(doc: &mut Document, version: u32) -> Result<(), FormatError> {
     Ok(())
 }
 
-/// The only field read before the version is known.
+/// What is read before the document itself: the version, and the shared
+/// images (version 4) the image nodes refer to.
 #[derive(Deserialize)]
 struct Probe {
     format_version: Option<u32>,
+    #[serde(default)]
+    images: Vec<String>,
 }
 
 fn json_error(e: &serde_json::Error) -> FormatError {

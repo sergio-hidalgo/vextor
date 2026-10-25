@@ -10,16 +10,19 @@ mod layout;
 mod menus;
 mod object_menu;
 mod paint;
+mod restore_flow;
 mod shape_menu;
 mod view_menu;
 
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use eframe::egui;
 
 use self::actions::Action;
 use self::closing::{Next, Pending};
+use crate::backups::Backups;
 use crate::canvas::Canvas;
 use crate::code_panel::CodePanel;
 use crate::documents::{DocId, Documents};
@@ -29,6 +32,7 @@ use crate::fonts::SystemFonts;
 use crate::new_doc::Picker;
 use crate::prompts;
 use crate::recovery::{Orphan, Recovery};
+use crate::saver::Saver;
 use crate::session::Session;
 use crate::swatch_library::Swatches;
 use crate::tabs;
@@ -101,6 +105,13 @@ pub struct VextorApp {
     path_dialog: Option<crate::path_dialog::PathDialog>,
     /// Image to Vector…, while open (spec 13b).
     trace_dialog: Option<crate::trace_dialog::TraceDialog>,
+    /// Saves and autosaves, off the UI thread (spec 14).
+    saver: Saver,
+    /// Copies of files before they are first overwritten (spec 14); `None`
+    /// without an app-data folder.
+    backups: Option<Arc<Mutex<Backups>>>,
+    /// File ▸ Restore from Backup…, while open.
+    restore: Option<crate::restore_dialog::RestoreDialog>,
 }
 
 impl VextorApp {
@@ -117,6 +128,11 @@ impl VextorApp {
             .map(RecentFiles::load)
             .unwrap_or_default();
         let swatches = data_dir.as_deref().map(Swatches::load).unwrap_or_default();
+        let backups = data_dir
+            .as_deref()
+            .map(|d| Arc::new(Mutex::new(Backups::open(d))));
+        let ctx = cc.egui_ctx.clone();
+        let saver = Saver::new(backups.clone(), move || ctx.request_repaint());
         let mut message = None;
         let (autosave, orphans) = match data_dir.as_deref().map(Recovery::orphans) {
             Some(Ok(o)) => (true, o),
@@ -154,6 +170,9 @@ impl VextorApp {
             shape_prompt: None,
             path_dialog: None,
             trace_dialog: None,
+            saver,
+            backups,
+            restore: None,
         }
     }
 
@@ -234,6 +253,7 @@ impl VextorApp {
                 self.save_as();
             }
             Action::Export => self.open_export(self.last_export),
+            Action::RestoreBackup => self.open_restore(),
             Action::ExportSelection => self.open_export(ExportDialog {
                 what: crate::export::What::Selection,
                 kind: crate::export::Kind::Svg,
@@ -280,7 +300,9 @@ impl VextorApp {
     }
 
     /// Takes a close or quit as far as it goes without asking, then asks.
+    /// A save still running finishes first, so it is not asked about.
     fn request(&mut self, pending: Pending) {
+        self.finish_saves();
         let next = pending.next(&mut self.docs);
         self.follow(next);
     }
@@ -316,6 +338,7 @@ impl VextorApp {
 impl eframe::App for VextorApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        self.poll_saves();
         self.save_swatches();
         if let Some(fonts) = self.fonts.poll() {
             for tab in self.docs.tabs_mut() {
@@ -331,7 +354,8 @@ impl eframe::App for VextorApp {
             || self.shape_prompt.is_some()
             || self.path_dialog.is_some()
             || self.trace_dialog.is_some()
-            || self.export_dialog.is_some();
+            || self.export_dialog.is_some()
+            || self.restore.is_some();
         self.paint_escape(&ctx);
         // While a shape is drawn, keys belong to it (arrows, Esc).
         if !prompt_open && !self.canvas.is_drawing() {
@@ -362,6 +386,7 @@ impl eframe::App for VextorApp {
         self.drop_hint(&ctx);
         self.prompts(&ctx);
         self.autosave_tick(&ctx);
+        self.keep_latest();
         if let Some(text) = self.system_clipboard.take() {
             self.last_copied = Some(text.clone());
             ctx.copy_text(text);
@@ -378,6 +403,8 @@ impl Drop for VextorApp {
     /// However the app ends: each document's unsaved work stays as an
     /// autosave (offered at the next launch); otherwise its slot is removed.
     fn drop(&mut self) {
+        // Saves still running land first.
+        self.finish_saves();
         let quitting = self.quit != Quit::Running;
         for tab in self.docs.tabs_mut() {
             let Some(r) = &mut tab.recovery else {

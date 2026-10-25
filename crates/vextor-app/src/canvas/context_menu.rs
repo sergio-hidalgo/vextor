@@ -7,7 +7,6 @@
 
 use eframe::egui;
 use vextor_core::ToolId;
-use vextor_geom::pick;
 
 use super::{Canvas, nodes, to_point};
 use crate::edit_ops;
@@ -167,7 +166,7 @@ fn menu_sections(session: &Session, on_object: bool) -> (bool, bool) {
 /// it landed on a selected object, so the arrange items act on it.
 fn right_click(session: &mut Session, p: kurbo::Point) -> bool {
     let tolerance = PICK_TOLERANCE / session.editor.view.zoom;
-    let Some(id) = pick(&session.doc, &session.fonts, p, tolerance) else {
+    let Some(id) = session.hit_index().pick(p, tolerance) else {
         return false;
     };
     if session.editor.tool == ToolId::Select && !session.selected().contains(&id) {

@@ -13,7 +13,7 @@
 
 use kurbo::{Affine, Point, Rect, Vec2};
 use vextor_core::{Document, NodeId, PathNodeRef, Selection, Side, SubPath};
-use vextor_geom::{NodeCorner, SegmentHit, hit_node, hit_segment, node_corner, pick};
+use vextor_geom::{NodeCorner, SegmentHit, hit_node, hit_segment, node_corner};
 
 use crate::path_ops::{self, edited, select_nodes, selected_nodes, world};
 use crate::select::{Mods, PICK_TOLERANCE};
@@ -179,7 +179,8 @@ impl NodeTool {
                 return NodeTarget::Segment(shape, hit);
             }
         }
-        pick(&s.doc, &s.fonts, p, PICK_TOLERANCE / zoom)
+        s.hit_index()
+            .pick(p, PICK_TOLERANCE / zoom)
             .map_or(NodeTarget::Empty, NodeTarget::Object)
     }
 

@@ -6,9 +6,12 @@
 #   scripts/bundle-macos.sh             build target/bundle/Vextor.app
 #   scripts/bundle-macos.sh --install   ... and copy it to ~/Applications,
 #                                       registered with Launch Services
+#   scripts/bundle-macos.sh --dmg       ... and a compressed disk image,
+#                                       target/bundle/Vextor-<version>.dmg
 #
 # macOS only. Uses only tools that ship with macOS (iconutil, codesign,
-# plutil, lsregister); no network. Signed ad hoc: for this machine, not
+# plutil, lsregister, hdiutil); no network. The release profile strips the
+# binary (spec 14 §6), so nothing else needs stripping here. Signed ad hoc: for this machine, not
 # for distribution (spec 15).
 set -eu
 
@@ -41,6 +44,14 @@ plutil -lint -s "$app/Contents/Info.plist"
 codesign --force --sign - "$app" 2>/dev/null
 
 echo "Built $app"
+
+if [ "${1:-}" = "--dmg" ]; then
+    dmg="$out/Vextor-$version.dmg"
+    rm -f "$dmg"
+    # ULFO: LZFSE compression, readable on macOS 10.11 and later.
+    hdiutil create -quiet -volname Vextor -srcfolder "$app" -ov -format ULFO "$dmg"
+    echo "Built $dmg"
+fi
 
 if [ "${1:-}" = "--install" ]; then
     dest="$HOME/Applications/Vextor.app"

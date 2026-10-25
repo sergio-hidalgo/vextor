@@ -14,6 +14,7 @@ mod edit;
 mod editor;
 mod error;
 mod format;
+mod hash;
 mod history;
 mod ids;
 mod layers;
@@ -35,7 +36,9 @@ pub use editor::{ClipResource, ClipboardPayload, EditorState, Selection, ToolId,
 pub use error::{ColorError, CoreError};
 pub use format::{
     FormatError, MAX_FILE_BYTES, MAX_NODES, MIN_FORMAT_VERSION, from_bytes, to_bytes,
+    to_bytes_pretty, to_writer,
 };
+pub use hash::{Fnv1a, fnv1a};
 pub use history::{DEFAULT_LIMIT, History};
 pub use ids::{ArtboardId, NodeId, ResourceId};
 pub use math::{EPS, Point, Rect, Transform, Vec2};

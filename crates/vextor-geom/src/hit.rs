@@ -13,6 +13,10 @@ use vextor_core::{Document, FillRule, Geometry, NodeId, NodeKind, Paint, Transfo
 use crate::convert::to_bezpath;
 use crate::text::{Fonts, text_box};
 
+mod index;
+
+pub use index::HitIndex;
+
 /// Accuracy of the nearest-point search on curves, in document px.
 const NEAREST_ACCURACY: f64 = 1e-3;
 
@@ -44,6 +48,13 @@ struct Leaf {
 }
 
 impl Leaf {
+    /// The box a hit or a marquee can reach the leaf in, before tolerance.
+    fn reach_box(&self) -> Rect {
+        self.outline
+            .bounding_box()
+            .inflate(self.half_stroke, self.half_stroke)
+    }
+
     fn hit(&self, p: Point, tolerance: f64) -> bool {
         let reach = self.half_stroke + tolerance;
         if !self

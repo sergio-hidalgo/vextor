@@ -7,7 +7,7 @@
 use eframe::egui::{self, Painter, Pos2, Stroke, StrokeKind};
 use kurbo::PathEl;
 use vextor_core::{NodeKind, NodeType, ToolId};
-use vextor_geom::{path_to_bezpath, pick, segment};
+use vextor_geom::{path_to_bezpath, segment};
 
 use super::{Canvas, path_marks, screen_rect, to_egui};
 use crate::node_tool::{self, NodeTarget, NodeTool};
@@ -146,7 +146,7 @@ pub(super) fn node_double_click(session: &mut Session, p: kurbo::Point) -> Optio
     match session.editor.tool {
         ToolId::Node => NodeTool::double_click(session, p, zoom).err(),
         ToolId::Select => {
-            let id = pick(&session.doc, &session.fonts, p, PICK_TOLERANCE / zoom)?;
+            let id = session.hit_index().pick(p, PICK_TOLERANCE / zoom)?;
             if session.path_of(id).is_some() {
                 session.select(vec![id]);
                 session.editor.tool = ToolId::Node;

@@ -5,11 +5,14 @@ mod common;
 use common::{fixture, rect_geom, shape};
 use vextor_core::{
     Document, FORMAT_VERSION, FormatError, Geometry, MAX_FILE_BYTES, MAX_NODES, NodeKind, Paint,
-    Point, Rgba, TextAlign, from_bytes, to_bytes,
+    Point, Rgba, TextAlign, from_bytes, to_bytes, to_bytes_pretty,
 };
 
 const MINIMAL_V1: &str = include_str!("fixtures/minimal_v1.vxtr");
 const LABEL_V2: &str = include_str!("fixtures/label_v2.vxtr");
+/// Written by Vextor 0.1 before spec 14: pretty, every field, three
+/// images of which two are the same picture, each stored inline.
+const IMAGES_V3: &str = include_str!("fixtures/images_v3.vxtr");
 
 fn round_trip(doc: &Document) {
     let bytes = to_bytes(doc).expect("encodes");
@@ -24,6 +27,90 @@ fn every_fixture_round_trips() {
     round_trip(&fixture().doc);
     round_trip(&from_bytes(MINIMAL_V1.as_bytes()).expect("fixture loads"));
     round_trip(&from_bytes(LABEL_V2.as_bytes()).expect("fixture loads"));
+    round_trip(&from_bytes(IMAGES_V3.as_bytes()).expect("fixture loads"));
+}
+
+#[test]
+fn every_earlier_format_version_loads_as_the_current_one() {
+    for (version, text) in [(1, MINIMAL_V1), (2, LABEL_V2), (3, IMAGES_V3)] {
+        assert!(text.contains(&format!("\"format_version\": {version}")));
+        let doc = from_bytes(text.as_bytes()).expect("loads");
+        assert_eq!(doc.format_version, FORMAT_VERSION, "v{version}");
+    }
+}
+
+fn image_count(doc: &Document) -> usize {
+    doc.nodes
+        .values()
+        .filter(|n| matches!(n.kind, NodeKind::Image(_)))
+        .count()
+}
+
+#[test]
+fn identical_images_are_saved_once_and_load_back_whole() {
+    let doc = from_bytes(IMAGES_V3.as_bytes()).expect("loads");
+    assert_eq!(image_count(&doc), 3);
+    let saved = to_bytes(&doc).expect("encodes");
+    let probe: serde_json::Value = serde_json::from_slice(&saved).expect("json");
+    let images = probe["images"].as_array().expect("an images list");
+    assert_eq!(images.len(), 2, "two distinct pictures");
+    assert!(
+        saved.len() * 3 < IMAGES_V3.len() * 2,
+        "{} bytes",
+        saved.len()
+    );
+    assert_eq!(from_bytes(&saved).expect("loads"), doc);
+}
+
+#[test]
+fn a_document_without_images_has_no_images_list() {
+    let saved = to_bytes(&from_bytes(LABEL_V2.as_bytes()).expect("loads")).expect("encodes");
+    let probe: serde_json::Value = serde_json::from_slice(&saved).expect("json");
+    assert!(probe.get("images").is_none());
+}
+
+#[test]
+fn a_shared_image_index_out_of_range_is_refused() {
+    let doc = from_bytes(IMAGES_V3.as_bytes()).expect("loads");
+    let text = String::from_utf8(to_bytes(&doc).expect("encodes")).expect("utf-8");
+    let damaged = text.replacen("\"bytes\":1", "\"bytes\":7", 1);
+    assert_ne!(damaged, text);
+    assert!(matches!(
+        from_bytes(damaged.as_bytes()),
+        Err(FormatError::NotVextor(_))
+    ));
+}
+
+#[test]
+fn compact_output_is_smaller_than_pretty_and_loads_equal() {
+    let doc = fixture().doc;
+    let compact = to_bytes(&doc).expect("encodes");
+    let pretty = to_bytes_pretty(&doc).expect("encodes");
+    assert!(compact.len() < pretty.len());
+    assert!(!compact[..compact.len() - 1].contains(&b'\n'), "one line");
+    assert_eq!(from_bytes(&compact).expect("loads"), doc);
+    assert_eq!(from_bytes(&pretty).expect("loads"), doc);
+}
+
+#[test]
+fn default_fields_are_left_out_and_filled_back() {
+    let doc = fixture().doc;
+    let text = String::from_utf8(to_bytes(&doc).expect("encodes")).expect("utf-8");
+    for absent in [
+        "\"visible\":true",
+        "\"locked\":false",
+        "\"opacity\":1.0",
+        "\"clip\":null",
+    ] {
+        assert!(!text.contains(absent), "{absent} written");
+    }
+    let back = from_bytes(text.as_bytes()).expect("loads");
+    assert!(
+        back.nodes
+            .values()
+            .all(|n| n.visible || doc.nodes[&n.id].visible)
+    );
+    assert_eq!(back, doc);
 }
 
 #[test]
@@ -50,7 +137,7 @@ fn hand_written_v2_file_with_text_loads() {
 fn a_v1_file_is_saved_as_the_current_version() {
     let doc = from_bytes(MINIMAL_V1.as_bytes()).expect("loads");
     let saved = String::from_utf8(to_bytes(&doc).expect("encodes")).expect("utf-8");
-    assert!(saved.contains(&format!("\"format_version\": {FORMAT_VERSION}")));
+    assert!(saved.contains(&format!("\"format_version\":{FORMAT_VERSION}")));
 }
 
 #[test]
@@ -219,7 +306,7 @@ fn error_messages_read_as_sentences() {
     );
     assert_eq!(
         FormatError::UnknownVersion(7).to_string(),
-        "the file uses format version 7; this Vextor reads versions 1 to 3"
+        "the file uses format version 7; this Vextor reads versions 1 to 4"
     );
 }
 
@@ -260,9 +347,9 @@ fn a_loaded_number_saves_and_loads_back_unchanged() {
     })
     .expect("inserts");
     let text = String::from_utf8(to_bytes(&doc).expect("encodes")).expect("utf-8");
-    let width = "\"width\": 1.0";
+    let width = "\"width\":1.0";
     assert!(text.contains(width), "{text}");
-    let text = text.replacen(width, "\"width\": 15.999999635522982", 1);
+    let text = text.replacen(width, "\"width\":15.999999635522982", 1);
     let loaded = from_bytes(text.as_bytes()).expect("loads");
     let again = from_bytes(&to_bytes(&loaded).expect("encodes")).expect("loads");
     assert_eq!(loaded, again);

@@ -1,13 +1,13 @@
 //! One open document with its history and editor state.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use vextor_core::{
     Command, CoreError, Document, EditorState, Geometry, GridSettings, History, NodeId, NodeKind,
     Path, PathNode, PathNodeRef, Rgba, Selection, Shape, Style, SvgExportOptions,
 };
-use vextor_geom::Fonts;
+use vextor_geom::{Fonts, HitIndex};
 
 use crate::files;
 use crate::swatch_library::Swatches;
@@ -46,6 +46,16 @@ pub struct Session {
     /// `revision` when the document last matched its file (or was
     /// created); `None` when it never did, e.g. after recovery.
     saved_revision: Option<u64>,
+    /// The hit index of `revision` with the fonts it was built with (spec
+    /// 14): built on the first pick after a change, shared until the next.
+    hit: Mutex<Option<HitCache>>,
+}
+
+/// A [`HitIndex`] and what it was built from.
+struct HitCache {
+    revision: u64,
+    fonts: Arc<Fonts>,
+    index: Arc<HitIndex>,
 }
 
 /// What the Edit menu shows: the label of the step undo/redo would act on,
@@ -76,6 +86,7 @@ impl Session {
             swatches: Swatches::default(),
             path: None,
             saved_revision: Some(0),
+            hit: Mutex::default(),
         }
     }
 
@@ -113,9 +124,16 @@ impl Session {
     }
 
     /// Records that the document, as it is now, was saved to `path`.
+    #[cfg(test)]
     pub fn mark_saved(&mut self, path: PathBuf) {
+        self.mark_saved_at(path, self.revision);
+    }
+
+    /// Records that the document as it was at `revision` was saved to
+    /// `path` (a background save, spec 14): edits made since stay unsaved.
+    pub fn mark_saved_at(&mut self, path: PathBuf, revision: u64) {
         self.path = Some(path);
-        self.saved_revision = Some(self.revision);
+        self.saved_revision = Some(revision);
     }
 
     /// The document's file was renamed to `path`; whether it has unsaved
@@ -144,6 +162,29 @@ impl Session {
     #[must_use]
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// The hit index of the document as it is now: what is under the
+    /// pointer, or under a marquee, without walking every node.
+    pub fn hit_index(&self) -> Arc<HitIndex> {
+        let mut cache = self
+            .hit
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match &*cache {
+            Some(c) if c.revision == self.revision && Arc::ptr_eq(&c.fonts, &self.fonts) => {
+                Arc::clone(&c.index)
+            }
+            _ => {
+                let index = Arc::new(HitIndex::build(&self.doc, &self.fonts));
+                *cache = Some(HitCache {
+                    revision: self.revision,
+                    fonts: Arc::clone(&self.fonts),
+                    index: Arc::clone(&index),
+                });
+                index
+            }
+        }
     }
 
     /// Switches to `fonts` (the system fonts finished loading). Text lays
@@ -511,6 +552,38 @@ mod tests {
         assert!(!s.is_dirty());
         assert_eq!(s.title(), "button.vxtr — Vextor");
         assert_eq!(s.path(), Some(std::path::Path::new("/tmp/button.vxtr")));
+    }
+
+    #[test]
+    fn edits_made_while_a_background_save_runs_stay_unsaved() {
+        let mut s = Session::new(Document::new("t"));
+        s.apply(nudge(&s, 10.0)).expect("valid command");
+        let snapshot = s.revision();
+        s.apply(nudge(&s, 5.0)).expect("valid command");
+        s.mark_saved_at(PathBuf::from("/tmp/t.vxtr"), snapshot);
+        assert!(s.is_dirty(), "the second nudge was not in the saved file");
+        s.mark_saved_at(PathBuf::from("/tmp/t.vxtr"), s.revision());
+        assert!(!s.is_dirty());
+    }
+
+    #[test]
+    fn the_hit_index_follows_the_document() {
+        let mut s = Session::new(vextor_render::fixtures::basic_shapes());
+        let p = kurbo::Point::new(20.0, 20.0);
+        let hit = s.hit_index().pick(p, 1.0);
+        assert!(hit.is_some());
+        let first = s.hit_index();
+        assert!(
+            Arc::ptr_eq(&first, &s.hit_index()),
+            "reused while unchanged"
+        );
+        let id = hit.expect("hit");
+        s.apply(Command::Delete { ids: vec![id] }).expect("deletes");
+        assert_ne!(
+            s.hit_index().pick(p, 1.0),
+            Some(id),
+            "rebuilt after a change"
+        );
     }
 
     #[test]

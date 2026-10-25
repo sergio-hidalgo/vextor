@@ -1,6 +1,7 @@
 //! proptest: random command sequences (mixed with undo, redo and gestures)
 //! never break the document invariants; a rejected command changes
-//! nothing; undoing everything returns to the initial document.
+//! nothing; undoing everything returns to the initial document; saving
+//! and loading gives the same document (spec 14).
 
 mod common;
 
@@ -368,6 +369,15 @@ fn run_sequence(ops: &[Op]) -> Result<(usize, usize), TestCaseError> {
     }
     while h.redo(&mut doc) {}
     let last = doc.clone();
+    // Spec 14: whatever the edits, the file loads back the same.
+    let saved = vextor_core::to_bytes(&doc).map_err(|e| TestCaseError::fail(e.to_string()))?;
+    let loaded = vextor_core::from_bytes(&saved).map_err(|e| TestCaseError::fail(e.to_string()))?;
+    prop_assert_eq!(&loaded, &doc, "save → load");
+    prop_assert_eq!(
+        loaded.next_id(),
+        doc.next_id(),
+        "ids keep going after a load"
+    );
     while h.undo(&mut doc).is_some() {
         prop_assert!(doc.validate().is_ok(), "{:?} during undo", doc.validate());
     }

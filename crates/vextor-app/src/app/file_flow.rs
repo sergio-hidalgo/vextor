@@ -14,6 +14,7 @@ use crate::documents::DocId;
 use crate::files::{self, FileError};
 use crate::prompts::{self, RecoverAnswer, SaveAnswer};
 use crate::recovery::Orphan;
+use crate::saver::{Done, Job};
 use crate::session::Session;
 
 impl VextorApp {
@@ -90,6 +91,11 @@ impl VextorApp {
             return;
         };
         let dirty = tab.session.is_dirty();
+        // A save in flight would write the old name again.
+        if self.saver.is_saving(id) {
+            self.finish_saves();
+            return self.rename_document(id, input);
+        }
         match files::rename_document(&from, &name) {
             Ok(to) if to != from => {
                 tab.session.moved_to(to.clone());
@@ -141,25 +147,74 @@ impl VextorApp {
         }
     }
 
+    /// Saves the active document to `path` in the background (spec 14):
+    /// a snapshot goes to the saving thread and the frame goes on. The
+    /// document counts as saved once the file is written and checked
+    /// ([`VextorApp::poll_saves`]). Returns true when the save was queued.
     pub(super) fn save_to(&mut self, path: PathBuf) -> bool {
-        let Some(tab) = self.docs.active_mut() else {
+        let Some(tab) = self.docs.active() else {
             return false;
         };
-        if let Err(e) = files::write_document(&path, &tab.session.doc) {
-            self.message = Some(format!(
-                "Couldn't save “{}”: {e}",
-                files::display_name(&path)
-            ));
-            return false;
-        }
-        tab.session.mark_saved(path.clone());
-        if let Some(r) = &mut tab.recovery {
-            r.clear(Instant::now());
-        }
-        self.recent.push(path);
-        self.save_recent();
-        self.message = None;
+        let job = Job::Save {
+            doc: tab.id,
+            path,
+            document: Box::new(tab.session.doc.clone()),
+            revision: tab.session.revision(),
+        };
+        self.saver.send(job);
         true
+    }
+
+    /// Takes in the saves and autosaves that finished.
+    pub(super) fn poll_saves(&mut self) {
+        let done = self.saver.poll();
+        self.took_in(done);
+    }
+
+    /// Waits for every save and autosave still running, then takes them
+    /// in: before closing or quitting, nothing may be left half done.
+    pub(super) fn finish_saves(&mut self) {
+        let done = self.saver.wait();
+        self.took_in(done);
+    }
+
+    fn took_in(&mut self, done: Vec<Done>) {
+        for d in done {
+            match d {
+                Done::Saved {
+                    doc,
+                    path,
+                    revision,
+                } => {
+                    if let Some(tab) = self.docs.get_mut(doc) {
+                        tab.session.mark_saved_at(path.clone(), revision);
+                        // Edits made while it saved stay in the autosave.
+                        if !tab.session.is_dirty()
+                            && let Some(r) = &mut tab.recovery
+                        {
+                            r.clear(Instant::now());
+                        }
+                    }
+                    self.recent.push(path);
+                    self.save_recent();
+                    self.message = None;
+                }
+                Done::Autosaved { doc, revision } => {
+                    if let Some(r) = self.docs.get_mut(doc).and_then(|t| t.recovery.as_mut()) {
+                        r.written(revision);
+                    }
+                }
+                Done::SaveFailed { error, .. } | Done::AutosaveFailed { error, .. } => {
+                    self.message = Some(error);
+                }
+            }
+        }
+    }
+
+    /// Whether document `id` was saved, once every save in flight is done.
+    pub(super) fn saved_now(&mut self, id: DocId) -> bool {
+        self.finish_saves();
+        self.docs.get(id).is_some_and(|t| !t.session.is_dirty())
     }
 
     /// Opens a recovered document in a new tab, autosaves it under this
@@ -197,7 +252,7 @@ impl VextorApp {
         }
     }
 
-    /// Writes document `id`'s autosave now.
+    /// Queues document `id`'s autosave now.
     pub(super) fn autosave_now(&mut self, id: DocId) {
         let Some(tab) = self.docs.get_mut(id) else {
             return;
@@ -205,9 +260,11 @@ impl VextorApp {
         let (Some(r), s) = (&mut tab.recovery, &tab.session) else {
             return;
         };
-        if let Err(e) = r.write(&s.doc, s.path(), s.revision(), Instant::now()) {
-            self.message = Some(format!("Autosave failed: {e}"));
-        }
+        let job = r.job(&s.doc, s.path(), s.revision(), Instant::now());
+        self.saver.send(Job::Autosave {
+            doc: id,
+            job: Box::new(job),
+        });
     }
 
     /// Autosaves every document that is due, and wakes the app up for the
@@ -215,32 +272,54 @@ impl VextorApp {
     pub(super) fn autosave_tick(&mut self, ctx: &egui::Context) {
         let now = Instant::now();
         let mut wait: Option<Duration> = None;
-        let mut failed = None;
+        let mut jobs = Vec::new();
         for tab in self.docs.tabs_mut() {
             let (Some(r), s) = (&mut tab.recovery, &tab.session) else {
                 continue;
             };
             let (revision, dirty) = (s.revision(), s.is_dirty());
+            // Not while a job of the document runs: a save in flight
+            // clears the autosave when it lands.
+            if self.saver.is_busy(tab.id) {
+                continue;
+            }
             if r.due(now, revision, dirty) {
-                if let Err(e) = r.write(&s.doc, s.path(), revision, now) {
-                    failed = Some(e);
-                }
+                let job = r.job(&s.doc, s.path(), revision, now);
+                jobs.push(Job::Autosave {
+                    doc: tab.id,
+                    job: Box::new(job),
+                });
             } else if r.pending(revision, dirty) {
                 let left = r.time_left(now);
                 wait = Some(wait.map_or(left, |w| w.min(left)));
             }
         }
-        if let Some(e) = failed {
-            self.message = Some(format!("Autosave failed: {e}"));
+        for job in jobs {
+            self.saver.send(job);
         }
         if let Some(w) = wait {
             ctx.request_repaint_after(w.max(Duration::from_millis(100)));
         }
     }
 
+    /// Keeps each document's latest unsaved work for the panic hook
+    /// (spec 14), throttled.
+    pub(super) fn keep_latest(&mut self) {
+        let now = Instant::now();
+        for tab in self.docs.tabs_mut() {
+            let (Some(r), s) = (&mut tab.recovery, &tab.session) else {
+                continue;
+            };
+            if s.is_dirty() {
+                r.keep_latest(&s.doc, s.path(), s.revision(), now);
+            }
+        }
+    }
+
     /// Unsaved changes were dealt with: deletes every autosave and lets
     /// the window close.
     pub(super) fn quit_now(&mut self) {
+        self.finish_saves();
         self.quit = Quit::Quitting;
         self.confirm = None;
         for tab in self.docs.tabs_mut() {
@@ -256,6 +335,7 @@ impl VextorApp {
         if self.quit != Quit::Running || !ctx.input(|i| i.viewport().close_requested()) {
             return;
         }
+        self.finish_saves();
         match (Pending::Quit {
             dont_save: Vec::new(),
         })
@@ -272,7 +352,7 @@ impl VextorApp {
     /// "Convert with the fallback font?", "Save changes?" and the recovery
     /// prompt, one at a time.
     pub(super) fn prompts(&mut self, ctx: &egui::Context) {
-        if self.path_prompts(ctx) || self.export_prompt(ctx) {
+        if self.path_prompts(ctx) || self.export_prompt(ctx) || self.restore_prompt(ctx) {
             return;
         }
         if let Some(missing) = &self.outline_prompt {
@@ -303,7 +383,7 @@ impl VextorApp {
                 Some(answer) => {
                     // Save acts on the active document: the one asked about.
                     self.docs.activate(id);
-                    let saved = answer == SaveAnswer::Save && self.save();
+                    let saved = answer == SaveAnswer::Save && self.save() && self.saved_now(id);
                     let next = pending.answer(&mut self.docs, id, answer, saved);
                     self.follow(next);
                 }
