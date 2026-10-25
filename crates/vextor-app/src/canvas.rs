@@ -6,8 +6,6 @@
 //! stops changing. Overlays (checkerboard, artboard outlines, selection,
 //! marquee) are drawn by egui every frame.
 
-use std::fmt::Write as _;
-
 use eframe::egui::{self, Painter, Pos2, Sense, Stroke, StrokeKind, TextureHandle};
 use vextor_core::{Point, Rect, Vec2, View};
 use vextor_render::RenderCache;
@@ -55,9 +53,6 @@ pub struct Canvas {
     last_view: Option<View>,
     /// Canvas size in points on the last frame.
     size: Vec2,
-    /// Show render and frame times (debug menu).
-    pub show_stats: bool,
-    last_render_ms: Option<f64>,
     error: Option<String>,
     tool: SelectTool,
     /// The layer textures of the drag in progress (spec 05b).
@@ -138,7 +133,6 @@ impl Canvas {
         *self = Self {
             checker: self.checker.take(),
             size: self.size,
-            show_stats: self.show_stats,
             hide_smart_guides: self.hide_smart_guides,
             document: Some(doc),
             // Polygon sides and star points carry over to the next shape.
@@ -222,26 +216,9 @@ impl Canvas {
         message.or(dialog_message).or(menu_message)
     }
 
-    /// The debug stats (frame and render times) and a render error. The
-    /// zoom shows in the zoom bar (spec 08b).
+    /// A render error, over the canvas. The zoom shows in the zoom bar
+    /// (spec 08b).
     fn draw_status(&self, ui: &egui::Ui, painter: &Painter, rect: egui::Rect) {
-        let mut text = String::new();
-        if self.show_stats {
-            let dt = ui.input(|i| i.unstable_dt) * 1000.0;
-            let render = self
-                .last_render_ms
-                .map_or_else(|| "–".to_owned(), |ms| format!("{ms:.1} ms"));
-            let _ = write!(text, "frame {dt:.1} ms   last render {render}");
-        }
-        let color = ui.visuals().weak_text_color();
-        let font = egui::FontId::proportional(12.0);
-        painter.text(
-            rect.left_bottom() + egui::vec2(8.0, -6.0),
-            egui::Align2::LEFT_BOTTOM,
-            text,
-            font,
-            color,
-        );
         if let Some(e) = &self.error {
             let error_font = egui::FontId::proportional(13.0);
             painter.text(
@@ -353,10 +330,7 @@ mod tests {
         let new = |name| Session::new(crate::new_doc::new_document(name, 24.0, 24.0));
         let a = docs.add(new("a"), None);
         let b = docs.add(new("b"), None);
-        let mut canvas = Canvas {
-            show_stats: true,
-            ..Canvas::default()
-        };
+        let mut canvas = Canvas::default();
         canvas.show_document(a);
         canvas.shown = Some(document::tests::shown(1.0, 3));
         canvas.show_document(a);
@@ -364,6 +338,5 @@ mod tests {
         canvas.show_document(b);
         assert!(canvas.shown.is_none(), "other document: rendered again");
         assert!(canvas.renaming().is_none());
-        assert!(canvas.show_stats, "debug setting kept");
     }
 }

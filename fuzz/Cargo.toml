@@ -34,3 +34,10 @@ bench = false
 
 [profile.release]
 debug = 1
+
+[[bin]]
+name = "command_seq"
+path = "fuzz_targets/command_seq.rs"
+test = false
+doc = false
+bench = false

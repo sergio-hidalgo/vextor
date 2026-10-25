@@ -1,12 +1,15 @@
 //! File ▸ Export… (spec 12): the dialog, then where to write, then the
-//! files, each written atomically. The place comes only from the save or
-//! folder dialog (`security-check` §4).
+//! files, each written atomically, an existing file backed up first (spec
+//! 14). The place comes only from the save or folder dialog
+//! (`security-check` §4).
 
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 
 use eframe::egui;
 
 use super::VextorApp;
+use crate::backups::Backups;
 use crate::export::{self, Kind, What};
 use crate::export_dialog::ExportDialog;
 use crate::files;
@@ -55,7 +58,7 @@ impl VextorApp {
         let result = if choice.what == What::AllArtboards {
             let dialog = rfd::FileDialog::new().set_title("Export to Folder");
             match self.in_current_folder(dialog).pick_folder() {
-                Some(dir) => write_into(&dir, &made),
+                Some(dir) => write_into(self.backups.as_deref(), &dir, &made),
                 None => return,
             }
         } else {
@@ -68,7 +71,11 @@ impl VextorApp {
                 .add_filter(ext.to_uppercase(), &[ext])
                 .set_file_name(&file.name);
             match self.in_current_folder(dialog).save_file() {
-                Some(path) => write_file(&with_extension(path, choice.kind), &file.bytes),
+                Some(path) => write_file(
+                    self.backups.as_deref(),
+                    &with_extension(path, choice.kind),
+                    &file.bytes,
+                ),
                 None => return,
             }
         };
@@ -96,21 +103,51 @@ fn with_extension(path: PathBuf, kind: Kind) -> PathBuf {
     }
 }
 
-fn write_file(path: &Path, bytes: &[u8]) -> Result<String, String> {
-    files::write_atomic(path, bytes).map_err(|e| e.to_string())?;
+fn write_file(
+    backups: Option<&Mutex<Backups>>,
+    path: &Path,
+    bytes: &[u8],
+) -> Result<String, String> {
+    backed_up_write(backups, path, bytes)?;
     Ok(format!("Exported “{}”.", files::display_name(path)))
+}
+
+/// Backs up the file at `path` if one is there, then writes `bytes`; a
+/// failed backup leaves the file alone.
+fn backed_up_write(
+    backups: Option<&Mutex<Backups>>,
+    path: &Path,
+    bytes: &[u8],
+) -> Result<(), String> {
+    if let Some(b) = backups {
+        b.lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .before_overwrite(path)
+            .map_err(|e| {
+                format!(
+                    "couldn't back up “{}” first, so it was not overwritten: {e}",
+                    files::display_name(path)
+                )
+            })?;
+    }
+    files::write_atomic(path, bytes).map_err(|e| e.to_string())
 }
 
 /// Writes each file into `dir` (replacing files of the same name, as an
 /// export to a folder does) and says how many.
-fn write_into(dir: &Path, made: &[export::File]) -> Result<String, String> {
+fn write_into(
+    backups: Option<&Mutex<Backups>>,
+    dir: &Path,
+    made: &[export::File],
+) -> Result<String, String> {
     let mut replaced = 0;
     for file in made {
         let path = dir.join(&file.name);
         if path.exists() {
             replaced += 1;
         }
-        files::write_atomic(&path, &file.bytes).map_err(|e| format!("“{}”: {e}", file.name))?;
+        backed_up_write(backups, &path, &file.bytes)
+            .map_err(|e| format!("“{}”: {e}", file.name))?;
     }
     let count = match made.len() {
         1 => "1 file".to_owned(),
@@ -145,13 +182,19 @@ mod tests {
             },
         ];
         std::fs::write(dir.path().join("a.svg"), b"old").expect("writes");
-        let said = write_into(dir.path(), &made).expect("writes");
+        let app = TestDir::new();
+        let backups = Mutex::new(Backups::open(app.path()));
+        let said = write_into(Some(&backups), dir.path(), &made).expect("writes");
         assert!(said.starts_with("Exported 2 files to"), "{said}");
         assert!(said.ends_with("(1 replaced)."), "{said}");
         assert_eq!(
             std::fs::read(dir.path().join("a.svg")).expect("reads"),
             b"<svg/>"
         );
+        // The replaced file was backed up first.
+        let kept = backups.lock().expect("lock").of(&dir.path().join("a.svg"));
+        assert_eq!(kept.len(), 1);
+        assert_eq!(std::fs::read(&kept[0].path).expect("reads"), b"old");
     }
 
     #[test]

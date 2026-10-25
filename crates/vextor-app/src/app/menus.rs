@@ -1,5 +1,4 @@
-//! The menu bar: File, Edit, Object (`object_menu.rs`), View, Window and
-//! (debug builds) Debug.
+//! The menu bar: File, Edit, Object (`object_menu.rs`), View and Window.
 
 use eframe::egui::{self, KeyboardShortcut};
 
@@ -10,7 +9,7 @@ use super::keys::{
 };
 use super::{Action, VextorApp};
 use crate::session::Session;
-use crate::{debug, edit_ops, files};
+use crate::{edit_ops, files};
 
 impl VextorApp {
     pub(super) fn menu_bar(&mut self, ui: &mut egui::Ui) -> Vec<Action> {
@@ -102,11 +101,6 @@ impl VextorApp {
                 ui.checkbox(&mut self.show_code, "Code Panel");
             });
             ui.menu_button("Window", |ui| self.window_menu(ui, &mut actions));
-            if debug::enabled()
-                && let Some(debug::Action::Load(doc)) = debug::menu(ui, &mut self.canvas.show_stats)
-            {
-                self.open(Session::new(*doc));
-            }
         });
         actions
     }
@@ -135,6 +129,20 @@ impl VextorApp {
             if why_item(ui, has_doc, text, shortcut, "No document is open") {
                 actions.push(action);
             }
+        }
+        ui.separator();
+        let why = if self.backups.is_none() {
+            "Vextor has no app-data folder for backups"
+        } else {
+            "No document is open"
+        };
+        let can = has_doc && self.backups.is_some();
+        if ui
+            .add_enabled(can, egui::Button::new("Restore from Backup…"))
+            .on_disabled_hover_text(why)
+            .clicked()
+        {
+            actions.push(Action::RestoreBackup);
         }
     }
 

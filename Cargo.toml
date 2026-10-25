@@ -15,13 +15,31 @@ vextor-core = { path = "crates/vextor-core" }
 vextor-geom = { path = "crates/vextor-geom" }
 vextor-svg = { path = "crates/vextor-svg" }
 vextor-render = { path = "crates/vextor-render" }
-eframe = "0.37.0"
+# Window and UI. `glow` (OpenGL) instead of the default `wgpu` (spec 14
+# spike): the canvas is one texture plus egui's own shapes, and wgpu with
+# its shader compiler (naga) was a quarter of the binary. `links` and
+# `web_screen_reader` are left out: no hyperlinks, no web build.
+eframe = { version = "0.37.0", default-features = false, features = [
+    "accesskit",
+    "clipboard",
+    "default_fonts",
+    "glow",
+    "system_fonts",
+    "wayland",
+    "x11",
+] }
+# Linux only: winit's default backends (X11, Wayland loaded at run time),
+# which eframe's own defaults used to turn on. Already in the tree.
+winit = "0.30.13"
 # Paste (spec 13): the files copied in Finder / Explorer; the version egui
 # already uses, without its image support (egui hands over pasted images).
 arboard = { version = "3.7.0", default-features = false }
 base64 = "0.23.1"
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 directories = "6.0.0"
+# Compressed `.vxtr` files (spec 14 spike: gzip saves 94 % on the 20 000-node
+# fixture); the version png already pulls in, pure-Rust backend, no C.
+flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
 # Text (spec 05c): the versions usvg 0.48 uses, so nothing is duplicated.
 fontdb = { version = "0.24.0", default-features = false, features = ["std", "fs"] }
 harfrust = "0.12.0"
@@ -62,8 +80,16 @@ module_name_repetitions = "allow"
 
 # Dependencies (tiny-skia, egui, …) are optimised even in debug builds, so
 # `cargo run` draws at a usable speed; workspace crates stay debuggable.
+# No debug info for dependencies (spec 14 §6): the build folder is much
+# smaller and nobody steps into egui or usvg; our own crates keep theirs.
 [profile.dev.package."*"]
 opt-level = 2
+debug = false
 
+# Small release binary (spec 14 §6): one codegen unit and full LTO let the
+# linker drop more; no debug symbols are shipped. `panic` stays `unwind`: a
+# panic inside the import or save thread must fail only that job.
 [profile.release]
-lto = "thin"
+lto = "fat"
+codegen-units = 1
+strip = "symbols"

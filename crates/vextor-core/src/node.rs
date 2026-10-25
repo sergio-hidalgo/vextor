@@ -30,18 +30,57 @@ pub fn clean_name(typed: &str) -> Option<String> {
 
 /// One entry of [`crate::Document::nodes`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+///
+/// Fields at their default (no name, visible, unlocked, opaque, identity
+/// transform) are left out of saved files and filled back on load
+/// (format version 4).
 pub struct Node {
     pub id: NodeId,
     /// Becomes the SVG `id` (slugified) when set. Not blank, at most
     /// [`MAX_NODE_NAME_CHARS`], no control characters (spec 10).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub visible: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
     pub locked: bool,
     /// 0.0..=1.0, group opacity.
+    #[serde(default = "one", skip_serializing_if = "is_one")]
     pub opacity: f64,
     /// Relative to the parent.
+    #[serde(default, skip_serializing_if = "is_identity")]
     pub transform: Transform,
     pub kind: NodeKind,
+}
+
+fn yes() -> bool {
+    true
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde's signature
+fn is_true(b: &bool) -> bool {
+    *b
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde's signature
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+fn one() -> f64 {
+    1.0
+}
+
+/// Exactly 1: only an untouched opacity is left out, so nothing rounds.
+#[allow(clippy::trivially_copy_pass_by_ref, clippy::float_cmp)] // serde's signature; exact on purpose
+fn is_one(v: &f64) -> bool {
+    *v == 1.0
+}
+
+/// Exactly the identity, bit for bit, for the same reason.
+#[allow(clippy::float_cmp)] // exact on purpose
+fn is_identity(t: &Transform) -> bool {
+    t.0 == Transform::IDENTITY.0
 }
 
 /// What a node is.
@@ -64,6 +103,7 @@ pub struct Container {
     pub children: Vec<NodeId>,
     /// One of `children`, a `Shape`, used as the SVG `clipPath` of the
     /// container instead of being drawn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clip: Option<NodeId>,
 }
 
@@ -210,12 +250,29 @@ mod base64_bytes {
     use base64::engine::general_purpose::STANDARD;
     use serde::{Deserialize, Deserializer, Serializer};
 
+    /// While a `.vxtr` file is written, an index into its shared images;
+    /// otherwise inline base64.
     pub fn serialize<S: Serializer>(bytes: &[u8], s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(&STANDARD.encode(bytes))
+        match crate::format::share_image(bytes) {
+            Some(i) => s.serialize_u32(i),
+            None => s.serialize_str(&STANDARD.encode(bytes)),
+        }
+    }
+
+    /// Inline base64 (every version), or an index into the file's shared
+    /// `images` (version 4, [`crate::format`]).
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Saved {
+        Shared(u32),
+        Inline(String),
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
-        let text = String::deserialize(d)?;
-        STANDARD.decode(text).map_err(serde::de::Error::custom)
+        match Saved::deserialize(d)? {
+            Saved::Inline(text) => STANDARD.decode(text).map_err(serde::de::Error::custom),
+            Saved::Shared(i) => crate::format::shared_image(i)
+                .ok_or_else(|| serde::de::Error::custom(format!("no shared image {i}"))),
+        }
     }
 }

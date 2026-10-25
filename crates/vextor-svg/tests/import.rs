@@ -379,6 +379,40 @@ fn our_own_sample_documents_survive_export_and_import() {
     assert_eq!(first, export_svg(&again, &fonts, &options));
 }
 
+/// Spec 14: the big fixtures (at test-sized counts) survive export and
+/// import: from the first import on, export → import → export is byte for
+/// byte the same. (The first import cannot match the first export: usvg
+/// turns rects, ellipses and stars into paths, spec 13.)
+#[test]
+fn big_documents_export_import_and_export_the_same() {
+    use vextor_render::fixtures::big;
+    let fonts = fonts();
+    let options = SvgExportOptions::default();
+    for doc in [
+        big::nodes(1_000),
+        big::long_path(2_000),
+        big::images(20, 4),
+        big::deep_groups(50),
+        big::texts(40),
+    ] {
+        let original = export_svg(&doc, &fonts, &options);
+        let (imported, back) = import(original.as_bytes(), &fonts);
+        assert!(
+            imported.report.is_clean(),
+            "{}: {:?}",
+            doc.name,
+            imported.report
+        );
+        let first = export_svg(&back, &fonts, &options);
+        let (_, again) = import(first.as_bytes(), &fonts);
+        assert!(
+            first == export_svg(&again, &fonts, &options),
+            "{}",
+            doc.name
+        );
+    }
+}
+
 #[test]
 fn current_color_stays_current_color_and_never_leaks_its_stand_in() {
     let fonts = fonts();

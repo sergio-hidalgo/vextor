@@ -3,8 +3,6 @@
 //! view changes (moved and scaled in between), and the checkerboard
 //! behind transparent artboards.
 
-use std::time::Instant;
-
 use eframe::egui::{
     self, Color32, ColorImage, Painter, Pos2, TextureHandle, TextureOptions, TextureWrapMode,
 };
@@ -76,7 +74,6 @@ impl Canvas {
     }
 
     fn render(&mut self, ctx: &egui::Context, session: &Session, viewport: &Viewport) {
-        let started = Instant::now();
         match self
             .cache
             .frame(&session.doc, &session.fonts, session.revision(), viewport)
@@ -108,7 +105,6 @@ impl Canvas {
                 self.error = Some(format!("The canvas could not be drawn: {e}"));
             }
         }
-        self.last_render_ms = Some(started.elapsed().as_secs_f64() * 1000.0);
     }
 
     /// A checkerboard behind every transparent artboard.

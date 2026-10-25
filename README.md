@@ -40,7 +40,9 @@ cargo deny check                 # advisories, licenses, bans, sources
 All four checks must pass before a change is merged.
 
 ```sh
-cargo bench -p vextor-render     # canvas render timings (criterion), typing in long text
+cargo bench -p vextor-render     # canvas render timings (criterion), typing in long text,
+                                 # and `--bench big`: open, save, frame, hit-test, snap, undo,
+                                 # export and import on a 20 000-object document
 cargo bench -p vextor-geom       # hit-testing, drag-frame and text layout timings
 cargo bench -p vextor-svg        # SVG export of 1 000 objects (budget 20 ms)
 ```
@@ -51,14 +53,27 @@ cargo bench -p vextor-svg        # SVG export of 1 000 objects (budget 20 ms)
 # cp crates/vextor-svg/tests/fixtures/import/*.svg fuzz/corpus/svg_import/
 cargo +nightly fuzz run svg_import -- -max_total_time=600 -rss_limit_mb=2048 -timeout=10
 cargo +nightly fuzz run vxtr_load  -- -max_total_time=600 -rss_limit_mb=2048 -timeout=10
+cargo +nightly fuzz run command_seq -- -max_total_time=600   # random edits stay valid
 ```
+
+Release builds use full LTO, one codegen unit and strip symbols, so they
+take about two minutes but the binary is about 10 MB. Debug builds keep no
+debug info for dependencies, which roughly halves `target/`; the fuzz
+build folder (`fuzz/target/`, several hundred MB) can be removed with
+`rm -rf fuzz/target` when not fuzzing.
 
 ### macOS app and document icon
 
 ```sh
 scripts/bundle-macos.sh             # builds target/bundle/Vextor.app
 scripts/bundle-macos.sh --install   # ... copies it to ~/Applications
+scripts/bundle-macos.sh --dmg       # ... and a compressed target/bundle/Vextor-<version>.dmg
+scripts/size-report.sh              # disk used by the binary, .app, .dmg and app data,
+                                    # checked against the size budgets (fails when over)
 ```
+
+Size budgets (macOS arm64): binary ≤ 12 MB, `Vextor.app` ≤ 13 MB,
+`.dmg` ≤ 6 MB, Vextor's own data folder ≤ 1 MB without backups.
 
 The app declares the `.vxtr` file type ("Vextor Document"), so once it
 is installed Finder shows saved documents with Vextor's document icon
@@ -414,14 +429,35 @@ colours from the palette in `crates/vextor-app/src/theme.rs`.
 
 ## Files, autosave and recovery
 
-Documents are saved as `.vxtr` files (JSON, `format_version: 3`; version 2
-added text, version 3 the "Text as outlines" export option; version-1 and
-version-2 files still open and are saved as version 3;
-embedded images as base64; fonts are never embedded, only their names). Saving writes a temporary file next to the
-document and renames it into place, so a crash never leaves a half-written
-file. The title bar shows `•` while there are unsaved changes, and closing
-the window, opening a file or starting a new document asks
-**Save changes?** first.
+Documents are saved as `.vxtr` files: compact JSON, gzip-compressed,
+`format_version: 4` (version 2 added text, version 3 the "Text as
+outlines" export option, version 4 compact files that leave default
+fields out and store each distinct embedded image once). Files from
+versions 1–3, and uncompressed `.vxtr` JSON, still open and are saved as
+version 4; `gunzip -c file.vxtr` shows the JSON. Numbers are saved
+exactly, never rounded; images are base64; fonts are never embedded, only
+their names. A 20 000-object document takes about 330 KB (it took 21 MB
+as version 3).
+
+Saving runs in the background, so the editor never stalls on a big file:
+the document is checked first (a document that breaks a rule is never
+written, and the message says why), written to a temporary file next to
+the target, flushed to disk, read back and compared with what was saved,
+and only then renamed over the old file. If any step fails, the old file
+is left as it was and a one-line message names the file and the reason.
+Exports are written the same way. The title bar shows `•` while there
+are unsaved changes, and closing the window, opening a file or starting a
+new document asks **Save changes?** first.
+
+Before a save or an export first overwrites an existing file in a session,
+Vextor copies that file, byte for byte and checked, to
+`~/Library/Application Support/Vextor/backups` (the OS data folder on
+Windows and Linux); if the copy fails, the file is not overwritten.
+Opening a file makes no backup. **File ▸ Restore from Backup…** lists the
+current file's backups (age and size) and opens one as a new, unsaved
+document; it never overwrites anything. The same dialog turns backups off
+and sets how many are kept: 5 per file and 100 MB in all by default,
+oldest removed first, also at startup.
 
 Opening refuses, with a one-line message, files over 50 MB, files from an
 unknown format version, cut-off or damaged files, and files with more than
@@ -436,25 +472,19 @@ the copy. If Vextor crashes or is killed, the next launch offers
 **Recover unsaved work?**. File ▸ Open Recent lists the last 10 files; the
 list is kept in the same folder (`recent.json`), and so are the swatches
 (`swatches.json`; up to 256, read only up to 1 MB, an unreadable file
-starts an empty library).
-
-Debug builds have a **Debug** menu: sample documents (basic shapes, 500
-and 5 000 shapes), an undoable "nudge layer" step and a frame-time readout.
-A release build shows it when started with `VEXTOR_DEBUG_MENU=1`:
-
-```sh
-VEXTOR_DEBUG_MENU=1 cargo run -p vextor-app --release
-```
+starts an empty library). If Vextor itself fails, it writes the latest
+unsaved work of every open document (kept every 2 seconds while you edit)
+to the same folder before it closes, and the next launch offers it.
 
 ## Crates
 
 | Crate           | Holds                                                      |
 | :-------------- | :--------------------------------------------------------- |
-| `vextor-core`   | document model, commands, undo history, `.vxtr` bytes (no UI, no file I/O) |
-| `vextor-geom`   | shape → Bézier conversion, hit-testing, resizing, path editing (segment hit-tests, split, bend, joins), text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`), snapping, where a gradient lands on an object, path operations (booleans on polygons via `i_overlay`, curves recovered from the inputs; offset, outline stroke and simplify via `kurbo`), image tracing (Otsu threshold or k-means colours, pixel-edge outlines, corner detection and curve fitting) |
+| `vextor-core`   | document model, commands, undo history, `.vxtr` bytes (no UI, no file I/O), FNV-1a content hashes |
+| `vextor-geom`   | shape → Bézier conversion, hit-testing (with a grid index built once per change, so a pointer move on 20 000 objects takes microseconds), resizing, path editing (segment hit-tests, split, bend, joins), text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`), snapping, where a gradient lands on an object, path operations (booleans on polygons via `i_overlay`, curves recovered from the inputs; offset, outline stroke and simplify via `kurbo`), image tracing (Otsu threshold or k-means colours, pixel-edge outlines, corner detection and curve fitting) |
 | `vextor-svg`    | SVG / HTML / JSX / CSS export; SVG import (`usvg`, external resources off, XML bounded before parsing) and PNG / JPEG / WebP import (format and size from the header, `imagesize`) |
 | `vextor-render` | rasterising documents for the canvas (`tiny-skia`: solid colours, gradients, patterns, dashes, clips, opacity; images decoded by `image` with size limits, and scaled down for tracing), sample documents |
-| `vextor-app`    | the desktop app (`eframe`/`egui`), file dialogs (`rfd`), autosave |
+| `vextor-app`    | the desktop app (`eframe`/`egui` on OpenGL via `glow`), file dialogs (`rfd`), background saving with checks (gzip via `flate2`), autosave, backups |
 
 Dependencies point downwards only: `app → svg/render → geom → core`.
 

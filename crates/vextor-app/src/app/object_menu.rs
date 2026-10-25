@@ -53,10 +53,15 @@ impl VextorApp {
         ui.separator();
         let session = self.docs.session().filter(|_| self.picker.is_none());
         convert_items(ui, can, session_traceable(session), actions);
-        ui.menu_button("Path", |ui| path_menu(ui, session, actions));
-        ui.menu_button("Path Operations", |ui| {
-            super::shape_menu::shape_menu(ui, session, actions);
-        });
+        // With no document there is nothing in them: greyed like the rest.
+        ui.add_enabled_ui(session.is_some(), |ui| {
+            ui.menu_button("Path", |ui| path_menu(ui, session, actions));
+            ui.menu_button("Path Operations", |ui| {
+                super::shape_menu::shape_menu(ui, session, actions);
+            });
+        })
+        .response
+        .on_disabled_hover_text("No document is open");
         ui.separator();
         ui.add_enabled_ui(can.edit, |ui| {
             ui.menu_button("Arrange", |ui| arrange_menu(ui, can, actions));

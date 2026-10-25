@@ -287,3 +287,19 @@ fn outlined_text_exports_like_the_canvas() {
     doc.export.text_as_outlines = true;
     assert_exports_like_canvas(&doc);
 }
+
+/// Spec 14: the big fixtures, at test-sized counts, export like the canvas.
+/// Not the images one: this resvg is built without raster images
+/// (`tests/images.rs` checks where image pixels land).
+#[test]
+fn big_documents_export_like_the_canvas() {
+    use vextor_render::fixtures::big;
+    for doc in [
+        big::nodes(1_000),
+        big::long_path(2_000),
+        big::deep_groups(50),
+        big::texts(40),
+    ] {
+        assert_exports_like_canvas(&doc);
+    }
+}

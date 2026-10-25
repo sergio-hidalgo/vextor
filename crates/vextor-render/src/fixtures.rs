@@ -1,5 +1,5 @@
-//! Sample documents for render tests, benchmarks and the app's debug
-//! menu, built through the same [`Command`]s the editor uses.
+//! Sample documents for tests and benchmarks, built through the same
+//! [`Command`]s the editor uses.
 
 use vextor_core::{
     Artboard, Command, Container, CornerRadii, Document, Geometry, LineCap, LineJoin, Node, NodeId,
@@ -7,6 +7,7 @@ use vextor_core::{
     Transform, Vec2,
 };
 
+pub mod big;
 mod paints;
 
 pub use paints::{PAINTS_SIZE, paints};

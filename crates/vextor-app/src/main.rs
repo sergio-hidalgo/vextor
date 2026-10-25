@@ -2,15 +2,16 @@
 
 mod app;
 mod artboard;
+mod backups;
 #[cfg(test)]
 mod bundle_icons;
 mod canvas;
 mod code_panel;
 mod convert_path;
 mod corners;
-mod debug;
 mod documents;
 mod edit_ops;
+mod emergency;
 mod export;
 mod export_dialog;
 mod files;
@@ -30,6 +31,9 @@ mod path_ops;
 mod pen_tool;
 mod prompts;
 mod recovery;
+mod restore_dialog;
+mod safe_save;
+mod saver;
 mod select;
 mod session;
 mod shape_ops;
@@ -52,6 +56,7 @@ use eframe::egui;
 const APP_NAME: &str = "Vextor";
 
 fn main() -> eframe::Result {
+    emergency::install();
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(APP_NAME)
         .with_inner_size([1280.0, 800.0])

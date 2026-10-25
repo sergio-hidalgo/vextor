@@ -21,7 +21,7 @@ pub use draw::{
     Corner, DrawMods, ShapeKind, ShapeSize, corner_radius_at, corner_widget, drawn, sized,
 };
 pub use hit::{
-    bounds, from_affine, overlaps, pick, selectable, to_affine, touching, union_bounds,
+    HitIndex, bounds, from_affine, overlaps, pick, selectable, to_affine, touching, union_bounds,
     visual_bounds,
 };
 pub use ops::{Area, BooleanOp, divide, offset, outline_stroke, result_path, simplify};

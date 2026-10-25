@@ -4,7 +4,6 @@
 
 use eframe::egui::{self, Key, Painter, Pos2, Stroke};
 use vextor_core::{NodeId, NodeKind, ToolId};
-use vextor_geom::pick;
 
 use super::{Canvas, to_egui};
 use crate::select::PICK_TOLERANCE;
@@ -91,7 +90,9 @@ impl Canvas {
             return (false, None);
         }
         let zoom = session.editor.view.zoom;
-        if let Some(id) = pick(&session.doc, &session.fonts, p, PICK_TOLERANCE / zoom)
+        if let Some(id) = session
+            .hit_index()
+            .pick(p, PICK_TOLERANCE / zoom)
             .filter(|&id| is_text(session, id))
         {
             self.text.start_at(session, id, p);
@@ -113,7 +114,9 @@ impl Canvas {
     /// A double-click at `p` with the selection tool: edits the text there.
     pub(super) fn text_double_click(&mut self, session: &mut Session, p: kurbo::Point) {
         let zoom = session.editor.view.zoom;
-        if let Some(id) = pick(&session.doc, &session.fonts, p, PICK_TOLERANCE / zoom)
+        if let Some(id) = session
+            .hit_index()
+            .pick(p, PICK_TOLERANCE / zoom)
             .filter(|&id| is_text(session, id))
         {
             self.text.start_at(session, id, p);
