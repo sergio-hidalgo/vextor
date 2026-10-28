@@ -1,0 +1,25 @@
+[package]
+name = "vextor-macos"
+description = "Vextor's macOS hook: documents opened from Finder (spec 14b)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+# Empty on other platforms.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+objc2-foundation.workspace = true
+
+# The workspace lints, except `unsafe_code`: the only crate where it is
+# `deny` instead of `forbid`, so `src/open_documents.rs` alone can allow it
+# (spec 14b, `rust-core` and `security-check` §6). Keep the rest in step
+# with `[workspace.lints]`.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+undocumented_unsafe_blocks = "deny"
