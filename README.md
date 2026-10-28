@@ -83,9 +83,19 @@ once after installing: `killall iconservicesagent Dock Finder`. If a
 `.vxtr` file still shows the old icon, clear the system's icon store with
 `sudo rm -rf /Library/Caches/com.apple.iconservices.store` and restart
 the Mac. The bundle's app icon is `icon.svg` full bleed (square to the
-edges), which macOS rounds to its own shape. The build is signed ad hoc, for your own Mac only;
-double-clicking a document starts Vextor but does not open it yet
-(open the file with File ▸ Open…).
+edges), which macOS rounds to its own shape. The build is signed ad hoc, for your own Mac only.
+
+Opening files from outside Vextor works like File ▸ Open…, whether Vextor
+is closed or already running: double-click a `.vxtr` in Finder, select
+several and press `⌘↓`, drop one on the Dock icon, or use "Open With ▸
+Vextor" (which also takes SVG, PNG, JPEG and WebP). Files named on the
+command line open the same way (`vextor a.vxtr b.svg`, at most 20). A file
+that is already open switches to its tab; each new one opens in a tab of
+its own, the last one active; a file that can't be opened shows the usual
+message and the others still open. While a dialog is up, the files wait
+until it closes. On macOS this takes a small Apple event hook, the
+`vextor-macos` crate: the only place in the workspace where `unsafe` code
+is allowed.
 
 SVG export and import are checked with `insta` snapshots in
 `crates/vextor-svg/tests/snapshots/`; after a deliberate output change,
@@ -484,7 +494,8 @@ to the same folder before it closes, and the next launch offers it.
 | `vextor-geom`   | shape → Bézier conversion, hit-testing (with a grid index built once per change, so a pointer move on 20 000 objects takes microseconds), resizing, path editing (segment hit-tests, split, bend, joins), text layout (system fonts via `fontdb`, shaping via `harfrust`, glyph outlines via `skrifa`), snapping, where a gradient lands on an object, path operations (booleans on polygons via `i_overlay`, curves recovered from the inputs; offset, outline stroke and simplify via `kurbo`), image tracing (Otsu threshold or k-means colours, pixel-edge outlines, corner detection and curve fitting) |
 | `vextor-svg`    | SVG / HTML / JSX / CSS export; SVG import (`usvg`, external resources off, XML bounded before parsing) and PNG / JPEG / WebP import (format and size from the header, `imagesize`) |
 | `vextor-render` | rasterising documents for the canvas (`tiny-skia`: solid colours, gradients, patterns, dashes, clips, opacity; images decoded by `image` with size limits, and scaled down for tracing), sample documents |
-| `vextor-app`    | the desktop app (`eframe`/`egui` on OpenGL via `glow`), file dialogs (`rfd`), background saving with checks (gzip via `flate2`), autosave, backups |
+| `vextor-app`    | the desktop app (`eframe`/`egui` on OpenGL via `glow`), file dialogs (`rfd`), background saving with checks (gzip via `flate2`), autosave, backups, files named on the command line |
+| `vextor-macos`  | macOS only: the "open documents" Apple event (Finder, Dock, "Open With") via `objc2`; the one crate allowed `unsafe`, each block with a `// SAFETY:` note |
 
 Dependencies point downwards only: `app → svg/render → geom → core`.
 

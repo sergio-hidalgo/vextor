@@ -20,6 +20,7 @@ mod icon;
 mod icons;
 mod image_trace;
 mod import;
+mod launch;
 mod layers;
 mod new_doc;
 mod node_tool;
@@ -68,9 +69,39 @@ fn main() -> eframe::Result {
         viewport,
         ..Default::default()
     };
+    let paths = launch::launch_paths(std::env::args_os().skip(1));
+    let (to_open, ctx_for_hook) = open_queue(paths);
     eframe::run_native(
         APP_NAME,
         options,
-        Box::new(|cc| Ok(Box::new(app::VextorApp::new(cc)))),
+        Box::new(move |cc| {
+            let _ = ctx_for_hook.set(cc.egui_ctx.clone());
+            Ok(Box::new(app::VextorApp::new(cc, to_open)))
+        }),
     )
+}
+
+/// Where the UI context goes once the window is up, so the macOS hook can
+/// wake the frame loop when files arrive.
+type ContextSlot = std::sync::Arc<std::sync::OnceLock<egui::Context>>;
+
+/// The files to open: `paths` from the command line, then what Finder sends
+/// (spec 14b).
+#[cfg(target_os = "macos")]
+fn open_queue(paths: Vec<std::path::PathBuf>) -> (launch::OpenQueue, ContextSlot) {
+    let slot = ContextSlot::default();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let ctx = slot.clone();
+    vextor_macos::install(tx, move || {
+        if let Some(ctx) = ctx.get() {
+            ctx.request_repaint();
+        }
+    });
+    (launch::OpenQueue::new(paths, Some(rx)), slot)
+}
+
+/// The files to open: `paths` from the command line (spec 14b).
+#[cfg(not(target_os = "macos"))]
+fn open_queue(paths: Vec<std::path::PathBuf>) -> (launch::OpenQueue, ContextSlot) {
+    (launch::OpenQueue::new(paths, None), ContextSlot::default())
 }

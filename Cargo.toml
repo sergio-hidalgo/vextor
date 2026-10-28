@@ -15,6 +15,7 @@ vextor-core = { path = "crates/vextor-core" }
 vextor-geom = { path = "crates/vextor-geom" }
 vextor-svg = { path = "crates/vextor-svg" }
 vextor-render = { path = "crates/vextor-render" }
+vextor-macos = { path = "crates/vextor-macos" }
 # Window and UI. `glow` (OpenGL) instead of the default `wgpu` (spec 14
 # spike): the canvas is one texture plus egui's own shapes, and wgpu with
 # its shader compiler (naga) was a quarter of the binary. `links` and
@@ -55,6 +56,18 @@ image = { version = "0.25.10", default-features = false, features = ["png", "jpe
 # SVG export snapshots (spec 12): one reviewed file per feature.
 insta = "1.49.0"
 kurbo = "0.13.1"
+# macOS only (spec 14b): the "open documents" Apple event. The versions
+# arboard already uses; only the Foundation classes the hook touches.
+objc2 = "0.6.5"
+objc2-foundation = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "NSAppleEventDescriptor",
+    "NSAppleEventManager",
+    "NSNotification",
+    "NSObject",
+    "NSString",
+    "NSURL",
+] }
 proptest = "1.12.0"
 rfd = "0.17.2"
 skrifa = { version = "0.44.0", default-features = false, features = ["std"] }

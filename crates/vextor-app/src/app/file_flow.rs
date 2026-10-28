@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use eframe::egui;
-use vextor_core::Command;
+use vextor_core::{Command, Document};
 
 use super::closing::{Next, Pending};
 use super::{Quit, VextorApp};
-use crate::documents::DocId;
+use crate::documents::{DocId, Documents};
 use crate::files::{self, FileError};
 use crate::prompts::{self, RecoverAnswer, SaveAnswer};
 use crate::recovery::Orphan;
@@ -43,15 +43,13 @@ impl VextorApp {
             self.open_as_document(path, kind);
             return;
         }
-        if let Some(id) = self.docs.find_path(&path) {
-            self.activate(id);
-            self.recent.push(path);
-            self.save_recent();
-            return;
-        }
-        match files::read_document(&path) {
-            Ok(doc) => {
-                self.open(Session::opened(doc, path.clone()));
+        match resolve(&self.docs, &path) {
+            Ok(Resolved::Open(id)) => {
+                self.activate(id);
+                self.recent.push(path);
+            }
+            Ok(Resolved::Read(doc)) => {
+                self.open(Session::opened(*doc, path.clone()));
                 self.recent.push(path);
                 self.message = None;
             }
@@ -66,6 +64,19 @@ impl VextorApp {
             }
         }
         self.save_recent();
+    }
+
+    /// Opens the files asked for from outside (spec 14b), one tab each, the
+    /// last one active. A file that fails leaves its message (the last
+    /// failure when several do) and the others still open.
+    pub(super) fn open_paths(&mut self, paths: Vec<PathBuf>) {
+        let mut failed = None;
+        for path in paths {
+            self.open_path(path);
+            // Taken so the next file opening does not clear it.
+            failed = self.message.take().or(failed);
+        }
+        self.message = failed;
     }
 
     /// Renames document `id` from its tab: a document not saved yet takes
@@ -445,5 +456,56 @@ impl VextorApp {
             }
         }
         true
+    }
+}
+
+/// What opening a `.vxtr` comes to.
+#[derive(Debug)]
+enum Resolved {
+    /// It is open already: its tab.
+    Open(DocId),
+    /// Read from disk, for a new tab.
+    Read(Box<Document>),
+}
+
+/// The tab of `path` when it is open (never a second copy), else the
+/// document read through every `files::read_document` check.
+fn resolve(docs: &Documents, path: &Path) -> Result<Resolved, FileError> {
+    if let Some(id) = docs.find_path(path) {
+        return Ok(Resolved::Open(id));
+    }
+    files::read_document(path).map(|doc| Resolved::Read(Box::new(doc)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::files::test_dir::TestDir;
+    use crate::new_doc::new_document;
+
+    #[test]
+    fn a_path_already_open_gives_its_tab() {
+        let dir = TestDir::new();
+        let path = dir.path().join("a.vxtr");
+        let doc = new_document("a", 24.0, 24.0);
+        files::write_document(&path, &doc).expect("writes");
+        let mut docs = Documents::default();
+        let id = docs.add(Session::opened(doc, path.clone()), None);
+        docs.add(Session::new(new_document("b", 24.0, 24.0)), None);
+        assert!(matches!(resolve(&docs, &path), Ok(Resolved::Open(found)) if found == id));
+    }
+
+    #[test]
+    fn a_bad_path_fails_and_the_next_still_reads() {
+        let dir = TestDir::new();
+        let missing = dir.path().join("missing.vxtr");
+        let damaged = dir.path().join("damaged.vxtr");
+        std::fs::write(&damaged, b"not a document").expect("writes");
+        let good = dir.path().join("good.vxtr");
+        files::write_document(&good, &new_document("good", 24.0, 24.0)).expect("writes");
+        let docs = Documents::default();
+        assert!(resolve(&docs, &missing).is_err());
+        assert!(resolve(&docs, &damaged).is_err());
+        assert!(matches!(resolve(&docs, &good), Ok(Resolved::Read(_))));
     }
 }

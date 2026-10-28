@@ -29,6 +29,7 @@ use crate::documents::{DocId, Documents};
 use crate::export_dialog::ExportDialog;
 use crate::files::{self, RecentFiles};
 use crate::fonts::SystemFonts;
+use crate::launch::OpenQueue;
 use crate::new_doc::Picker;
 use crate::prompts;
 use crate::recovery::{Orphan, Recovery};
@@ -112,12 +113,15 @@ pub struct VextorApp {
     backups: Option<Arc<Mutex<Backups>>>,
     /// File ▸ Restore from Backup…, while open.
     restore: Option<crate::restore_dialog::RestoreDialog>,
+    /// Files asked for from outside: the command line, Finder (spec 14b).
+    to_open: OpenQueue,
 }
 
 impl VextorApp {
     /// Starts with the start screen, and the recovery prompt when a
-    /// previous run left unsaved work behind.
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    /// previous run left unsaved work behind; the files in `to_open` open
+    /// on the first frame they can.
+    pub fn new(cc: &eframe::CreationContext<'_>, to_open: OpenQueue) -> Self {
         // ⌘0 / ⌘+ / ⌘- belong to the canvas, not to egui's UI scale.
         cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
         theme::apply(&cc.egui_ctx);
@@ -173,6 +177,7 @@ impl VextorApp {
             saver,
             backups,
             restore: None,
+            to_open,
         }
     }
 
@@ -356,6 +361,10 @@ impl eframe::App for VextorApp {
             || self.trace_dialog.is_some()
             || self.export_dialog.is_some()
             || self.restore.is_some();
+        let paths = self.to_open.take(prompt_open);
+        if !paths.is_empty() {
+            self.open_paths(paths);
+        }
         self.paint_escape(&ctx);
         // While a shape is drawn, keys belong to it (arrows, Esc).
         if !prompt_open && !self.canvas.is_drawing() {

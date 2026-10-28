@@ -24,6 +24,10 @@ thiserror.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 winit.workspace = true
 
+# Files opened from Finder, the Dock or "Open With" (spec 14b).
+[target.'cfg(target_os = "macos")'.dependencies]
+vextor-macos.workspace = true
+
 [dev-dependencies]
 # Image to vector snapshots (spec 13b).
 insta.workspace = true
