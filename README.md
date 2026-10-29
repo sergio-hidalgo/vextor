@@ -138,6 +138,9 @@ there), never the machine's fonts.
 
 ## Using the editor
 
+Each time Vextor starts, its launch card shows alone for about two seconds
+(not when it is already running), then the editor.
+
 On launch, pick an artboard size: Icon 16 / 24 / 32 / 48, Button 160×48,
 Card 320×200, or a custom size — or open a file: Open…, and under it the
 last three files you worked on that still exist, each with a snapshot
