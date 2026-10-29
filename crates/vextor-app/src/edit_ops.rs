@@ -40,14 +40,14 @@ pub struct Can {
     pub release_clip: bool,
 }
 
-/// The four arrange commands in menu order: command, name, keys (spec
-/// 08c). The Object menu, the Inspector and the canvas context menu all
-/// list these.
-pub const ARRANGE: [(Arrange, &str, &str); 4] = [
-    (Arrange::Front, "Bring to Front", "⇧⌘↑"),
-    (Arrange::Forward, "Bring Forward", "⌘↑"),
-    (Arrange::Backward, "Send Backward", "⌘↓"),
-    (Arrange::Back, "Send to Back", "⇧⌘↓"),
+/// The four arrange commands in menu order: command, name (spec 08c);
+/// their keys are `keys::arrange`. The Object menu, the Inspector and the
+/// canvas context menu all list these.
+pub const ARRANGE: [(Arrange, &str); 4] = [
+    (Arrange::Front, "Bring to Front"),
+    (Arrange::Forward, "Bring Forward"),
+    (Arrange::Backward, "Send Backward"),
+    (Arrange::Back, "Send to Back"),
 ];
 
 impl Can {

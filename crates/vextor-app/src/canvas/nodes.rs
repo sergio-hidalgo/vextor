@@ -4,12 +4,13 @@
 //! (squares for corners, circles for smooth nodes), the shown handles,
 //! the selected or hovered segment, corner round widgets and the marquee.
 
-use eframe::egui::{self, Painter, Pos2, Stroke, StrokeKind};
+use eframe::egui::{self, Painter, Pos2, Stroke, StrokeKind, os::OperatingSystem};
 use kurbo::PathEl;
 use vextor_core::{NodeKind, NodeType, ToolId};
 use vextor_geom::{path_to_bezpath, segment};
 
 use super::{Canvas, path_marks, screen_rect, to_egui};
+use crate::app::keys::{self, CONVERT_TO_PATH};
 use crate::node_tool::{self, NodeTarget, NodeTool};
 use crate::path_ops::{self, PathAction};
 use crate::select::{Mods, PICK_TOLERANCE};
@@ -140,8 +141,13 @@ pub(super) fn path_menu_items(ui: &mut egui::Ui, session: &mut Session) -> Optio
 
 /// A double-click at `p`: with the selection tool on a path, edits its
 /// nodes (another shape must be converted first); with the node tool,
-/// cycles a node's type or leaves on empty canvas.
-pub(super) fn node_double_click(session: &mut Session, p: kurbo::Point) -> Option<String> {
+/// cycles a node's type or leaves on empty canvas. `os` writes the keys
+/// in the message.
+pub(super) fn node_double_click(
+    session: &mut Session,
+    p: kurbo::Point,
+    os: OperatingSystem,
+) -> Option<String> {
     let zoom = session.editor.view.zoom;
     match session.editor.tool {
         ToolId::Node => NodeTool::double_click(session, p, zoom).err(),
@@ -157,9 +163,11 @@ pub(super) fn node_double_click(session: &mut Session, p: kurbo::Point) -> Optio
                 Some(NodeKind::Shape(_))
             );
             shape.then(|| {
-                "To edit its nodes, convert it to a path first: \
-                 Object ▸ Convert to Path (⇧⌘P)"
-                    .to_owned()
+                format!(
+                    "To edit its nodes, convert it to a path first: \
+                     Object ▸ Convert to Path ({})",
+                    keys::label_for(os, CONVERT_TO_PATH)
+                )
             })
         }
         _ => None,
@@ -363,7 +371,11 @@ mod tests {
             nodes: vec![Node::new(id, NodeKind::Shape(rect))],
         })
         .expect("inserts");
-        let message = node_double_click(&mut s, kurbo::Point::new(100.0, 100.0));
+        let message = node_double_click(
+            &mut s,
+            kurbo::Point::new(100.0, 100.0),
+            OperatingSystem::Mac,
+        );
         assert!(message.is_some_and(|m| m.contains("Convert to Path")));
         assert_eq!(s.editor.tool, ToolId::Select, "never converted silently");
     }

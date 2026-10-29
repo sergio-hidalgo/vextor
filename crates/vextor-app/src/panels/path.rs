@@ -10,6 +10,7 @@ use vextor_core::{FillRule, NodeId, NodeType, PathNodeRef, Side};
 use vextor_geom::node_corner;
 
 use super::{FIELD_SIZE, Label};
+use crate::app::keys;
 use crate::icons::{self, Icon};
 use crate::path_ops::{self, PathAction};
 use crate::session::Session;
@@ -78,9 +79,9 @@ pub fn sections(ui: &mut egui::Ui, s: &mut Session) -> Option<String> {
             ui.spacing_mut().item_spacing.x = 2.0;
             for a in PathAction::STRUCTURE {
                 let icon = action_icon(a);
-                let tip = match a.keys() {
-                    "" => a.title().to_owned(),
-                    keys => format!("{} ({keys})", a.title()),
+                let tip = match keys::path_action(ui.ctx().os(), a) {
+                    None => a.title().to_owned(),
+                    Some(k) => format!("{} ({})", a.title(), keys::label(ui.ctx(), k)),
                 };
                 if icons::button(ui, icon, false, a.can(s), &tip, a.why()).clicked() {
                     ran = a.run(s).err();

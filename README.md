@@ -39,6 +39,12 @@ cargo deny check                 # advisories, licenses, bans, sources
 
 All four checks must pass before a change is merged.
 
+To see the Windows (or Linux) keys and labels on a Mac, start the app
+with `VEXTOR_PRETEND_OS=windows cargo run -p vextor-app` (`linux` and
+`macos` work too). `Ctrl` then does what `⌘` does, the menus read
+`Ctrl+…` and File ▸ Exit appears. macOS keeps some `Ctrl` keys for
+itself (`Ctrl+arrows` for Spaces), and `Alt+F4` means nothing there.
+
 ```sh
 cargo bench -p vextor-render     # canvas render timings (criterion), typing in long text,
                                  # and `--bench big`: open, save, frame, hit-test, snap, undo,
@@ -296,7 +302,8 @@ Inspector ▸ Path Operations (Union, Subtract, Intersect, Exclude, after
 Align), Object ▸ Path Operations, the keys below, and — with two or more
 objects selected — the canvas right-click menu (Union, Subtract,
 Intersect, Exclude, Divide, under Group / Ungroup; right-clicking a group
-shows Group / Ungroup too) work on the selected objects. Each is one undo step; when a result would
+shows Group / Ungroup too) work on the selected objects. The keys are
+macOS only (see *Windows and Linux* below). Each is one undo step; when a result would
 be empty (two shapes that do not touch, intersected) nothing changes and
 the message bar says why. Results stay curves: a circle cut by a square
 keeps its arcs.
@@ -422,7 +429,24 @@ nodes is refused ("Too detailed for vector shapes: try fewer colours").
 The same image and mode always give the same shapes. Tracing works on a
 copy: changing the image later does not change the shapes.
 
-Ctrl replaces ⌘ on Windows and Linux.
+### Windows and Linux
+
+The tables above show the macOS keys. On Windows and Linux every menu,
+tooltip and hint shows that platform's keys instead (`Ctrl+S`,
+"Group (Ctrl+G)"): `⌘` is `Ctrl`, `⌥` is `Alt`, `⇧` is `Shift`. These
+differ:
+
+| Action                         | macOS                       | Windows and Linux                         |
+| :----------------------------- | :-------------------------- | :---------------------------------------- |
+| Redo                           | `⇧⌘Z`                       | `Ctrl+Y` or `Ctrl+Shift+Z`                |
+| Next / previous document       | `⌥⌘→` / `⌥⌘←`, `⌃Tab` / `⌃⇧Tab` | `Ctrl+PageDown` / `Ctrl+PageUp`, `Ctrl+Tab` / `Ctrl+Shift+Tab` |
+| Delete                         | `⌫` (`Del` works too)       | `Del` (`Backspace` works too)             |
+| Union / Subtract / Intersect / Exclude | `⌥⌘U` / `⌥⌘S` / `⌥⌘I` / `⌥⌘E` | no keys: Object ▸ Path Operations, the Inspector or the right-click menu |
+| Quit                           | `⌘Q` (Vextor menu)          | File ▸ Exit, or `Alt+F4`                  |
+
+`Ctrl+Alt` is `AltGr` on Spanish, German, French and many other layouts
+(`AltGr+E` types `€`), so no shortcut uses it there: an `AltGr` key
+types its character and nothing else.
 
 The app icon comes from `crates/vextor-app/assets/icon.svg` and the
 "vextor" wordmark on the new-document screen from `assets/wordmark.svg`

@@ -1,0 +1,41 @@
+---
+source: crates/vextor-app/src/app/keys.rs
+expression: "sheet(OperatingSystem::Windows)"
+---
+New: Ctrl+N
+Open: Ctrl+O
+Import: Ctrl+Shift+I
+Close: Ctrl+W
+Save: Ctrl+S
+Save As: Ctrl+Shift+S
+Export: Ctrl+Shift+E
+Undo: Ctrl+Z
+Redo: Ctrl+Y
+Cut: Ctrl+X
+Copy: Ctrl+C
+Copy As SVG: Ctrl+Shift+C
+Paste: Ctrl+V
+Paste in Place: Ctrl+Shift+V
+Duplicate: Ctrl+D
+Delete: Del
+Select All: Ctrl+A
+Group: Ctrl+G
+Ungroup: Ctrl+Shift+G
+Convert to Path: Ctrl+Shift+P
+Convert Text to Outlines: Ctrl+Shift+O
+Fit Artboard: Ctrl+0
+Actual Size: Ctrl+1
+Zoom In: Ctrl+Plus
+Zoom Out: Ctrl+Minus
+Show Grid: Ctrl+'
+Next Document: Ctrl+PageDown
+Previous Document: Ctrl+PageUp
+Exit: Alt+F4
+Bring to Front: Ctrl+Shift+↑
+Bring Forward: Ctrl+↑
+Send Backward: Ctrl+↓
+Send to Back: Ctrl+Shift+↓
+Join: Ctrl+J
+Straight ↔ Curve: C
+Add Node: +
+Delete Nodes: Del

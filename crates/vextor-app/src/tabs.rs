@@ -4,6 +4,7 @@
 
 use eframe::egui::{self, Align2, FontId, Rect, Sense, TextStyle, Vec2};
 
+use crate::app::keys::{self, NEW};
 use crate::documents::{DocId, Documents, Tab};
 use crate::files::MAX_NAME_CHARS;
 use crate::session::Session;
@@ -72,7 +73,7 @@ impl Strip {
                     }
                     let plus = ui
                         .add(egui::Button::new("+").frame(false))
-                        .on_hover_text("New document (⌘N)");
+                        .on_hover_text(format!("New document ({})", keys::label(ui.ctx(), NEW)));
                     if plus.clicked() {
                         actions.push(TabAction::New);
                     }
@@ -131,7 +132,8 @@ impl Strip {
             );
         }
 
-        if hovered && close.on_hover_text("Close (⌘W)").clicked() {
+        let tip = format!("Close ({})", keys::label(ui.ctx(), keys::CLOSE));
+        if hovered && close.on_hover_text(tip).clicked() {
             return Some(TabAction::Close(tab.id));
         }
         let response = response.on_hover_text(hint(s));

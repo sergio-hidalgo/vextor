@@ -9,6 +9,7 @@ use eframe::egui;
 use vextor_core::ToolId;
 
 use super::{Canvas, nodes, to_point};
+use crate::app::keys::{self, GROUP, UNGROUP};
 use crate::edit_ops;
 use crate::select::PICK_TOLERANCE;
 use crate::session::Session;
@@ -95,17 +96,17 @@ type EditRun = fn(&mut Session) -> Result<(), String>;
 /// Group and Ungroup, disabled with the reason.
 fn group_items(ui: &mut egui::Ui, session: &mut Session) -> Option<String> {
     let can = edit_ops::can(session);
-    let items: [(&str, &str, bool, &str, EditRun); 2] = [
+    let items: [(&str, _, bool, &str, EditRun); 2] = [
         (
             "Group",
-            "⌘G",
+            GROUP,
             can.group,
             "Select objects in the same group or layer",
             edit_ops::group,
         ),
         (
             "Ungroup",
-            "⇧⌘G",
+            UNGROUP,
             can.ungroup,
             "Select a group",
             edit_ops::ungroup,
@@ -113,7 +114,7 @@ fn group_items(ui: &mut egui::Ui, session: &mut Session) -> Option<String> {
     ];
     let mut message = None;
     for (text, keys, enabled, why, run) in items {
-        let button = egui::Button::new(text).shortcut_text(keys);
+        let button = egui::Button::new(text).shortcut_text(keys::label(ui.ctx(), keys));
         if ui
             .add_enabled(enabled, button)
             .on_disabled_hover_text(why)
@@ -133,14 +134,8 @@ fn combine_items(ui: &mut egui::Ui, session: &Session) -> Option<ShapeOp> {
     ui.separator();
     let mut picked = None;
     for op in ShapeOp::COMBINE {
-        let keys = match op {
-            ShapeOp::Union => "⌥⌘U",
-            ShapeOp::Subtract => "⌥⌘S",
-            ShapeOp::Intersect => "⌥⌘I",
-            ShapeOp::Exclude => "⌥⌘E",
-            _ => "",
-        };
-        let button = egui::Button::new(op.title()).shortcut_text(keys);
+        let keys = keys::shape_op(ui.ctx().os(), op).map(|k| keys::label(ui.ctx(), k));
+        let button = egui::Button::new(op.title()).shortcut_text(keys.unwrap_or_default());
         if ui
             .add_enabled(op.can(session), button)
             .on_disabled_hover_text(op.why())
@@ -180,7 +175,8 @@ fn right_click(session: &mut Session, p: kurbo::Point) -> bool {
 fn arrange_items(ui: &mut egui::Ui, session: &mut Session) -> Option<String> {
     let can = edit_ops::can(session);
     let mut message = None;
-    for (how, text, keys) in edit_ops::ARRANGE {
+    for (how, text) in edit_ops::ARRANGE {
+        let keys = keys::label(ui.ctx(), keys::arrange(how));
         let button = egui::Button::new(text).shortcut_text(keys);
         if ui
             .add_enabled(can.arrange(how), button)

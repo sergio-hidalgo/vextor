@@ -3,7 +3,7 @@
 
 use eframe::egui;
 
-use super::keys::SHOW_GRID;
+use super::keys::{self, SHOW_GRID};
 use super::{Action, VextorApp};
 use crate::artboard;
 use crate::new_doc::Picker;
@@ -26,7 +26,7 @@ impl VextorApp {
         let on = |f: &dyn Fn(&vextor_core::GridSettings) -> bool| grid.as_ref().is_some_and(f);
         let show = egui::Button::new("Show Grid")
             .selected(on(&|g| g.visible))
-            .shortcut_text(ui.ctx().format_shortcut(&SHOW_GRID));
+            .shortcut_text(keys::label(ui.ctx(), SHOW_GRID));
         if ui.add_enabled(has_doc, show).clicked() {
             actions.push(Action::ToggleGrid);
         }

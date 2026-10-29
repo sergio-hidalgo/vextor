@@ -5,7 +5,7 @@ mod closing;
 mod export_flow;
 mod file_flow;
 mod import_flow;
-mod keys;
+pub(crate) mod keys;
 mod layout;
 mod menus;
 mod object_menu;
@@ -124,6 +124,10 @@ impl VextorApp {
     pub fn new(cc: &eframe::CreationContext<'_>, to_open: OpenQueue) -> Self {
         // ⌘0 / ⌘+ / ⌘- belong to the canvas, not to egui's UI scale.
         cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
+        let pretend = std::env::var("VEXTOR_PRETEND_OS").ok();
+        if let Some(os) = keys::pretend_os(pretend.as_deref()) {
+            cc.egui_ctx.set_os(os);
+        }
         theme::apply(&cc.egui_ctx);
         let fonts = SystemFonts::load(&cc.egui_ctx);
         let data_dir = files::app_data_dir();

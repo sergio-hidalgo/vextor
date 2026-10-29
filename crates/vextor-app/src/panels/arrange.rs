@@ -7,6 +7,7 @@ use eframe::egui;
 use vextor_core::Arrange;
 use vextor_geom::Align;
 
+use crate::app::keys::{self, GROUP, UNGROUP};
 use crate::edit_ops::{self, Can};
 use crate::icons::{self, Icon};
 
@@ -109,14 +110,14 @@ pub fn arrange_section(ui: &mut egui::Ui, can: Can, out: &mut Vec<PanelAction>) 
     super::section(ui, "Arrange", |ui| {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
-            for (how, text, keys) in edit_ops::ARRANGE {
+            for (how, text) in edit_ops::ARRANGE {
                 let icon = match how {
                     Arrange::Front => Icon::ArrangeFront,
                     Arrange::Forward => Icon::ArrangeForward,
                     Arrange::Backward => Icon::ArrangeBackward,
                     Arrange::Back => Icon::ArrangeBack,
                 };
-                let tip = format!("{text} ({keys})");
+                let tip = format!("{text} ({})", keys::label(ui.ctx(), keys::arrange(how)));
                 let why = can.arrange_why(how);
                 if icons::button(ui, icon, false, can.arrange(how), &tip, why).clicked() {
                     out.push(PanelAction::Arrange(how));
@@ -139,7 +140,7 @@ fn group_buttons(ui: &mut egui::Ui, can: Can, out: &mut Vec<PanelAction>) {
             Icon::Group,
             false,
             can.group,
-            "Group (⌘G)",
+            &format!("Group ({})", keys::label(ui.ctx(), GROUP)),
             "Select objects in the same group or layer",
         );
         if group.clicked() {
@@ -150,7 +151,7 @@ fn group_buttons(ui: &mut egui::Ui, can: Can, out: &mut Vec<PanelAction>) {
             Icon::Ungroup,
             false,
             can.ungroup,
-            "Ungroup (⇧⌘G)",
+            &format!("Ungroup ({})", keys::label(ui.ctx(), UNGROUP)),
             "Select a group",
         );
         if ungroup.clicked() {

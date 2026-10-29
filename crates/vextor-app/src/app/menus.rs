@@ -3,9 +3,8 @@
 use eframe::egui::{self, KeyboardShortcut};
 
 use super::keys::{
-    ACTUAL_SIZE, CLOSE, COPY, COPY_AS_SVG, CUT, DELETE, DUPLICATE, EXPORT, FIT, IMPORT, NEW,
-    NEXT_DOC, OPEN, PASTE, PASTE_IN_PLACE, PREV_DOC, REDO, SAVE, SAVE_AS, SELECT_ALL, UNDO,
-    ZOOM_IN, ZOOM_OUT,
+    self, ACTUAL_SIZE, CLOSE, COPY, COPY_AS_SVG, CUT, DUPLICATE, EXIT, EXPORT, FIT, IMPORT, NEW,
+    OPEN, PASTE, PASTE_IN_PLACE, SAVE, SAVE_AS, SELECT_ALL, UNDO, ZOOM_IN, ZOOM_OUT,
 };
 use super::{Action, VextorApp};
 use crate::session::Session;
@@ -16,9 +15,10 @@ impl VextorApp {
         let mut actions = Vec::new();
         let ctx = ui.ctx().clone();
         let item = |ui: &mut egui::Ui, enabled: bool, text: &str, shortcut: &KeyboardShortcut| {
-            let button = egui::Button::new(text).shortcut_text(ctx.format_shortcut(shortcut));
+            let button = egui::Button::new(text).shortcut_text(keys::label(&ctx, *shortcut));
             ui.add_enabled(enabled, button).clicked()
         };
+        let os = ctx.os();
         let has_doc = !self.docs.is_empty() && self.picker.is_none();
         let edit = self.docs.session().map(Session::edit_menu);
         let can = match self.docs.session() {
@@ -35,7 +35,7 @@ impl VextorApp {
                 if item(ui, undo.is_some(), &undo_text, &UNDO) {
                     actions.push(Action::Undo);
                 }
-                if item(ui, redo.is_some(), &redo_text, &REDO) {
+                if item(ui, redo.is_some(), &redo_text, &keys::redo(os)[0]) {
                     actions.push(Action::Redo);
                 }
                 ui.separator();
@@ -64,7 +64,13 @@ impl VextorApp {
                         can.edit,
                         select_first,
                     ),
-                    ("Delete", DELETE, Action::Delete, can.edit, select_first),
+                    (
+                        "Delete",
+                        keys::delete(os),
+                        Action::Delete,
+                        can.edit,
+                        select_first,
+                    ),
                 ];
                 for (text, shortcut, action, enabled, why) in edit_items {
                     if why_item(ui, enabled, text, shortcut, why) {
@@ -105,7 +111,8 @@ impl VextorApp {
         actions
     }
 
-    /// File: New, Open, Open Recent, Close, Save, Save As.
+    /// File: New, Open, Open Recent, Close, Save, Save As, and Exit off
+    /// macOS (spec 14c), where the app menu has Quit.
     fn file_menu(&self, ui: &mut egui::Ui, has_doc: bool, actions: &mut Vec<Action>) {
         let items = [
             ("New…", NEW, Action::New, true),
@@ -144,15 +151,23 @@ impl VextorApp {
         {
             actions.push(Action::RestoreBackup);
         }
+        if !ui.ctx().os().is_mac() {
+            ui.separator();
+            // Like the window's close button: "Save changes?" first.
+            if why_item(ui, true, "Exit", EXIT, "") {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
     }
 
     /// Window: next / previous document, then every open document (✓ on
     /// the active one).
     fn window_menu(&self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         let many = self.docs.tabs().len() > 1;
+        let [next, prev] = keys::cycle_docs(ui.ctx().os());
         let cycle = [
-            ("Next Document", NEXT_DOC, true),
-            ("Previous Document", PREV_DOC, false),
+            ("Next Document", next, true),
+            ("Previous Document", prev, false),
         ];
         for (text, shortcut, forward) in cycle {
             if why_item(ui, many, text, shortcut, "Open another document first") {
@@ -230,7 +245,7 @@ pub(super) fn why_item(
     shortcut: KeyboardShortcut,
     why: &str,
 ) -> bool {
-    let button = egui::Button::new(text).shortcut_text(ui.ctx().format_shortcut(&shortcut));
+    let button = egui::Button::new(text).shortcut_text(keys::label(ui.ctx(), shortcut));
     ui.add_enabled(enabled, button)
         .on_disabled_hover_text(why)
         .clicked()

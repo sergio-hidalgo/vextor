@@ -3,7 +3,7 @@
 use eframe::egui;
 
 use super::Action;
-use super::keys::{EXCLUDE, INTERSECT, SUBTRACT, UNION};
+use super::keys;
 use super::menus::why_item;
 use crate::session::Session;
 use crate::shape_ops::ShapeOp;
@@ -11,13 +11,7 @@ use crate::shape_ops::ShapeOp;
 /// Object ▸ Path Operations (spec 11): the booleans and Divide, then
 /// Offset, Outline Stroke and Simplify, then compound paths.
 pub(super) fn shape_menu(ui: &mut egui::Ui, session: Option<&Session>, actions: &mut Vec<Action>) {
-    let shortcut = |op: ShapeOp| match op {
-        ShapeOp::Union => Some(UNION),
-        ShapeOp::Subtract => Some(SUBTRACT),
-        ShapeOp::Intersect => Some(INTERSECT),
-        ShapeOp::Exclude => Some(EXCLUDE),
-        _ => None,
-    };
+    let os = ui.ctx().os();
     let groups = [
         &ShapeOp::COMBINE[..],
         &ShapeOp::MODIFY[..],
@@ -29,7 +23,7 @@ pub(super) fn shape_menu(ui: &mut egui::Ui, session: Option<&Session>, actions: 
         }
         for &op in group {
             let enabled = session.is_some_and(|s| op.can(s));
-            let clicked = match shortcut(op) {
+            let clicked = match keys::shape_op(os, op) {
                 Some(key) => why_item(ui, enabled, op.title(), key, op.why()),
                 None => ui
                     .add_enabled(enabled, egui::Button::new(op.title()))
