@@ -21,6 +21,7 @@ mod icons;
 mod image_trace;
 mod import;
 mod launch;
+mod launch_card;
 mod layers;
 mod new_doc;
 mod node_tool;
@@ -59,16 +60,16 @@ use eframe::egui;
 const APP_NAME: &str = "Vextor";
 
 fn main() -> eframe::Result {
+    let started = std::time::Instant::now();
     emergency::install();
-    let mut viewport = egui::ViewportBuilder::default()
-        .with_title(APP_NAME)
-        .with_inner_size([1280.0, 800.0])
-        .with_min_inner_size([800.0, 500.0]);
+    // The window opens as the launch card and becomes the editor (spec 14e).
+    let mut viewport = launch_card::viewport(APP_NAME);
     if let Some(icon) = icon::app_icon() {
         viewport = viewport.with_icon(icon);
     }
     let options = eframe::NativeOptions {
         viewport,
+        centered: true,
         ..Default::default()
     };
     let paths = launch::launch_paths(std::env::args_os().skip(1));
@@ -78,7 +79,7 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| {
             let _ = ctx_for_hook.set(cc.egui_ctx.clone());
-            Ok(Box::new(app::VextorApp::new(cc, to_open)))
+            Ok(Box::new(app::VextorApp::new(cc, to_open, started)))
         }),
     )
 }

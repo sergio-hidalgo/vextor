@@ -30,6 +30,7 @@ use crate::export_dialog::ExportDialog;
 use crate::files::{self, RecentFiles};
 use crate::fonts::SystemFonts;
 use crate::launch::OpenQueue;
+use crate::launch_card::LaunchCard;
 use crate::new_doc::Picker;
 use crate::prompts;
 use crate::recovery::{Orphan, Recovery};
@@ -38,6 +39,9 @@ use crate::session::Session;
 use crate::swatch_library::Swatches;
 use crate::tabs;
 use crate::theme;
+
+/// The window's background behind the editor.
+pub const BACKGROUND: egui::Color32 = egui::Color32::from_rgb(12, 12, 12);
 
 /// Where quitting stands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -115,13 +119,16 @@ pub struct VextorApp {
     restore: Option<crate::restore_dialog::RestoreDialog>,
     /// Files asked for from outside: the command line, Finder (spec 14b).
     to_open: OpenQueue,
+    /// The launch card, while it is up (spec 14e).
+    card: Option<LaunchCard>,
 }
 
 impl VextorApp {
     /// Starts with the start screen, and the recovery prompt when a
     /// previous run left unsaved work behind; the files in `to_open` open
-    /// on the first frame they can.
-    pub fn new(cc: &eframe::CreationContext<'_>, to_open: OpenQueue) -> Self {
+    /// on the first frame they can, after the launch card (Vextor started
+    /// at `started`).
+    pub fn new(cc: &eframe::CreationContext<'_>, to_open: OpenQueue, started: Instant) -> Self {
         // ⌘0 / ⌘+ / ⌘- belong to the canvas, not to egui's UI scale.
         cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
         let pretend = std::env::var("VEXTOR_PRETEND_OS").ok();
@@ -182,6 +189,7 @@ impl VextorApp {
             backups,
             restore: None,
             to_open,
+            card: Some(LaunchCard::new(&cc.egui_ctx, started)),
         }
     }
 
@@ -345,8 +353,26 @@ impl VextorApp {
 }
 
 impl eframe::App for VextorApp {
+    /// Transparent behind the launch card so its corners are; opaque after.
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        if self.card.is_some() {
+            [0.0; 4]
+        } else {
+            BACKGROUND.to_normalized_gamma_f32()
+        }
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        // The card alone: files from the launch and the recovery prompt
+        // wait for the editor; ⌘Q quits (no documents yet).
+        if self.card.is_some() {
+            self.handle_close(&ctx);
+            if self.card.as_mut().is_some_and(|c| c.show(ui)) {
+                return;
+            }
+            self.card = None;
+        }
         self.poll_saves();
         self.save_swatches();
         if let Some(fonts) = self.fonts.poll() {
