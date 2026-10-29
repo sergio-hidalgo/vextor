@@ -659,3 +659,19 @@ fn a_missing_artboard_exports_nothing() {
     );
     assert_eq!(none, None);
 }
+
+#[test]
+fn a_saved_preview_never_reaches_the_export() {
+    let mut d = shapes();
+    let before = d.svg();
+    let mut bytes = Vec::new();
+    vextor_core::to_writer_with_preview(&mut bytes, &d.doc, Some(b"PREVIEW-PICTURE"))
+        .expect("encodes");
+    d.doc = vextor_core::from_bytes(&bytes).expect("loads");
+    let after = d.svg();
+    assert_eq!(after, before);
+    assert!(!after.contains("preview"));
+    for format in [Format::Html, Format::Jsx, Format::CssDataUri] {
+        assert_eq!(d.export(format).code, shapes().export(format).code);
+    }
+}

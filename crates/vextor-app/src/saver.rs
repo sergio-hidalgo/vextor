@@ -15,27 +15,38 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 
-use vextor_core::Document;
+use vextor_core::{Document, NodeKind};
+use vextor_geom::Fonts;
 
 use crate::backups::Backups;
 use crate::documents::DocId;
 use crate::files;
 use crate::recovery::AutosaveJob;
+use crate::thumbnails;
 
 /// Work for the saving thread.
 pub enum Job {
     /// Save `document` (at `revision`) to `path`, backing up the file
-    /// there first.
+    /// there first, with a preview for Finder (spec 14d).
     Save {
         doc: DocId,
         path: PathBuf,
         document: Box<Document>,
         revision: u64,
+        preview: PreviewFonts,
     },
     Autosave {
         doc: DocId,
         job: Box<AutosaveJob>,
     },
+}
+
+/// The fonts a save's preview is drawn with.
+pub struct PreviewFonts {
+    pub fonts: Arc<Fonts>,
+    /// Whether the system fonts were read; until then a document with
+    /// text is saved without a preview rather than with a wrong one.
+    pub loaded: bool,
 }
 
 /// What a job came to.
@@ -219,6 +230,7 @@ fn run_job(job: Job, backups: Option<&Mutex<Backups>>) -> Done {
             path,
             document,
             revision,
+            preview: fonts,
         } => {
             let name = files::display_name(&path);
             if let Some(b) = backups {
@@ -232,7 +244,8 @@ fn run_job(job: Job, backups: Option<&Mutex<Backups>>) -> Done {
                     };
                 }
             }
-            match files::write_document(&path, &document) {
+            let preview = preview(&document, &fonts);
+            match files::write_document_with_preview(&path, &document, preview.as_deref()) {
                 Ok(()) => {
                     if let Some(b) = backups {
                         b.lock()
@@ -262,6 +275,25 @@ fn run_job(job: Job, backups: Option<&Mutex<Backups>>) -> Done {
             },
         },
     }
+}
+
+/// The picture saved with `document` for Finder; `None` when it cannot be
+/// drawn, even by a panic: a save never fails because of its preview.
+fn preview(document: &Document, fonts: &PreviewFonts) -> Option<Vec<u8>> {
+    let has_text = || {
+        document
+            .nodes
+            .values()
+            .any(|n| matches!(n.kind, NodeKind::Text(_)))
+    };
+    if !fonts.loaded && has_text() {
+        return None;
+    }
+    catch_unwind(AssertUnwindSafe(|| {
+        thumbnails::preview_png(document, &fonts.fonts)
+    }))
+    .ok()
+    .flatten()
 }
 
 #[cfg(test)]

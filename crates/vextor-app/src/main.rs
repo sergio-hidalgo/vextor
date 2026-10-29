@@ -31,6 +31,8 @@ mod path_dialog;
 mod path_ops;
 mod pen_tool;
 mod prompts;
+#[cfg(test)]
+mod quicklook_samples;
 mod recovery;
 mod restore_dialog;
 mod safe_save;

@@ -24,6 +24,8 @@ outlines only) to draw over or keep.
   [`cargo-fuzz`](https://github.com/rust-fuzz/cargo-fuzz)
   (`rustup toolchain install nightly --profile minimal`,
   `cargo +nightly install cargo-fuzz --locked`).
+- Only for the macOS app bundle: the Xcode command line tools
+  (`xcode-select --install`), for `swiftc`.
 
 ## Build, run, check
 
@@ -76,6 +78,9 @@ scripts/bundle-macos.sh --install   # ... copies it to ~/Applications
 scripts/bundle-macos.sh --dmg       # ... and a compressed target/bundle/Vextor-<version>.dmg
 scripts/size-report.sh              # disk used by the binary, .app, .dmg and app data,
                                     # checked against the size budgets (fails when over)
+scripts/check-quicklook.sh          # after --install: Finder's thumbnails of sample documents
+                                    # (artwork for saved ones, the icon for damaged ones)
+scripts/check-quicklook.sh a.vxtr   # ... or what Finder shows for your own files
 ```
 
 Size budgets (macOS arm64): binary ≤ 12 MB, `Vextor.app` ≤ 13 MB,
@@ -90,6 +95,25 @@ once after installing: `killall iconservicesagent Dock Finder`. If a
 `sudo rm -rf /Library/Caches/com.apple.iconservices.store` and restart
 the Mac. The bundle's app icon is `icon.svg` full bleed (square to the
 edges), which macOS rounds to its own shape. The build is signed ad hoc, for your own Mac only.
+
+Finder also shows each document's artwork, like an Illustrator file: in
+icon, list and column view, in the column view's preview pane, and with
+the space bar. Every save stores a small picture of the document in the
+file (all artboards, 512 px on the longest side, about 10–20 KB); two
+Quick Look extensions inside `Vextor.app`
+(`crates/vextor-app/macos/QuickLook/`, one Swift file built with `swiftc`)
+read that picture back. They never draw the document themselves, run
+sandboxed with read-only access to the one file, refuse files over 50 MB,
+and show the plain document icon for anything unexpected. Files saved
+before this version, files saved while the system fonts were still
+loading (when they hold text), and autosave copies have no picture and
+show the plain icon until saved again. `--install` registers the
+extensions; if Finder still shows an old picture or the plain icon after
+a save, refresh Quick Look with `qlmanage -r && qlmanage -r cache`.
+`qlmanage -t` can't check this on current macOS (it hangs on types served
+by app extensions); `scripts/check-quicklook.sh` asks for thumbnails the
+way Finder does and saves them in `target/quicklook-check/thumbs/`.
+Building the app needs the Xcode command line tools (`swiftc`).
 
 Opening files from outside Vextor works like File ▸ Open…, whether Vextor
 is closed or already running: double-click a `.vxtr` in Finder, select
@@ -464,11 +488,11 @@ colours from the palette in `crates/vextor-app/src/theme.rs`.
 ## Files, autosave and recovery
 
 Documents are saved as `.vxtr` files: compact JSON, gzip-compressed,
-`format_version: 4` (version 2 added text, version 3 the "Text as
+`format_version: 5` (version 2 added text, version 3 the "Text as
 outlines" export option, version 4 compact files that leave default
-fields out and store each distinct embedded image once). Files from
-versions 1–3, and uncompressed `.vxtr` JSON, still open and are saved as
-version 4; `gunzip -c file.vxtr` shows the JSON. Numbers are saved
+fields out and store each distinct embedded image once, version 5 a
+preview picture for Finder). Files from versions 1–4, and uncompressed
+`.vxtr` JSON, still open and are saved as version 5; `gunzip -c file.vxtr` shows the JSON. Numbers are saved
 exactly, never rounded; images are base64; fonts are never embedded, only
 their names. A 20 000-object document takes about 330 KB (it took 21 MB
 as version 3).

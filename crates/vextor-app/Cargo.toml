@@ -30,6 +30,7 @@ vextor-macos.workspace = true
 
 [dev-dependencies]
 # Image to vector snapshots (spec 13b).
+base64.workspace = true
 insta.workspace = true
 resvg.workspace = true
 

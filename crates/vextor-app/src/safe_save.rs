@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 
 use flate2::Compression;
 use flate2::write::GzEncoder;
-use vextor_core::{Document, Fnv1a, FormatError, MAX_FILE_BYTES, to_writer};
+use vextor_core::{Document, Fnv1a, FormatError, MAX_FILE_BYTES, to_writer_with_preview};
 
 use crate::files::{FileError, decode};
 
@@ -143,6 +143,20 @@ impl<W: Write> Write for Hashing<W> {
 /// [`FileError::Verify`] when the file read back differs, I/O and
 /// encoding errors otherwise; `path` is then unchanged.
 pub fn save_document(disk: &dyn Disk, path: &Path, doc: &Document) -> Result<(), FileError> {
+    save_document_with_preview(disk, path, doc, None)
+}
+
+/// [`save_document`] with `preview`, a PNG of the document, stored in the
+/// file for Finder (spec 14d).
+///
+/// # Errors
+/// As [`save_document`].
+pub fn save_document_with_preview(
+    disk: &dyn Disk,
+    path: &Path,
+    doc: &Document,
+    preview: Option<&[u8]>,
+) -> Result<(), FileError> {
     if let Err(violations) = doc.validate() {
         let first = violations
             .first()
@@ -156,7 +170,7 @@ pub fn save_document(disk: &dyn Disk, path: &Path, doc: &Document) -> Result<(),
             // The JSON writer makes many tiny writes; gzip wants big ones.
             let mut json =
                 BufWriter::with_capacity(1 << 16, GzEncoder::new(w, Compression::default()));
-            to_writer(&mut json, doc)?;
+            to_writer_with_preview(&mut json, doc, preview)?;
             json.into_inner()
                 .map_err(|e| FormatError::Encode(e.error().to_string()))?
                 .finish()

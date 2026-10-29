@@ -39,6 +39,11 @@ impl SystemFonts {
         Arc::clone(&self.current)
     }
 
+    /// Whether the system fonts are still being read.
+    pub fn is_loading(&self) -> bool {
+        self.pending.is_some()
+    }
+
     /// The system fonts, the first time they are ready.
     pub fn poll(&mut self) -> Option<Arc<Fonts>> {
         let rx = self.pending.as_ref()?;

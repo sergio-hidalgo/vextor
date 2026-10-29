@@ -1,7 +1,8 @@
 #!/bin/sh
 # Builds target/bundle/Vextor.app (spec 13c): the release binary, the app
 # icon, and the .vxtr document type with its icon, so Finder shows Vextor
-# documents with their own icon once the app is installed.
+# documents with their own icon once the app is installed; and the Quick
+# Look extensions that show the artwork saved in each document (spec 14d).
 #
 #   scripts/bundle-macos.sh             build target/bundle/Vextor.app
 #   scripts/bundle-macos.sh --install   ... and copy it to ~/Applications,
@@ -10,7 +11,8 @@
 #                                       target/bundle/Vextor-<version>.dmg
 #
 # macOS only. Uses only tools that ship with macOS (iconutil, codesign,
-# plutil, lsregister, hdiutil); no network. The release profile strips the
+# plutil, lsregister, pluginkit, hdiutil) and swiftc (the Xcode command
+# line tools); no network. The release profile strips the
 # binary (spec 14 §6), so nothing else needs stripping here. Signed ad hoc: for this machine, not
 # for distribution (spec 15).
 set -eu
@@ -41,6 +43,24 @@ iconutil -c icns "$out/AppIcon.iconset" -o "$app/Contents/Resources/AppIcon.icns
 iconutil -c icns "$out/Document.iconset" -o "$app/Contents/Resources/Document.icns"
 sed "s/__VERSION__/$version/g" crates/vextor-app/macos/Info.plist >"$app/Contents/Info.plist"
 plutil -lint -s "$app/Contents/Info.plist"
+
+# The Quick Look extensions: one Swift file, built once per extension
+# (Apple allows one extension point per extension), each signed with the
+# sandbox entitlements before the app around them is signed.
+echo "Building the Quick Look extensions..."
+ql=crates/vextor-app/macos/QuickLook
+for name in Thumbnail Preview; do
+    appex="$app/Contents/PlugIns/Vextor$name.appex"
+    mkdir -p "$appex/Contents/MacOS"
+    swiftc -O -parse-as-library -application-extension \
+        -module-name VextorQuickLook \
+        -target "$(uname -m)-apple-macos11.0" \
+        -Xlinker -e -Xlinker _NSExtensionMain \
+        -o "$appex/Contents/MacOS/Vextor$name" "$ql/VextorQuickLook.swift"
+    sed "s/__VERSION__/$version/g" "$ql/$name-Info.plist" >"$appex/Contents/Info.plist"
+    plutil -lint -s "$appex/Contents/Info.plist"
+    codesign --force --sign - --entitlements "$ql/QuickLook.entitlements" "$appex" 2>/dev/null
+done
 codesign --force --sign - "$app" 2>/dev/null
 
 echo "Built $app"
@@ -60,6 +80,12 @@ if [ "${1:-}" = "--install" ]; then
     cp -R "$app" "$dest"
     lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
     "$lsregister" -f "$dest"
+    # Quick Look finds the extensions through PlugInKit (spec 14d).
+    for name in Thumbnail Preview; do
+        pluginkit -a "$dest/Contents/PlugIns/Vextor$name.appex"
+        pluginkit -e use -i "io.github.sergio-hidalgo.vextor.$(echo "$name" | tr '[:upper:]' '[:lower:]')"
+    done
+    qlmanage -r >/dev/null 2>&1 || true
     # The system already hands out the new icons, but the icon service,
     # the Dock and Finder (which draws the Desktop) keep what they cached.
     echo "Installed $dest."
@@ -68,4 +94,7 @@ if [ "${1:-}" = "--install" ]; then
     echo "If a .vxtr file still shows the old icon, clear the system's icon"
     echo "store and restart the Mac:"
     echo "  sudo rm -rf /Library/Caches/com.apple.iconservices.store"
+    echo "If Finder still shows the plain icon for a newly saved document,"
+    echo "refresh Quick Look:"
+    echo "  qlmanage -r && qlmanage -r cache"
 fi
