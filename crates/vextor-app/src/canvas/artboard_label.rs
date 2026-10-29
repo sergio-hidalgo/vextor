@@ -6,6 +6,7 @@ use eframe::egui::{self, Painter, Pos2};
 use vextor_core::{Artboard, ArtboardId};
 
 use super::{Canvas, screen_rect, to_point};
+use crate::app::keys;
 use crate::artboard::{self, ArtboardDrag, MAX_NAME_CHARS};
 use crate::session::Session;
 use crate::view;
@@ -103,10 +104,11 @@ impl Canvas {
             .and_then(|p| label_at(&painter, rect.min, session, p));
         if hovered.is_some() && self.rename.is_none() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
-            response.clone().on_hover_text_at_pointer(
-                "Drag to move it with its objects (⌥: alone), \
-                 click to show it in the inspector, double-click to rename",
-            );
+            let alt = keys::modifier_name(ui.ctx(), egui::Modifiers::ALT);
+            response.clone().on_hover_text_at_pointer(format!(
+                "Drag to move it with its objects ({alt}: alone), \
+                 click to show it in the inspector, double-click to rename"
+            ));
         }
         if response.double_clicked()
             && let Some(id) = hovered

@@ -112,7 +112,7 @@ impl Canvas {
                 self.text_double_click(session, to_doc(p));
             }
             if !self.is_editing_text()
-                && let Some(e) = super::nodes::node_double_click(session, to_doc(p))
+                && let Some(e) = super::nodes::node_double_click(session, to_doc(p), ui.ctx().os())
             {
                 message = Some(e);
             }

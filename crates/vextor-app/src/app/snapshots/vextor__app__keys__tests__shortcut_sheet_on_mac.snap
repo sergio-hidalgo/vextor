@@ -1,0 +1,44 @@
+---
+source: crates/vextor-app/src/app/keys.rs
+expression: "sheet(OperatingSystem::Mac)"
+---
+New: ⌘N
+Open: ⌘O
+Import: ⇧⌘I
+Close: ⌘W
+Save: ⌘S
+Save As: ⇧⌘S
+Export: ⇧⌘E
+Undo: ⌘Z
+Redo: ⇧⌘Z
+Cut: ⌘X
+Copy: ⌘C
+Copy As SVG: ⇧⌘C
+Paste: ⌘V
+Paste in Place: ⇧⌘V
+Duplicate: ⌘D
+Delete: ⌫
+Select All: ⌘A
+Group: ⌘G
+Ungroup: ⇧⌘G
+Convert to Path: ⇧⌘P
+Convert Text to Outlines: ⇧⌘O
+Fit Artboard: ⌘0
+Actual Size: ⌘1
+Zoom In: ⌘+
+Zoom Out: ⌘−
+Show Grid: ⌘'
+Next Document: ⌥⌘→
+Previous Document: ⌥⌘←
+Bring to Front: ⇧⌘↑
+Bring Forward: ⌘↑
+Send Backward: ⌘↓
+Send to Back: ⇧⌘↓
+Join: ⌘J
+Straight ↔ Curve: C
+Add Node: +
+Delete Nodes: ⌫
+Union: ⌥⌘U
+Subtract: ⌥⌘S
+Intersect: ⌥⌘I
+Exclude: ⌥⌘E

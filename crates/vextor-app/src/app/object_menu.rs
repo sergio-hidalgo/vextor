@@ -2,13 +2,9 @@
 //! operations, arrange, align, distribute, flip, artboards.
 
 use eframe::egui;
-use vextor_core::Arrange;
 use vextor_geom::Align;
 
-use super::keys::{
-    ADD_NODE, BACK, BACKWARD, CONVERT_TO_PATH, DELETE, FORWARD, FRONT, GROUP, JOIN, OUTLINE_TEXT,
-    TOGGLE_SEGMENT, UNGROUP,
-};
+use super::keys::{self, CONVERT_TO_PATH, GROUP, OUTLINE_TEXT, UNGROUP};
 use super::menus::why_item;
 use super::{Action, VextorApp};
 use crate::edit_ops;
@@ -107,13 +103,8 @@ impl VextorApp {
 
 /// Object ▸ Arrange, each item disabled with the reason (spec 08c).
 fn arrange_menu(ui: &mut egui::Ui, can: edit_ops::Can, actions: &mut Vec<Action>) {
-    for (how, text, _) in edit_ops::ARRANGE {
-        let shortcut = match how {
-            Arrange::Front => FRONT,
-            Arrange::Forward => FORWARD,
-            Arrange::Backward => BACKWARD,
-            Arrange::Back => BACK,
-        };
+    for (how, text) in edit_ops::ARRANGE {
+        let shortcut = keys::arrange(how);
         if why_item(ui, can.arrange(how), text, shortcut, can.arrange_why(how)) {
             actions.push(Action::Arrange(how));
         }
@@ -146,17 +137,11 @@ fn align_menu(ui: &mut egui::Ui, to_artboard: &mut bool, actions: &mut Vec<Actio
 /// Object ▸ Path (spec 07): close, open, join, split, reverse, and the
 /// segment and node commands.
 fn path_menu(ui: &mut egui::Ui, session: Option<&Session>, actions: &mut Vec<Action>) {
-    let shortcut = |a: PathAction| match a {
-        PathAction::Join => Some(JOIN),
-        PathAction::ToggleSegment => Some(TOGGLE_SEGMENT),
-        PathAction::AddNode => Some(ADD_NODE),
-        PathAction::DeleteNodes => Some(DELETE),
-        _ => None,
-    };
+    let os = ui.ctx().os();
     for group in [&PathAction::STRUCTURE[..], &PathAction::EDIT[..]] {
         for &a in group {
             let enabled = session.is_some_and(|s| a.can(s));
-            let clicked = match shortcut(a) {
+            let clicked = match keys::path_action(os, a) {
                 Some(key) => why_item(ui, enabled, a.title(), key, a.why()),
                 None => ui
                     .add_enabled(enabled, egui::Button::new(a.title()))
