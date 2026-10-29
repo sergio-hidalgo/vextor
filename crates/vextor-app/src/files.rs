@@ -112,6 +112,18 @@ pub fn write_document(path: &Path, doc: &Document) -> Result<(), FileError> {
     safe_save::save_document(&RealDisk, path, doc)
 }
 
+/// [`write_document`] with `preview`, the PNG Finder shows (spec 14d).
+///
+/// # Errors
+/// As [`write_document`].
+pub fn write_document_with_preview(
+    path: &Path,
+    doc: &Document,
+    preview: Option<&[u8]>,
+) -> Result<(), FileError> {
+    safe_save::save_document_with_preview(&RealDisk, path, doc, preview)
+}
+
 /// Writes `bytes` to a temporary file in `path`'s folder, flushes it to
 /// disk, reads it back, then renames it over `path`. A crash at any point
 /// leaves either the old file or the new one, never a half-written file.

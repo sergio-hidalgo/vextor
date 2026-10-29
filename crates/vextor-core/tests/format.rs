@@ -5,7 +5,7 @@ mod common;
 use common::{fixture, rect_geom, shape};
 use vextor_core::{
     Document, FORMAT_VERSION, FormatError, Geometry, MAX_FILE_BYTES, MAX_NODES, NodeKind, Paint,
-    Point, Rgba, TextAlign, from_bytes, to_bytes, to_bytes_pretty,
+    Point, Rgba, TextAlign, from_bytes, to_bytes, to_bytes_pretty, to_writer_with_preview,
 };
 
 const MINIMAL_V1: &str = include_str!("fixtures/minimal_v1.vxtr");
@@ -13,6 +13,8 @@ const LABEL_V2: &str = include_str!("fixtures/label_v2.vxtr");
 /// Written by Vextor 0.1 before spec 14: pretty, every field, three
 /// images of which two are the same picture, each stored inline.
 const IMAGES_V3: &str = include_str!("fixtures/images_v3.vxtr");
+/// Written by Vextor 0.1 before spec 14d: compact, no preview.
+const LABEL_V4: &str = include_str!("fixtures/label_v4.vxtr");
 
 fn round_trip(doc: &Document) {
     let bytes = to_bytes(doc).expect("encodes");
@@ -28,12 +30,21 @@ fn every_fixture_round_trips() {
     round_trip(&from_bytes(MINIMAL_V1.as_bytes()).expect("fixture loads"));
     round_trip(&from_bytes(LABEL_V2.as_bytes()).expect("fixture loads"));
     round_trip(&from_bytes(IMAGES_V3.as_bytes()).expect("fixture loads"));
+    round_trip(&from_bytes(LABEL_V4.as_bytes()).expect("fixture loads"));
 }
 
 #[test]
 fn every_earlier_format_version_loads_as_the_current_one() {
-    for (version, text) in [(1, MINIMAL_V1), (2, LABEL_V2), (3, IMAGES_V3)] {
-        assert!(text.contains(&format!("\"format_version\": {version}")));
+    for (version, text) in [
+        (1, MINIMAL_V1),
+        (2, LABEL_V2),
+        (3, IMAGES_V3),
+        (4, LABEL_V4),
+    ] {
+        assert!(
+            text.contains(&format!("\"format_version\": {version}"))
+                || text.contains(&format!("\"format_version\":{version}"))
+        );
         let doc = from_bytes(text.as_bytes()).expect("loads");
         assert_eq!(doc.format_version, FORMAT_VERSION, "v{version}");
     }
@@ -60,6 +71,64 @@ fn identical_images_are_saved_once_and_load_back_whole() {
         saved.len()
     );
     assert_eq!(from_bytes(&saved).expect("loads"), doc);
+}
+
+/// `doc` saved with `preview` as its preview picture.
+fn with_preview(doc: &Document, preview: &[u8]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    to_writer_with_preview(&mut bytes, doc, Some(preview)).expect("encodes");
+    bytes
+}
+
+#[test]
+fn a_saved_preview_is_in_the_file_and_the_document_loads_equal() {
+    let doc = fixture().doc;
+    let png = b"\x89PNG\r\n\x1a\n not really";
+    let saved = with_preview(&doc, png);
+    let probe: serde_json::Value = serde_json::from_slice(&saved).expect("json");
+    let stored = probe["preview_png"].as_str().expect("a preview");
+    assert_eq!(base64_decode(stored), png);
+    assert_eq!(probe["format_version"], FORMAT_VERSION);
+    assert_eq!(from_bytes(&saved).expect("loads"), doc);
+}
+
+#[test]
+fn files_without_a_preview_have_no_preview_field() {
+    let saved = to_bytes(&fixture().doc).expect("encodes");
+    let probe: serde_json::Value = serde_json::from_slice(&saved).expect("json");
+    assert!(probe.get("preview_png").is_none());
+    for text in [MINIMAL_V1, LABEL_V2, IMAGES_V3, LABEL_V4] {
+        assert!(!text.contains("preview_png"));
+    }
+}
+
+#[test]
+fn a_broken_or_huge_preview_still_opens() {
+    let doc = from_bytes(LABEL_V4.as_bytes()).expect("loads");
+    let saved = String::from_utf8(to_bytes(&doc).expect("encodes")).expect("utf-8");
+    let huge = format!("\"{}\"", "A".repeat(20 * 1024 * 1024));
+    for preview in [
+        "\"not base64 !\"",
+        "42",
+        "null",
+        "{\"x\":[1,2]}",
+        "\"\"",
+        &huge,
+    ] {
+        let text = saved.replacen(
+            "\"next_id\"",
+            &format!("\"preview_png\":{preview},\"next_id\""),
+            1,
+        );
+        assert_eq!(from_bytes(text.as_bytes()).expect("opens"), doc);
+    }
+}
+
+fn base64_decode(text: &str) -> Vec<u8> {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD
+        .decode(text)
+        .expect("base64")
 }
 
 #[test]
@@ -306,7 +375,7 @@ fn error_messages_read_as_sentences() {
     );
     assert_eq!(
         FormatError::UnknownVersion(7).to_string(),
-        "the file uses format version 7; this Vextor reads versions 1 to 4"
+        "the file uses format version 7; this Vextor reads versions 1 to 5"
     );
 }
 

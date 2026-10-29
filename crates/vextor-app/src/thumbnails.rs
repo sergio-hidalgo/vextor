@@ -14,12 +14,14 @@ use std::thread;
 use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
 use vextor_core::{Document, Rgba, Vec2, View};
 use vextor_geom::{FontDb, Fonts};
-use vextor_render::{Viewport, render};
+use vextor_render::{Pixmap, Viewport, render};
 
 use crate::files;
 
 /// Size of one snapshot on screen, in points.
 pub const SIZE: egui::Vec2 = egui::vec2(200.0, 112.0);
+/// Longest side of the preview saved in a `.vxtr` (spec 14d), in pixels.
+pub const PREVIEW_SIDE: u32 = 512;
 /// The background a transparent artboard gets in a snapshot.
 const TRANSPARENT_BACKGROUND: Rgba = Rgba::rgb(0xFF, 0xFF, 0xFF);
 
@@ -235,7 +237,33 @@ pub fn render_file(path: &std::path::Path, fonts: &Fonts, pixels_per_point: f32)
 /// document without artboards or a failed render.
 #[must_use]
 pub fn snapshot(doc: &Document, fonts: &Fonts, pixels_per_point: f32) -> Option<Pixels> {
-    let mut doc = doc.clone();
+    let size = Vec2::new(f64::from(SIZE.x), f64::from(SIZE.y));
+    let pixmap = render_fitted(doc, fonts, size, f64::from(pixels_per_point.max(1.0)))?;
+    Some((
+        pixmap.width() as usize,
+        pixmap.height() as usize,
+        pixmap.data().to_vec(),
+    ))
+}
+
+/// The picture saved in a `.vxtr` for Finder (spec 14d): the start-screen
+/// snapshot without its margins, [`PREVIEW_SIDE`] pixels on its longest
+/// side, as PNG. `None` for a document without artboards or a failed
+/// render or encoding.
+#[must_use]
+pub fn preview_png(doc: &Document, fonts: &Fonts) -> Option<Vec<u8>> {
+    let bounds = artboard_bounds(doc)?;
+    let longest = f64::from(PREVIEW_SIDE);
+    let scale = longest / bounds.width().max(bounds.height());
+    let size = Vec2::new(
+        (bounds.width() * scale).round().clamp(1.0, longest),
+        (bounds.height() * scale).round().clamp(1.0, longest),
+    );
+    render_fitted(doc, fonts, size, 1.0)?.encode_png().ok()
+}
+
+/// The union of `doc`'s artboards; `None` when it has none or it is empty.
+fn artboard_bounds(doc: &Document) -> Option<kurbo::Rect> {
     let bounds = doc
         .artboards
         .iter()
@@ -248,19 +276,23 @@ pub fn snapshot(doc: &Document, fonts: &Fonts, pixels_per_point: f32) -> Option<
             )
         })
         .reduce(|a, b| a.union(b))?;
+    (bounds.width() > vextor_core::EPS && bounds.height() > vextor_core::EPS).then_some(bounds)
+}
+
+/// `doc`'s artboards fitted (whole, centred) into `size` points at `ppp`
+/// pixels per point; transparent artboards show white.
+fn render_fitted(doc: &Document, fonts: &Fonts, size: Vec2, ppp: f64) -> Option<Pixmap> {
+    let bounds = artboard_bounds(doc)?;
+    let mut doc = doc.clone();
     for a in &mut doc.artboards {
         a.background.get_or_insert(TRANSPARENT_BACKGROUND);
     }
-    let (w, h) = (f64::from(SIZE.x), f64::from(SIZE.y));
-    if bounds.width() <= vextor_core::EPS || bounds.height() <= vextor_core::EPS {
-        return None;
-    }
+    let (w, h) = (size.x, size.y);
     let zoom = (w / bounds.width()).min(h / bounds.height());
     let pan = Vec2::new(
         (w - bounds.width() * zoom) / 2.0 - bounds.x0 * zoom,
         (h - bounds.height() * zoom) / 2.0 - bounds.y0 * zoom,
     );
-    let ppp = f64::from(pixels_per_point.max(1.0));
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // small, > 0
     let viewport = Viewport {
         view: View { zoom, pan },
@@ -268,12 +300,7 @@ pub fn snapshot(doc: &Document, fonts: &Fonts, pixels_per_point: f32) -> Option<
         height: (h * ppp).round() as u32,
         pixels_per_point: ppp,
     };
-    let pixmap = render(&doc, fonts, &viewport).ok()?;
-    Some((
-        pixmap.width() as usize,
-        pixmap.height() as usize,
-        pixmap.data().to_vec(),
-    ))
+    render(&doc, fonts, &viewport).ok()
 }
 
 #[cfg(test)]

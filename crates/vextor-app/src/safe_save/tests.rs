@@ -9,7 +9,9 @@ use std::path::Path;
 use vextor_core::{Document, NodeId};
 use vextor_render::fixtures;
 
-use super::{Disk, RealDisk, TempFile, save_bytes, save_document, temp_path};
+use super::{
+    Disk, RealDisk, TempFile, save_bytes, save_document, save_document_with_preview, temp_path,
+};
 use crate::files::test_dir::TestDir;
 use crate::files::{FileError, read_document};
 
@@ -312,7 +314,8 @@ fn the_empty_document_round_trips() {
 
 /// Spec 14 budgets on the 20 000-node fixture: the UI thread only clones
 /// (≤ 16 ms); the background save, with backup-free write, read back and
-/// check, ≤ 300 ms; opening ≤ 300 ms.
+/// check, ≤ 300 ms; opening ≤ 300 ms. Spec 14d: the save with its
+/// preview drawn stays within +50 % of the save without.
 /// `cargo test --release -p vextor-app time_save_20k -- --ignored --nocapture`
 #[test]
 #[ignore = "timing, release only"]
@@ -332,11 +335,21 @@ fn time_save_20k() {
     };
     let snapshot = best(&mut || drop(std::hint::black_box(doc.clone())));
     let save = best(&mut || save_document(&RealDisk, &path, &doc).expect("saves"));
+    let plain = fs::metadata(&path).expect("exists").len();
+    let fonts = vextor_geom::Fonts::default();
+    let mut png = Vec::new();
+    let with_preview = best(&mut || {
+        png = crate::thumbnails::preview_png(&doc, &fonts).expect("drawn");
+        save_document_with_preview(&RealDisk, &path, &doc, Some(&png)).expect("saves");
+    });
     let open = best(&mut || drop(read_document(&path).expect("loads")));
     let size = fs::metadata(&path).expect("exists").len();
     println!(
         "20k nodes: UI snapshot {snapshot:.1} ms, background save {save:.1} ms, \
-         open {open:.1} ms, file {} KB",
-        size / 1024
+         with preview {with_preview:.1} ms, open {open:.1} ms, \
+         file {} KB → {} KB (PNG {} KB)",
+        plain / 1024,
+        size / 1024,
+        png.len() / 1024
     );
 }

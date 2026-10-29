@@ -17,7 +17,7 @@ use crate::node::NodeKind;
 
 mod shared;
 
-pub(crate) use shared::{Images, get as shared_image, share as share_image};
+pub(crate) use shared::{Images, Preview, get as shared_image, share as share_image};
 
 /// Oldest `.vxtr` format version still read (version 1 had no text).
 pub const MIN_FORMAT_VERSION: u32 = 1;
@@ -67,8 +67,22 @@ pub fn to_bytes(doc: &Document) -> Result<Vec<u8>, FormatError> {
 ///
 /// # Errors
 /// [`FormatError::Encode`] when serialisation or `w` fails.
-pub fn to_writer<W: Write>(mut w: W, doc: &Document) -> Result<(), FormatError> {
-    let _images = shared::SaveScope::start();
+pub fn to_writer<W: Write>(w: W, doc: &Document) -> Result<(), FormatError> {
+    to_writer_with_preview(w, doc, None)
+}
+
+/// [`to_writer`] with `preview`, a PNG of the document, stored as
+/// `preview_png` (format 5, spec 14d) for the Quick Look extension.
+/// Loading ignores it: the picture is generated, never trusted.
+///
+/// # Errors
+/// [`FormatError::Encode`] when serialisation or `w` fails.
+pub fn to_writer_with_preview<W: Write>(
+    mut w: W,
+    doc: &Document,
+    preview: Option<&[u8]>,
+) -> Result<(), FormatError> {
+    let _images = shared::SaveScope::start(preview);
     serde_json::to_writer(&mut w, doc).map_err(|e| FormatError::Encode(e.to_string()))?;
     w.write_all(b"\n")
         .map_err(|e| FormatError::Encode(e.to_string()))
@@ -79,7 +93,7 @@ pub fn to_writer<W: Write>(mut w: W, doc: &Document) -> Result<(), FormatError> 
 /// # Errors
 /// [`FormatError::Encode`] if serialisation fails.
 pub fn to_bytes_pretty(doc: &Document) -> Result<Vec<u8>, FormatError> {
-    let _images = shared::SaveScope::start();
+    let _images = shared::SaveScope::start(None);
     let mut bytes = Vec::new();
     let mut ser = serde_json::Serializer::with_formatter(
         &mut bytes,
@@ -144,7 +158,8 @@ pub fn from_bytes(bytes: &[u8]) -> Result<Document, FormatError> {
 /// was not written by Vextor and is refused. 2 → 3: the export options
 /// gained `text_as_outlines` (absent = off). 3 → 4: same model; files are
 /// compact, leave default fields out and store each image once (spec 14),
-/// all read by the same code.
+/// all read by the same code. 4 → 5: same model; files may carry a
+/// `preview_png` for Finder (spec 14d), which loading skips.
 fn migrate(doc: &mut Document, version: u32) -> Result<(), FormatError> {
     if version < 2
         && doc

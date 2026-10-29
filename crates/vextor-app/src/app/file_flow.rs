@@ -14,7 +14,7 @@ use crate::documents::{DocId, Documents};
 use crate::files::{self, FileError};
 use crate::prompts::{self, RecoverAnswer, SaveAnswer};
 use crate::recovery::Orphan;
-use crate::saver::{Done, Job};
+use crate::saver::{Done, Job, PreviewFonts};
 use crate::session::Session;
 
 impl VextorApp {
@@ -171,6 +171,10 @@ impl VextorApp {
             path,
             document: Box::new(tab.session.doc.clone()),
             revision: tab.session.revision(),
+            preview: PreviewFonts {
+                fonts: self.fonts.current(),
+                loaded: !self.fonts.is_loading(),
+            },
         };
         self.saver.send(job);
         true

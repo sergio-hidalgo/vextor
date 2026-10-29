@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- VextorPreview.appex (spec 14d). scripts/bundle-macos.sh fills in the version. -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>VextorPreview</string>
+	<key>CFBundleDisplayName</key>
+	<string>Vextor Preview</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.sergio-hidalgo.vextor.preview</string>
+	<key>CFBundleExecutable</key>
+	<string>VextorPreview</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__VERSION__</string>
+	<key>CFBundleSupportedPlatforms</key>
+	<array>
+		<string>MacOSX</string>
+	</array>
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<key>QLSupportedContentTypes</key>
+			<array>
+				<string>io.github.sergio-hidalgo.vextor.document</string>
+			</array>
+			<key>QLSupportsSearchableItems</key>
+			<false/>
+		</dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.quicklook.preview</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>VextorQuickLook.PreviewViewController</string>
+	</dict>
+</dict>
+</plist>

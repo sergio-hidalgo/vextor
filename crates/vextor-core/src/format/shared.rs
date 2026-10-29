@@ -1,7 +1,8 @@
 //! Shared images (format version 4, spec 14): while a `.vxtr` file is
 //! written, every embedded image is stored once in a top-level `images`
 //! list and image nodes refer to it by index; while one is read, the
-//! indices are resolved back into bytes. Outside [`to_bytes`] and
+//! indices are resolved back into bytes. The save also carries the
+//! document's preview picture (format 5, spec 14d). Outside [`to_bytes`] and
 //! [`from_bytes`] (the clipboard, tests) images stay inline.
 //!
 //! [`to_bytes`]: super::to_bytes
@@ -22,6 +23,8 @@ struct Table {
     images: Vec<Vec<u8>>,
     /// Content hash → indices in `images` with that hash.
     by_hash: HashMap<u64, Vec<u32>>,
+    /// The preview PNG, as base64.
+    preview: Option<String>,
 }
 
 thread_local! {
@@ -29,12 +32,17 @@ thread_local! {
     static LOADING: RefCell<Option<Vec<Vec<u8>>>> = const { RefCell::new(None) };
 }
 
-/// Shares images on this thread until dropped (one save).
+/// Shares images on this thread until dropped (one save), and writes
+/// `preview` as the document's preview.
 pub(super) struct SaveScope(());
 
 impl SaveScope {
-    pub(super) fn start() -> Self {
-        SAVING.with_borrow_mut(|t| *t = Some(Table::default()));
+    pub(super) fn start(preview: Option<&[u8]>) -> Self {
+        let table = Table {
+            preview: preview.map(|png| STANDARD.encode(png)),
+            ..Table::default()
+        };
+        SAVING.with_borrow_mut(|t| *t = Some(table));
         Self(())
     }
 }
@@ -103,6 +111,25 @@ impl Serialize for Images {
         SAVING.with_borrow(|t| {
             let images = t.as_ref().map_or(&[][..], |t| t.images.as_slice());
             s.collect_seq(images.iter().map(|b| STANDARD.encode(b)))
+        })
+    }
+}
+
+/// The `preview_png` of the file being written, as base64.
+pub(crate) struct Preview;
+
+impl Preview {
+    /// Whether the save has no preview (the field is then left out).
+    pub(crate) fn is_empty(_: &Self) -> bool {
+        SAVING.with_borrow(|t| t.as_ref().is_none_or(|t| t.preview.is_none()))
+    }
+}
+
+impl Serialize for Preview {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        SAVING.with_borrow(|t| {
+            let preview = t.as_ref().and_then(|t| t.preview.as_deref());
+            s.serialize_str(preview.unwrap_or_default())
         })
     }
 }

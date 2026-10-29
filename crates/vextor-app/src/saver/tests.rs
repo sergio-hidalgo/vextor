@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use vextor_render::fixtures;
 
-use super::{Done, Job, Saver};
+use super::{Done, Job, PreviewFonts, Saver};
 use crate::backups::Backups;
 use crate::documents::{DocId, Documents};
 use crate::files::read_document;
@@ -22,6 +22,10 @@ fn save(doc: DocId, path: &std::path::Path, document: vextor_core::Document, rev
         path: path.to_path_buf(),
         document: Box::new(document),
         revision,
+        preview: PreviewFonts {
+            fonts: Arc::default(),
+            loaded: true,
+        },
     }
 }
 
@@ -158,4 +162,84 @@ fn an_autosave_runs_in_the_background() {
             revision: 4
         }]
     );
+}
+
+/// The `preview_png` stored in the `.vxtr` at `path`, decoded.
+fn stored_preview(path: &std::path::Path) -> Option<vextor_render::Pixmap> {
+    use base64::Engine as _;
+    use std::io::Read as _;
+    let mut json = Vec::new();
+    flate2::read::GzDecoder::new(fs::File::open(path).expect("opens"))
+        .read_to_end(&mut json)
+        .expect("gzip");
+    let value: serde_json::Value = serde_json::from_slice(&json).expect("json");
+    let png = base64::engine::general_purpose::STANDARD
+        .decode(value.get("preview_png")?.as_str().expect("text"))
+        .expect("base64");
+    Some(vextor_render::Pixmap::decode_png(&png).expect("a PNG"))
+}
+
+fn save_with_fonts(path: &std::path::Path, document: vextor_core::Document, loaded: bool) -> Done {
+    let mut saver = Saver::new(None, || {});
+    let id = doc_id();
+    let mut job = save(id, path, document, 1);
+    if let Job::Save { preview, .. } = &mut job {
+        preview.loaded = loaded;
+    }
+    saver.send(job);
+    saver.wait().pop().expect("one result")
+}
+
+#[test]
+fn a_save_writes_a_preview_512_pixels_on_its_longest_side() {
+    let dir = TestDir::new();
+    let path = dir.path().join("a.vxtr");
+    let doc = fixtures::basic_shapes();
+    assert!(matches!(
+        save_with_fonts(&path, doc.clone(), true),
+        Done::Saved { .. }
+    ));
+    let png = stored_preview(&path).expect("a preview");
+    let (w, h) = (png.width(), png.height());
+    assert_eq!(w.max(h), crate::thumbnails::PREVIEW_SIDE, "{w}×{h}");
+    let (aw, ah) = vextor_render::fixtures::BASIC_SHAPES_SIZE;
+    let ratio = f64::from(w) / f64::from(h);
+    assert!((ratio - aw / ah).abs() < 0.01, "{w}×{h} for {aw}×{ah}");
+    let centre = png.pixel(w / 2, h / 2).expect("inside");
+    assert_eq!(centre.alpha(), 255, "the artwork, not an empty picture");
+    assert_eq!(read_document(&path).expect("loads"), doc);
+}
+
+#[test]
+fn a_save_whose_preview_cannot_be_drawn_still_writes_the_document() {
+    let dir = TestDir::new();
+    // No artboard: nothing to draw.
+    let path = dir.path().join("a.vxtr");
+    let doc = vextor_core::Document::new("no artboard");
+    assert!(matches!(
+        save_with_fonts(&path, doc.clone(), true),
+        Done::Saved { .. }
+    ));
+    assert!(stored_preview(&path).is_none());
+    assert_eq!(read_document(&path).expect("loads"), doc);
+    // Text while the system fonts are still being read.
+    let path = dir.path().join("b.vxtr");
+    let doc = fixtures::big::texts(3);
+    assert!(matches!(
+        save_with_fonts(&path, doc.clone(), false),
+        Done::Saved { .. }
+    ));
+    assert!(stored_preview(&path).is_none());
+    assert_eq!(read_document(&path).expect("loads"), doc);
+}
+
+#[test]
+fn shapes_get_a_preview_while_the_fonts_load() {
+    let dir = TestDir::new();
+    let path = dir.path().join("a.vxtr");
+    assert!(matches!(
+        save_with_fonts(&path, fixtures::basic_shapes(), false),
+        Done::Saved { .. }
+    ));
+    assert!(stored_preview(&path).is_some());
 }

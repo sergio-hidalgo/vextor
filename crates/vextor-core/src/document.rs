@@ -14,7 +14,7 @@ use crate::settings::{GridSettings, SvgExportOptions};
 use crate::style::Swatch;
 
 /// Current `.vxtr` file format version.
-pub const FORMAT_VERSION: u32 = 4;
+pub const FORMAT_VERSION: u32 = 5;
 
 /// A vextor document. Edited only through [`crate::Command`]s
 /// ([`Document::apply`]) so every change is undoable.
@@ -86,6 +86,10 @@ impl Serialize for Document {
             /// Written last, once every image node has been met.
             #[serde(skip_serializing_if = "crate::format::Images::is_empty")]
             images: crate::format::Images,
+            /// The picture Finder shows (format 5, spec 14d); never read
+            /// back.
+            #[serde(skip_serializing_if = "crate::format::Preview::is_empty")]
+            preview_png: crate::format::Preview,
         }
         let _scope = FormatScope::set(self.color_format);
         Fields {
@@ -101,6 +105,7 @@ impl Serialize for Document {
             export: &self.export,
             next_id: self.next_id,
             images: crate::format::Images,
+            preview_png: crate::format::Preview,
         }
         .serialize(s)
     }
